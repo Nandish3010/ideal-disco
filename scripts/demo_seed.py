@@ -9,14 +9,15 @@ from google.cloud import firestore
 db = firestore.Client(project=os.environ.get("GCP_PROJECT", "green-corridor-2026"))
 
 for plate, vtype, agency in [("KA01AB1234", "ambulance", "108 Karnataka"),
+                             ("KA01AB4321", "ambulance", "108 Karnataka"),
                              ("KA01FE5678", "fire", "Karnataka Fire & Emergency"),
                              ("KA01PC9012", "police", "Bengaluru City Police")]:
-    db.collection("vehicles").document(plate).set({"type": vtype, "agency": agency, "active": True})
+    db.collection("vehicles").document(plate).set({"type": vtype, "agency": agency, "active": True}, merge=True)
 
 for f in sorted(Path("data/corridors").glob("*.json")):
     c = json.loads(f.read_text())
     for j in c["junctions"]:
-        db.collection("junctions").document(f"{c['id']}_{j['id']}").set({"phase": None, "lang": c["lang"]})
+        db.collection("junctions").document(f"{c['id']}_{j['id']}").set({"phase": None, "lang": c["lang"]}, merge=True)
 
 db.collection("incidents").document("INC-0001").set({
     "type": "cardiac", "severity_note": "Synthetic demo incident: chest pain, adult male",
