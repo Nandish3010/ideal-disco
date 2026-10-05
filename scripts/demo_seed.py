@@ -6,7 +6,7 @@ from pathlib import Path
 
 from google.cloud import firestore
 
-db = firestore.Client(project=os.environ.get("GOOGLE_CLOUD_PROJECT", "green-corridor-2026"))
+db = firestore.Client(project=os.environ.get("GCP_PROJECT", "green-corridor-2026"))
 
 for plate, vtype, agency in [("KA01AB1234", "ambulance", "108 Karnataka"),
                              ("KA01FE5678", "fire", "Karnataka Fire & Emergency"),
@@ -20,5 +20,5 @@ for f in sorted(Path("data/corridors").glob("*.json")):
 
 db.collection("incidents").document("INC-0001").set({
     "type": "cardiac", "severity_note": "Synthetic demo incident: chest pain, adult male",
-    "created_at": datetime.now(timezone.utc), "state": "active"})
+    "created_at": datetime.now(timezone.utc), "state": "open"})
 print("seeded")

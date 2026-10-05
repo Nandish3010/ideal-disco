@@ -1,0 +1,32 @@
+name: deploy-api
+on:
+  push:
+    branches: [main]
+    paths: ["api/**"]
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/919512130399/locations/global/workloadIdentityPools/github/providers/gh-oidc
+          service_account: corridor-ci@green-corridor-2026.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Deploy to Cloud Run
+        run: >
+          gcloud run deploy corridor-api --source api --region asia-south1
+          --project green-corridor-2026
+          --allow-unauthenticated
+          --service-account corridor-api@green-corridor-2026.iam.gserviceaccount.com
+          --set-env-vars GCP_PROJECT=green-corridor-2026,GEMINI_MODEL=gemini-3-flash-preview,GEMINI_FALLBACK_MODEL=gemini-3.1-flash-lite,GEMINI_LOCATION=global
+          --memory 1Gi --max-instances 3 --quiet
+      - name: Health check
+        run: |
+          url=$(gcloud run services describe corridor-api --region asia-south1 --project green-corridor-2026 --format='value(status.url)')
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$url/health")
+          echo "GET $url/health -> $code"
+          test "$code" = 200

@@ -1,0 +1,27 @@
+name: deploy-web
+on:
+  push:
+    branches: [main]
+    paths: ["web/**"]
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/919512130399/locations/global/workloadIdentityPools/github/providers/gh-oidc
+          service_account: corridor-ci@green-corridor-2026.iam.gserviceaccount.com
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build
+        run: cd web && npm install && npm run build
+        env:
+          VITE_FIREBASE_CONFIG: ${{ vars.VITE_FIREBASE_CONFIG }}
+          VITE_MAPS_BROWSER_KEY: ${{ vars.VITE_MAPS_BROWSER_KEY }}
+      - name: Deploy to Firebase Hosting
+        run: cd web && npx firebase-tools@latest deploy --only hosting --project green-corridor-2026 --non-interactive

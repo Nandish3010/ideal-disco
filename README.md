@@ -103,3 +103,7 @@ jobs/       traffic_logger.py (Cloud Run Job -> BigQuery)
 data/       corridors/{blr,hyd}.json, scenarios/*.json
 scripts/    demo_seed.py
 ```
+
+## Deploy
+
+Pushes to `main` deploy `api/` to Cloud Run and `web/` to Firebase Hosting via GitHub Actions, authenticated with Workload Identity Federation (no stored keys). Checks run on every push.

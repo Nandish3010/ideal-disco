@@ -7,27 +7,27 @@ Clients read; only the Cloud Run service account writes. Every server log line c
 
 ### `vehicles/{plate}`
 ```json
-{ "type": "ambulance", "agency": "108 Karnataka", "active": true }
+{ "type": "ambulance", "agency": "108 Karnataka", "active": true, "bound_device_id": "dev-1" }
 ```
-`type`: `ambulance | fire | police`.
+`bound_device_id` is set by `/vehicles/bind`. `type`: `ambulance | fire | police`.
 
 ### `incidents/{id}`
 ```json
-{ "type": "cardiac", "severity_note": "Synthetic demo incident", "created_at": "2026-10-05T09:00:00Z", "state": "active" }
+{ "type": "cardiac", "severity_note": "Synthetic demo incident", "created_at": "2026-10-05T09:00:00Z", "state": "open" }
 ```
 
 ### `runs/{id}`
 ```json
 {
   "vehicle_plate": "KA01AB1234", "vehicle_type": "ambulance", "incident_id": "INC-0001",
-  "state": "en_route", "patient_on_board": true,
+  "state": "en_route", "patient_on_board": false,
   "acuity_tier": "critical", "confirmed_tier": "critical",
   "destination": {"name": "Jayadeva Institute of Cardiovascular Sciences", "lat": 12.9185, "lng": 77.599},
   "source": "gps", "last_tick_at": "2026-10-05T09:03:10Z", "eta_hospital_s": 412,
   "brief_fired": false, "corridor": "blr"
 }
 ```
-`state`: `en_route | arrived | ended | stale | off_route`. `source`: `gps | sim`. `acuity_tier` is the lookup result, `confirmed_tier` the crew's tap; only `confirmed_tier` enters priority.
+`state`: `en_route | arrived | ended | stale | off_route`. `source`: `gps | sim`. `acuity_tier` is the lookup result written by `/triage`, `confirmed_tier` the crew's tap written by `/runs/{id}/confirm` (which also sets `patient_on_board: true`); only `confirmed_tier` enters priority.
 
 ### `runs/{id}/log/{n}`
 ```json
@@ -77,49 +77,50 @@ Clients read; only the Cloud Run service account writes. Every server log line c
 
 ## API
 
-All bodies JSON. Errors: `{"error": "<code>", "detail": "..."}` with 4xx/5xx. Unwritten endpoints currently return 501 `{"todo": "<name>"}`.
+All bodies JSON. Errors: `{"error": "<code>", "detail": "..."}` with 4xx/5xx. Unwritten endpoints currently return 501 `{"todo": "<name>"}`. Request bodies that fail validation return FastAPI's 422 `{"detail": [...]}`. Firestore failures return 503 `{"error": "store_unavailable"}`.
 
 ### `GET /health`
-Response `{"ok": true}`
+Response `{"ok": true, "model": "gemini-3-flash-preview"}`
 
 ### `POST /vehicles/bind` (mock registry)
 ```json
-{ "plate": "KA01AB1234" }
+{ "plate": "KA01AB1234", "device_id": "dev-1" }
 ```
-200 `{ "plate": "KA01AB1234", "type": "ambulance", "agency": "108 Karnataka", "active": true }`
-404 `{ "error": "unknown_plate" }` (the UI shows a visible rejection)
+200 `{ "plate": "KA01AB1234", "type": "ambulance", "agency": "108 Karnataka", "active": true, "bound_device_id": "dev-1" }`
+404 `{ "error": "unregistered_vehicle" }` (also when the vehicle is inactive) (the UI shows a visible rejection)
 
 ### `POST /incidents` (mock dispatch console)
 ```json
 { "type": "cardiac", "severity_note": "chest pain, adult" }
 ```
-200 `{ "id": "INC-0001", "state": "active" }`
+200 `{ "incident_id": "INC-4BC6E7" }` (state `open`)
 
 ### `POST /runs`
 Start:
 ```json
-{ "action": "start", "plate": "KA01AB1234", "incident_id": "INC-0001", "corridor": "blr", "source": "gps" }
+{ "action": "start", "plate": "KA01AB1234", "incident_id": "INC-0001", "corridor": "blr", "destination": {"name": "...", "lat": 0, "lng": 0}, "source": "gps" }
 ```
-200 `{ "run_id": "run-amb-1", "state": "en_route" }`. 403 `{ "error": "no_active_incident" }` if the plate is unregistered or the incident is not active.
+`destination` is optional. 200 `{ "run_id": "run-1a2b3c4d" }` (state `en_route`, `patient_on_board` false). 403 `{ "error": "unregistered_vehicle" }` or `{ "error": "no_active_incident" }` (incident missing or not `open`).
 End:
 ```json
 { "action": "end", "run_id": "run-amb-1" }
 ```
-200 `{ "run_id": "run-amb-1", "state": "ended", "report": { "minutes_saved": 5.0 } }`
+200 `{ "run_id": "run-amb-1", "state": "ended" }` (the `report` field comes with the report card later). 404 `{ "error": "unknown_run" }`.
 
 ### `POST /triage`
-Request (audio, image, or text; one of):
+Request (audio or text; image later). Audio is base64 in JSON; multipart is not supported. `lang_hint` is optional.
 ```json
 { "run_id": "run-amb-1", "vehicle_type": "ambulance", "audio_b64": "...", "mime": "audio/webm" }
 ```
 ```json
 { "run_id": "run-amb-1", "vehicle_type": "ambulance", "text": "chest pain, BP 85 over 50" }
 ```
-200 (tier is the deterministic lookup; the crew must confirm):
+200 (`suggested_tier` is the deterministic lookup, stored as `runs/{id}.acuity_tier`; the crew must confirm):
 ```json
-{ "fields": { "...": "Gemini response schema below" }, "tier": "critical" }
+{ "fields": { "...": "Gemini response schema below" }, "transcript_en": "...", "suggested_tier": "critical" }
 ```
-422 `{ "error": "extraction_failed", "fallback": "form" }` (after one retry; the UI shows the form).
+Each call appends `runs/{id}/log/{n}` with `confirmed: false`.
+422 `{ "error": "extraction_failed", "fallback": "form" }` (after one retry on the primary model, then one try on the fallback model; the UI shows the form).
 
 Gemini response schema:
 ```json
@@ -135,9 +136,17 @@ Gemini response schema:
 ```
 Unknown values are `null`. Gemini never returns a score.
 
-### `POST /log`
+### `POST /runs/{run_id}/confirm`
+The crew's one tap.
 ```json
-{ "run_id": "run-amb-1", "kind": "voice", "audio_b64": "...", "mime": "audio/webm", "confirmed_tier": "critical" }
+{ "tier": "critical" }
+```
+200 `{ "run_id": "run-amb-1", "confirmed_tier": "critical", "patient_on_board": true }`. 400 `{ "error": "bad_tier" }`, 404 `{ "error": "unknown_run" }`.
+
+### `POST /log`
+Same request and 422 as `/triage` (optional `kind`: `voice | photo | form`); appends a log entry only, no tier change.
+```json
+{ "run_id": "run-amb-1", "kind": "voice", "audio_b64": "...", "mime": "audio/webm" }
 ```
 200 `{ "n": 3, "transcript_en": "Oxygen started", "fields": {"treatment": "oxygen 4 L"}, "confirmed": false }`
 
