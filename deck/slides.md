@@ -1,70 +1,99 @@
 ---
 marp: true
-theme: default
+theme: corridor
 paginate: true
-style: |
-  section { font-size: 26px; }
-  section h1 { color: #0b6b3a; }
-  section h2 { color: #0b6b3a; }
-  pre { font-size: 14px; line-height: 1.25; }
-  table { font-size: 20px; }
-  .ph { color: #b45309; }
+footer: "Emergency Green Corridor"
 ---
 
-<!-- Draft. Items in [brackets] are placeholders to fill before export. -->
+<!-- _class: dark -->
+<!-- _paginate: false -->
+<!-- _footer: "Google Cloud AI Builder Cup 2026 · Sustainability & Social Impact" -->
+
+![bg right:42% fit](img/sim-split.png)
 
 # Emergency Green Corridor
 
-## Every red light costs a life.
+<div class="sub">Every red light costs a life.</div>
 
-Google Cloud AI Builder Cup 2026 · Sustainability & Social Impact
+Tell the cop at the next junction, early enough, that an ambulance or fire engine is coming.
 
-Team: Nandish · [second team member, or delete this line]
+Built by Nandish · Live at green-corridor-2026.web.app
 
 <!--
-Emergency Green Corridor tells the cop at the next junction, early enough and with real numbers, that an ambulance, fire engine or police vehicle is coming. Gemini does the language work, deterministic rules do the safety-critical decisions. Everything in this deck is running at green-corridor-2026.web.app.
+Emergency Green Corridor tells the cop at the next junction, early enough and with real numbers, that an ambulance, fire engine or police vehicle is coming. Gemini does the language work, deterministic rules do the safety-critical decisions. Everything in this deck is running at green-corridor-2026.web.app. Right: /sim?corridor=blr mid-replay, the same trace with and without the corridor.
 -->
 
 ---
 
 ## The problem, seen daily on Hosur Road
 
-- Ambulances and fire engines sit at red signals in a queue they cannot clear.
-- The officer at the junction has no idea they are coming.
-- Nobody is told, nothing adapts, and the delay is paid in lives or property.
-- In cardiac arrest, survival falls by [X% per minute without defibrillation, cite source].
-- Bengaluru emergency response times: [median / 90th percentile, cite source].
-- Full signal preemption needs city controller integration: years away.
+<div class="stats">
+<div class="stat"><b>7–10%</b><span>survival lost per minute in cardiac arrest without defibrillation</span></div>
+<div class="stat"><b>2–3 km</b><span>covered in 30–50 min by Bengaluru ambulances at peak hours</span></div>
+<div class="stat"><b>60%+</b><span>of Karnataka 108 cardiac, stroke and respiratory calls missed the 10-min target</span></div>
+</div>
+
+The officer at the junction has no idea they are coming. Full signal preemption needs city controller integration: years away.
+
+<p class="cite">Sources: American Heart Association, CPR Facts and Stats (cpr.heart.org) and AHA, Circulation, 2017 · The Siasat Daily, 28 Jun 2026 (Karnataka Health Minister announcement) · CAG audit of Karnataka 108 EMS, 2014–19, reported by The News Minute, Dec 2020 (state-wide, not Bengaluru only)</p>
 
 <!--
-Every Bengaluru commuter has seen this on Hosur Road. The missing piece is not a siren, it is information reaching the one person who can clear the queue. Fill the bracketed numbers from cited sources (resuscitation literature, city or 108 response-time data) before export.
+Every Bengaluru commuter has seen this on Hosur Road. The missing piece is not a siren, it is information reaching the one person who can clear the queue. The AHA figure is the commonly cited 7 to 10 percent per minute without CPR or defibrillation (the AHA public page says about 10 percent per minute without CPR). The Siasat figure is the ambulance speed at peak hours, not a median response time. The CAG figure is state-wide for Karnataka 108 over 2014-15 to 2018-19, so we call it that.
 -->
 
 ---
 
 ## The 20-second demo
 
-**Today** (stops at every red) vs **With corridor** (cop warned early, queue cleared), side by side on the Silk Board → Jayadeva Hospital corridor.
+<div class="cols wide-left">
+<div>
 
-- 3 vehicles: critical ambulance, fire engine with trapped persons, urgent ambulance.
-- Counter on screen: **11.8 minutes saved** across the three.
-- Same recorded GPS trace and the same recorded traffic in both lanes.
-- State plainly: a **simulated baseline on recorded traffic, not a field measurement**.
+**Today:** stops at every red.
+**With corridor:** cop warned early, queue cleared.
+Silk Board → Jayadeva Hospital, same recorded GPS trace and recorded traffic in both lanes.
+
+<div class="stats two"><div class="stat"><b>11.8 min</b><span>saved across 3 vehicles</span></div><div class="stat"><b>3</b><span>critical ambulance, fire engine, urgent ambulance</span></div></div>
+
+</div>
+<div>
+
+![w:420 img-shadow](img/sim-split.png)
+
+</div>
+</div>
+
+<p class="cite">A simulated baseline on recorded traffic, not a field measurement.</p>
 
 <!--
-The /sim screen replays the same trace twice. On the left the vehicle stops at each junction for the remaining red of a fixed signal cycle, on the right the corridor is cleared and only sequencing gaps remain. The number is an estimate from a simulation, and the slide says so.
+The /sim?corridor=blr screen replays the same trace twice. On the left the vehicle stops at each junction for the remaining red of a fixed signal cycle, on the right the corridor is cleared and only sequencing gaps remain. The number is an estimate from a simulation, and the slide says so.
 -->
 
 ---
 
 ## What it does: six screens
 
-- **/vehicle** crew binds a plate, speaks in any Indian language, confirms the tier with one tap, sees the routed hospital.
-- **/dispatch** issues incident IDs (mock dispatch console).
-- **/cop** on-duty toggle for a junction, spoken alerts, one giant ACK.
-- **/hospital** live transit log, English ATMIST brief and prep checklist, countdown.
-- **/control** all runs, junction ACK states, escalation flags.
-- **/sim** corridor digital twin, with-vs-without replay, minutes-saved counter.
+<div class="cols three">
+<div>
+
+![h:300 img-shadow](img/vehicle.png)
+`/vehicle` voice, tier tap
+
+</div>
+<div>
+
+![h:300 img-shadow](img/cop.png)
+`/cop` spoken alert, one ACK
+
+</div>
+<div>
+
+![w:520 img-shadow](img/hospital.png)
+`/hospital` live log, ATMIST brief
+
+</div>
+</div>
+
+Also: `/dispatch` incident IDs · `/control` all runs and escalations · `/sim` with-vs-without replay.
 
 <!--
 Six React PWA routes, one Firestore event bus, every screen subscribes live. Unknown plates are rejected visibly, and preemption needs a registered plate plus an open incident. Corridor is chosen by ?corridor=blr or ?corridor=hyd.
@@ -74,112 +103,142 @@ Six React PWA routes, one Firestore event bus, every screen subscribes live. Unk
 
 ## How a cop gets warned: the lead-time engine
 
-Live Routes traffic spans → queue metres → clearance time → two-stage alert
+Live Routes traffic spans → queue metres → clearance time → two-stage alert.
+
+<div class="cols wide-left">
+<div>
 
 ```
-jam_m   = Σ TRAFFIC_JAM metres + 0.5 × Σ SLOW metres      (walk back from stop line to first NORMAL)
-clear_s = reaction_s (20) + jam_m / clearance_rate_mps (2.0)
-eta_s   = 0.5 × routes_eta + 0.5 × distance / observed_speed_60s   (floor 3 m/s)
-PREPARE            when eta_s <= clear_s + 15
-STOP CROSS TRAFFIC when eta_s <= 30
+jam_m   = Σ JAM m + 0.5 × Σ SLOW m
+clear_s = 20 + jam_m / 2.0
+eta_s   = 0.5 × routes_eta
+        + 0.5 × distance / speed_60s
+PREPARE            eta_s <= clear_s + 15
+STOP CROSS TRAFFIC eta_s <= 30
 ```
 
-- Spoken in conversational English; Kannada / Telugu switchable (Gemini rewrite, Cloud Translation, Text-to-Speech).
-- Cop taps ACK; no ACK in 20 s raises an escalation flag in the control room and an audit entry.
+</div>
+<div>
+
+![h:330 img-shadow](img/cop-alert.png)
+
+</div>
+</div>
+
+No ACK in 20 s raises an escalation flag and an audit entry.
 
 <!--
-A 500 m queue alerts earlier than a 100 m queue, because the cop needs the time to clear exactly what is there. The constants (2.0 m/s clearance, 50/50 ETA blend) are deliberately simple and tunable. Each stage fires once per junction per run.
+A 500 m queue alerts earlier than a 100 m queue, because the cop needs the time to clear exactly what is there. The constants (2.0 m/s clearance, 50/50 ETA blend) are deliberately simple and tunable. Each stage fires once per junction per run. Spoken in conversational English; Kannada and Telugu are switchable (Gemini rewrite, Cloud Translation, Text-to-Speech). jam_m walks back from the stop line to the first NORMAL span. eta_s has a floor of 3 m/s on speed.
 -->
 
 ---
 
 ## Rules decide, Gemini explains
 
-- Gemini extracts fields from speech. It never returns a score.
-- `acuity.py`: a deterministic lookup (SBP < 90, SpO2 < 90, unconscious, chest pain, trapped persons ...) → critical / urgent / stable. The crew confirms with one tap; only the confirmed tier enters priority.
-- `priority.py`: sort by (tier rank, ETA). Output is a **sequence, not a hold**: "Fire engine first, ambulance 12 s later." Everyone passes.
-- Gemini only writes the one-line rationale of the order, in the cop's language.
-- Why it matters: a language model must not decide who lives; rules are auditable, testable and have self-checks.
+| Step | Who | What |
+|---|---|---|
+| 1. Extract | Gemini | speech or monitor photo → fixed JSON fields, never a score |
+| 2. Tier | `acuity.py` | deterministic lookup → critical / urgent / stable; crew confirms with one tap |
+| 3. Order | `priority.py` | sort by (tier, ETA): a **sequence, not a hold** |
+| 4. Explain | Gemini | one line, in the cop's language: "Fire engine first, ambulance 12 s later" |
+
+A language model must not decide who lives. Rules are auditable, testable and carry self-checks.
 
 <!--
-Hallucination risk is removed from the safety path by construction. The model sits before the rules (extraction) and after them (explanation), never inside them. acuity.py, priority.py and leadtime.py each ship with assert-based self-checks.
+Hallucination risk is removed from the safety path by construction. The model sits before the rules (extraction) and after them (explanation), never inside them. acuity.py, priority.py and leadtime.py each ship with assert-based self-checks. Priority is a sequence, everyone passes.
 -->
 
 ---
 
 ## Where Gemini is load-bearing
 
-| Job | Mode | Example |
-|---|---|---|
-| Voice extraction | audio in, fixed JSON schema, no tool calling | "chest pain, BP 85 over 50" → `{complaint, vitals.sbp: 85}` → lookup says critical [sample] |
-| Transit log | voice note → interventions | "Oxygen 4 litres started" → `{drug, oxygen, 4 litres}`, shown beside transcript |
-| Hospital brief | ATMIST + prep checklist | "Activate cath lab · Page cardiology · Prepare heparin" |
-| Sequence rationale | one line, cop's language | "Fire engine first, ambulance 12 s later" |
-| Alert wording | spoken line per language | "Ambulance coming, critical case. 520 metre queue..." |
-| Monitor photo → vitals | vision, same schema | [sample; include only if shipped before export] |
+<div class="cols wide-left">
+<div>
 
-Synthetic patients only. Clinician confirms every extracted value.
+| Job | Example |
+|---|---|
+| Voice extraction | "chest pain, BP 85 over 50" → `sbp: 85` → critical |
+| Monitor photo | vision → same schema |
+| Transit log | "Oxygen 4 litres started" → structured entry |
+| Hospital brief | ATMIST + prep checklist |
+| Alert wording | spoken line per language |
+
+</div>
+<div>
+
+![h:330 img-shadow](img/triage-gemini.png)
+
+</div>
+</div>
+
+<p class="cite">Synthetic patients only. A clinician confirms every extracted value. Examples are the contract examples in SCHEMA.md.</p>
 
 <!--
-Each use changes what a human sees or hears next, and each has a form or template fallback if the model fails. Examples are the contract examples in SCHEMA.md and are marked [sample] where not captured from a live run. Remove the photo row if that feature is not on main at export time.
+Each use changes what a human sees or hears next, and each has a form or template fallback if the model fails. Examples are the contract examples in SCHEMA.md, not captured from a live run. Photo vitals is on main: Gemini reads values visible on a monitor or ECG photo using the same schema, null where unreadable.
 -->
 
 ---
 
 ## The agent: hospital routing on Agent Development Kit
 
-An ADK agent on Vertex AI picks the destination after the crew confirms the tier. Three tools:
-
-- `required_capabilities(tier, fields)` → e.g. cath_lab
-- `list_hospitals(corridor)` → mock capability and bed roster
-- `eta_to(...)` → traffic-aware Routes ETA
+<div class="cols">
+<div>
 
 ```
-called required_capabilities(critical) -> cath_lab
-called list_hospitals(blr) -> 3 hospitals
-called eta_to(Jayadeva Institute of Cardiovascular Sciences) -> 438 s
+required_capabilities(critical) -> cath_lab
+list_hospitals(blr) -> 3 hospitals
+eta_to(Jayadeva Institute) -> 438 s
 ```
 
-- Trace is shown in the UI. The server re-checks the choice (capability, beds, ETA from the tool).
-- Any failure or 20 s timeout → nearest eligible hospital, trace marked fallback.
+An ADK agent on Vertex AI picks the destination after the crew confirms the tier. The server re-checks the choice; any failure or 20 s timeout falls back to the nearest eligible hospital.
+
+</div>
+<div>
+
+![w:420 img-shadow](img/agent-trace.png)
+
+</div>
+</div>
 
 <!--
-The trace above is the contract example from SCHEMA.md; replace with a captured run if you have one. The agent never changes acuity or signal priority. The roster is invented demo data and the slide says so.
+The trace on the left is the contract example from SCHEMA.md; the screenshot on the right is the live trace in /vehicle. The agent never changes acuity or signal priority. The roster is invented demo data and the slide says so. Three tools: required_capabilities(tier, fields), list_hospitals(corridor) (mock capability and bed roster), eta_to(...) (traffic-aware Routes ETA).
 -->
 
 ---
 
 ## Architecture
 
-```
- vehicle PWA ──GPS/voice──▶ Cloud Run corridor-api ──▶ Vertex AI Gemini (global) · ADK agent
- sim feeder  ──GPS───────▶   │ /location: Routes (throttled) → leadtime → priority
-                             │        └─▶ >>> SignalAdapter.request_green <<<
-                             │                 └─▶ SimAdapter → Firestore junctions/
-                             ▼
-                        Firestore (event bus) ──▶ cop (TTS audio) · hospital · control · sim
- Cloud Scheduler ─▶ Cloud Run Job ──Routes spans──▶ BigQuery corridor.traffic_spans
-```
+![w:1100](img/architecture.svg)
 
-Routes API · Maps JavaScript API (map) · Cloud Storage (alert audio) · Secret Manager (keys) · Cloud Translation + Text-to-Speech (alerts) · Firebase Hosting (PWA) · Cloud Build + Artifact Registry (deploy) · Cloud Logging (run_id on every line).
-**Day 9, not yet on main:** BigQuery ML, Gen AI Evaluation. [update at freeze]
+<p class="cite">Wired on main only. Day 9 items (BigQuery ML forecast, Gen AI Evaluation) are on the roadmap.</p>
 
 <!--
-The SignalAdapter seam is the point: today SimAdapter writes the junction phase to Firestore, tomorrow a real controller adapter implements the same one method. Firestore is the single event bus and the accepted single point of failure for the demo. Only products wired on main are shown.
+The SignalAdapter seam is the point: today SimAdapter writes the junction phase to Firestore, tomorrow a real controller adapter implements the same one method. Firestore is the single event bus and the accepted single point of failure for the demo. Only products wired on main are shown. Update at freeze if BigQuery ML or Gen AI Evaluation land.
 -->
 
 ---
 
 ## Real data: the traffic logger
 
-**Built**
-- Cloud Scheduler triggers a Cloud Run Job every 10 minutes.
-- Records live Bengaluru jam and slow spans per junction approach into BigQuery `corridor.traffic_spans`, for two corridors (Bengaluru, Hyderabad).
-- The same `jam_metres` function the live engine uses, so logged and live data agree.
+<div class="cols">
+<div>
 
-**Roadmap (day 9, not built yet)**
-- BigQuery ML forecast of queue length by junction and hour.
-- First step toward a learning controller; clearance rate stays a constant until observed clearance times exist.
+### Built
+- Cloud Scheduler → Cloud Run Job every 10 minutes
+- Live jam and slow spans per approach → BigQuery `traffic_spans`, two corridors
+- Same `jam_metres` as the live engine
+
+</div>
+<div>
+
+### Roadmap, not built
+- BigQuery ML forecast of queue length by junction and hour
+- First step to a learning controller; clearance rate stays constant until observed
+
+</div>
+</div>
+
+<p class="cite">Run reports (the with-vs-without report card per run) also land in BigQuery <code>run_reports</code>.</p>
 
 <!--
 Be explicit that the forecast is not built yet at the time of writing. What exists is the data collection that makes it possible. Update this slide if BQML lands before export.
@@ -189,33 +248,45 @@ Be explicit that the forecast is not built yet at the time of writing. What exis
 
 ## Sustainability
 
-Every cleared queue is fuel not burned at idle.
+<div class="stats">
+<div class="stat"><b>0.76 L/h</b><span>idle burn, small petrol car (low end of 0.2–0.5 gal/h)</span></div>
+<div class="stat"><b>2.35 kg</b><span>CO₂ per litre of petrol (diesel 2.69 kg/L)</span></div>
+<div class="stat"><b>0.6 kg</b><span>CO₂ avoided per cleared queue (assumed 20 vehicles, 60 s)</span></div>
+</div>
 
-```
-fuel_saved_L = queue_vehicles × idle_burn_L_per_s × seconds_saved
-CO₂_kg       = fuel_saved_L × [emission factor kg CO₂/L]
-```
+`fuel_saved_L = queue_vehicles × idle_L_per_s × seconds_saved`
 
-- Per cleared queue: [N] litres of fuel, [N] kg CO₂ avoided (illustrative, from the demo corridor).
-- Idle burn rate: [L/h per vehicle, cite fuel-economy / idling study]. Emission factor: [cite, e.g. national grid or IPCC factor].
-- **SDG 3.6** halve road traffic deaths and injuries. **SDG 11.2** sustainable transport systems.
+**SDG 3.6** halve road traffic deaths and injuries · **SDG 11.2** sustainable transport.
+
+<p class="cite">Idle burn: Argonne National Laboratory (Gaines, Rask, Keller), US DOE, 2014. CO₂: US EPA, GHG Equivalencies Calculator, 8,887 g/gal petrol and 10,180 g/gal diesel, 2024. The 20-vehicle, 60 s case is an illustration, not a measurement.</p>
 
 <!--
-The queue length comes from the same Routes spans the engine already reads, so the estimate costs nothing extra. All numbers are placeholders until sourced; cite the idle burn rate and emission factor on the slide.
+The queue length comes from the same Routes spans the engine already reads, so the estimate costs nothing extra. Arithmetic: 20 vehicles x 0.76 L/h x 60 s / 3600 = 0.25 L; x 2.35 kg/L = 0.6 kg CO2. We use the low end of the Argonne passenger-car range as a conservative idle rate. Argonne tested US cars; we have not sourced an Indian auto-rickshaw or bus figure, so we do not claim one. Divide the gallon values by 3.785 for litres.
 -->
 
 ---
 
 ## Deployment path, and honesty
 
-- **Today:** cop alerts, no hardware. Deployable on a phone.
-- **Phase 2:** a real signal controller behind `SignalAdapter`.
-- **Phase 3:** a learning controller trained on the junction data layer.
+<div class="cols">
+<div>
 
-What is simulated or limited, stated plainly:
-- Signals are simulated. Patients are synthetic. Hospital roster is mock.
-- No auth in the demo: endpoints are publicly writable, identity is a mock plate registry.
-- Minutes saved is a simulated estimate, not a field measurement.
+| Phase | What |
+|---|---|
+| **Today** | cop alerts, no hardware, a phone |
+| **Phase 2** | real controller behind `SignalAdapter` |
+| **Phase 3** | learning controller on junction data |
+
+</div>
+<div>
+
+### Stated plainly
+- Signals simulated, patients synthetic, hospital roster mock
+- Demo-only auth: endpoints publicly writable, mock plate registry
+- Minutes saved is a simulation estimate
+
+</div>
+</div>
 
 <!--
 We would rather be believed on a smaller claim. Cop alerts are the part that needs no city integration. The auth gap is a documented demo decision, so judges can open every screen.
@@ -225,23 +296,42 @@ We would rather be believed on a smaller claim. Cop alerts are the part that nee
 
 ## Global by configuration
 
-- A corridor is one JSON file: junctions, approaches, signal cycle, language.
-- Bengaluru (`blr`, Silk Board → Jayadeva) and Hyderabad (`hyd`) are shipped. Switch with one click.
-- Any city with adaptive signals, or none: cop alerts work anywhere Routes reports traffic.
-- Alert language is a setting: English, Kannada, Telugu today.
+<div class="cols">
+<div>
+
+| | `blr` | `hyd` |
+|---|---|---|
+| Corridor | Silk Board → Jayadeva | Hyderabad |
+| Alert language | English, Kannada | English, Telugu |
+| Switch | `?corridor=blr` | `?corridor=hyd` |
+
+</div>
+<div>
+
+![w:440 img-shadow](img/control.png)
+
+</div>
+</div>
+
+A corridor is one JSON file: junctions, approaches, signal cycle, language. No code change.
 
 <!--
-Adding a city is a config change plus a hospital roster, no code. The Hyderabad corridor proves the schema is not Bengaluru-shaped.
+Adding a city is a config change plus a hospital roster, no code. The Hyderabad corridor proves the schema is not Bengaluru-shaped. Cop alerts work anywhere Routes reports traffic. The screenshot is /control?corridor=hyd.
 -->
 
 ---
 
-## Try it
+<!-- _class: dark -->
+<!-- _footer: "Google Cloud AI Builder Cup 2026" -->
 
-- Live app: https://green-corridor-2026.web.app
-- API: https://corridor-api-919512130399.asia-south1.run.app/health
-- Repo: https://github.com/Nandish3010/ideal-disco
-- Demo video: [link, 3 minutes]
+# Try it
+
+<div class="stats two">
+<div class="stat"><b>Live</b><span>green-corridor-2026.web.app</span></div>
+<div class="stat"><b>Repo</b><span>github.com/Nandish3010/ideal-disco</span></div>
+</div>
+
+API health: corridor-api-919512130399.asia-south1.run.app/health · Demo video: [link, 3 minutes]
 
 **Ask:** feedback from traffic police and 108 operators, and a pilot junction.
 
