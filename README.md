@@ -109,3 +109,5 @@ scripts/    demo_seed.py
 ## Deploy
 
 Pushes to `main` deploy `api/` to Cloud Run and `web/` to Firebase Hosting via GitHub Actions, authenticated with Workload Identity Federation (no stored keys). Checks run on every push.
+
+The `jobs/` traffic logger deploys separately: `deploy-job` builds the image, updates the `corridor-traffic-logger` Cloud Run Job and runs it once to verify. Run it with `workflow_dispatch` after changing job-related files outside the paths it watches.
