@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { corridors, scenario } from "../data.js";
 import blrTwoVehicles from "../../../data/scenarios/blr-two-vehicles.json";
-import { api } from "../api.js";
-import { startFeed, startFeedAll } from "../feeder.js";
+import { startFeed, startFeedAll, startRun } from "../feeder.js";
 import { useActiveRuns, useAlerts, useJunctions } from "../live.js";
 import CorridorMap, { HAS_MAPS_KEY } from "../map.jsx";
 import { ErrCard, Offline, StateBadge, useNow } from "../ui.jsx";
@@ -14,7 +13,7 @@ const dash = (v, f = (x) => x) => (v == null || v === "" ? "—" : f(v));
 const tierOf = (r) => r.confirmed_tier ?? r.acuity_tier;
 const mmss = (s) => { s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 
-// scenario vehicle -> run id, kept per scenario in localStorage (the "Create runs" button writes it)
+// scenario vehicle -> run id, kept per scenario in localStorage (the feeder writes it when it starts a run)
 const storeKey = (scn) => `sim.runs.${scn}`;
 const loadRuns = (scn) => { try { return JSON.parse(localStorage.getItem(storeKey(scn))) ?? {}; } catch { return {}; } };
 const saveRuns = (scn, m) => { try { localStorage.setItem(storeKey(scn), JSON.stringify(m)); } catch { /* private mode */ } };
@@ -68,52 +67,37 @@ function Live({ scn, setScn }) {
   const [progs, setProgs] = useState({}); // {plate: {i, n, t, status}}
   const [fed, setFed] = useState({}); // {plate: run id being fed}
   const [running, setRunning] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [createErr, setCreateErr] = useState(null);
+  const [create, setCreate] = useState(true); // start each run (POST /runs) right before its vehicle's first tick
+  const [warns, setWarns] = useState({}); // {plate: warning from starting the run}
   const stop = useRef(null);
   useEffect(() => () => stop.current?.(), []);
 
-  const pickScn = (k) => { setScn(k); setIdx(0); setMap(loadRuns(k)); setRunId(loadRuns(k)[scenarios[k].vehicles[0].plate] ?? scenarios[k].vehicles[0].run_id); setCreateErr(null); };
+  const pickScn = (k) => { setScn(k); setIdx(0); setMap(loadRuns(k)); setRunId(loadRuns(k)[scenarios[k].vehicles[0].plate] ?? scenarios[k].vehicles[0].run_id); setWarns({}); };
   const pick = (i) => { setIdx(i); setRunId(map[sc.vehicles[i].plate] ?? sc.vehicles[i].run_id); };
 
+  // a run was just started by the feeder: remember it (it replaces any older run id for that plate)
+  const gotRun = (plate, id, warn) => {
+    setMap((m) => { const n = { ...m, [plate]: id }; saveRuns(scn, n); return n; });
+    setFed((f) => ({ ...f, [plate]: id }));
+    if (plate === v.plate) setRunId(id);
+    setWarns((w) => ({ ...w, [plate]: warn }));
+  };
+  const begin = create ? (x) => startRun({ vehicle: x, scenarioName: scn, corridor: sc.corridor, destination: corridors[sc.corridor]?.hospital }) : undefined;
+
   const start = () => {
-    setRunning(true); setProgs({});
+    setRunning(true); setProgs({}); setWarns({});
     const onTick = (p) => setProgs((s) => ({ ...s, [p.plate ?? v.plate]: p }));
     const onDone = () => setRunning(false);
     if (all) {
       const ids = Object.fromEntries(sc.vehicles.map((x) => [x.plate, map[x.plate] ?? x.run_id]));
-      setFed(ids);
-      stop.current = startFeedAll({ scenario: sc, runIds: ids, speed, onTick, onDone });
+      setFed(create ? {} : ids);
+      stop.current = startFeedAll({ scenario: sc, runIds: ids, begin, speed, onTick, onDone, onRun: gotRun });
     } else {
-      setFed({ [v.plate]: runId });
-      stop.current = startFeed({ vehicle: v, runId, speed, onTick, onDone });
+      setFed(create ? {} : { [v.plate]: runId });
+      stop.current = startFeed({ vehicle: v, runId, begin, speed, onTick, onDone, onRun: (id, w) => gotRun(v.plate, id, w) });
     }
   };
   const halt = () => { stop.current?.(); setRunning(false); };
-
-  // Every scenario vehicle gets its own incident and run so /location has something to attach to.
-  const createRuns = async () => {
-    setCreating(true); setCreateErr(null);
-    const m = { ...map };
-    try {
-      for (const x of sc.vehicles) {
-        try {
-          const { incident_id } = await api("/incidents", { type: x.type === "fire" ? "fire" : "medical", severity_note: `Scenario ${scn} (synthetic)` });
-          const { run_id } = await api("/runs", { action: "start", plate: x.plate, incident_id, corridor: sc.corridor, destination: corridors[sc.corridor]?.hospital, source: "sim" });
-          m[x.plate] = run_id;
-          // the crew's one tap: priority only reads confirmed_tier (fire vehicles carry their tier on the run, no confirm)
-          if (x.type !== "fire" && x.tier) await api(`/runs/${run_id}/confirm`, { tier: x.tier });
-        } catch (e) {
-          throw Object.assign(e, { plate: x.plate });
-        }
-      }
-    } catch (e) {
-      setCreateErr(`${e.plate}: ${e.message}${e.status ? ` (HTTP ${e.status})` : ""}${e.body?.detail ? ` ${JSON.stringify(e.body.detail)}` : ""}`);
-    }
-    setMap(m); saveRuns(scn, m);
-    setRunId(m[v.plate] ?? v.run_id);
-    setCreating(false);
-  };
 
   // vehicles at their last tick; the feeder's own position fills in until the backend writes ticks[]
   const vehicles = runs.map((r) => {
@@ -122,7 +106,7 @@ function Live({ scn, setScn }) {
   }).filter((x) => Number.isFinite(x.lat));
   for (const x of sc.vehicles) {
     const p = progs[x.plate];
-    if (p && fed[x.plate] && !vehicles.some((y) => y.id === fed[x.plate])) {
+    if (p?.i > 0 && fed[x.plate] && !vehicles.some((y) => y.id === fed[x.plate])) {
       const k = x.ticks[p.i - 1];
       vehicles.push({ id: fed[x.plate], type: x.type, lat: k.lat, lng: k.lng });
     }
@@ -172,7 +156,7 @@ function Live({ scn, setScn }) {
               <button className={all ? "on" : ""} disabled={running} onClick={() => setAll(true)}>All vehicles</button>
             </div>
             {all ? (
-              <p className="muted">Runs every vehicle with its start offset ({sc.vehicles.map((x) => `${x.plate} +${x.start_offset_s ?? 0} s`).join(", ")}).</p>
+              <p className="muted">Runs every vehicle, each starting at its offset ({sc.vehicles.map((x) => `${x.plate} +${x.start_offset_s ?? 0} s`).join(", ")}).</p>
             ) : (
               <>
                 <label>Vehicle
@@ -180,9 +164,11 @@ function Live({ scn, setScn }) {
                     {sc.vehicles.map((x, i) => <option key={x.run_id} value={i}>{x.plate} · {x.type} · {x.ticks.length} ticks</option>)}
                   </select>
                 </label>
-                <label>Run ID (create runs below, start one on /vehicle, or use the scenario's)
-                  <input value={runId} disabled={running} onChange={(e) => setRunId(e.target.value)} />
-                </label>
+                {!create && (
+                  <label>Run ID (start one on /vehicle, or use the scenario's)
+                    <input value={runId} disabled={running} onChange={(e) => setRunId(e.target.value)} />
+                  </label>
+                )}
               </>
             )}
             <div className="row">
@@ -198,10 +184,16 @@ function Live({ scn, setScn }) {
             })}
             {seen.some((x) => progs[x.plate].status !== 200) && <p className="muted">501 is expected until /location is implemented; the feed keeps going.</p>}
             <h2>Runs for this scenario</h2>
-            <p className="muted">/location needs real runs. This issues one incident and one run per vehicle (confirming the ambulance tiers) and remembers the ids in this browser.</p>
-            <button disabled={running || creating} onClick={createRuns}>{creating ? "Creating…" : "Create runs for this scenario"}</button>
-            {createErr && <p className="card bad">Could not create runs — {createErr}</p>}
+            <label className="row">
+              <input type="checkbox" checked={create} disabled={running} onChange={(e) => setCreate(e.target.checked)} />
+              Create runs: start each run (incident, run, ambulance tier confirm) right before that vehicle's first tick
+            </label>
             {sc.vehicles.filter((x) => map[x.plate]).map((x) => <p key={x.plate} className="muted">{x.plate} → {map[x.plate]}</p>)}
+            {Object.entries(warns).filter(([, w]) => w).map(([plate, w]) => <p key={plate} className="card bad">{plate}: {w}</p>)}
+            <p className="muted">
+              Reset demo data (ends old runs, clears alerts, audit and duty): <code>python3 scripts/demo_reset.py --apply</code>,
+              see the <a href="https://github.com/Nandish3010/ideal-disco#run" target="_blank" rel="noreferrer">README</a>. Nothing is called from this page.
+            </p>
           </section>
         </div>
       </div>
