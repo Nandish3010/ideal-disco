@@ -70,7 +70,8 @@ def extract(audio_bytes, mime, text, vehicle_type, lang_hint, run_id=None) -> di
 
 
 def explain_sequence(seq: list, lang: str) -> str:
-    resp = _client().models.generate_content(
+    client = _client()  # keep a reference: a temporary Client closes its HTTP session on garbage collection
+    resp = client.models.generate_content(
         model=os.environ["GEMINI_MODEL"],
         contents=f"Vehicle order at a junction (decided by rules): {json.dumps(seq)}. "
                  f"In one short plain-text sentence in language code '{lang}', say who goes first and why.")

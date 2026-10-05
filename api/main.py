@@ -9,10 +9,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from google.api_core.exceptions import GoogleAPIError
 from google.cloud.firestore_v1.base_query import FieldFilter
-from google.cloud.firestore import Query
+from google.cloud.firestore import DELETE_FIELD, SERVER_TIMESTAMP, Query
+from google.genai import errors as genai_errors
 from pydantic import BaseModel, Field
 
 import acuity
+import gemini
 import leadtime
 import priority
 import routes_api
@@ -20,6 +22,7 @@ from corridor import CORRIDORS, SCENARIOS, bearing, distance_m, junctions_ahead,
 from firestore_client import db
 from gemini import ExtractionFailed, extract, log
 from signal_adapter import SimAdapter
+from tts import speak, translate
 
 app = FastAPI(title="corridor-api")
 # ponytail: demo, no auth, any origin
@@ -232,7 +235,22 @@ def contender(run_id, r, eta_s, approach):
     return {"run_id": run_id, "vehicle_type": vt, "tier": tier, "eta_s": eta_s, "approach": approach}
 
 
-def preempt(run_id, run, jid, approach, eta_s, clear_s, stage):
+def rationale(jid, seq, lang):
+    """Gemini's one-line 'why this order' on the phase, English plus the junction language. Failure: omit and log.
+    Always rewritten (deleted when fewer than 2 vehicles) so a stale line never outlives its sequence."""
+    out = {"phase.rationale": DELETE_FIELD, "phase.rationale_local": DELETE_FIELD}
+    if len(seq) >= 2:
+        try:
+            en = gemini.explain_sequence(
+                [{k: c[k] for k in ("vehicle_type", "tier", "approach", "offset_s")} for c in seq], "en")
+            out["phase.rationale"] = en
+            out["phase.rationale_local"] = translate(en, lang)
+        except (genai_errors.APIError, GoogleAPIError) as e:
+            log(event="rationale_error", junction_id=jid, error=type(e).__name__, detail=str(e)[:200])
+    db.collection("junctions").document(jid).update(out)
+
+
+def preempt(run_id, run, jid, approach, eta_s, clear_s, stage, lang):
     me = contender(run_id, run, eta_s, approach)
     if me is None:
         return None
@@ -248,6 +266,7 @@ def preempt(run_id, run, jid, approach, eta_s, clear_s, stage):
         jid, seq[0]["approach"], clear_s + 30 + seq[-1]["offset_s"], [c["run_id"] for c in seq],
         [{"run_id": c["run_id"], "offset_s": c["offset_s"], "approach": c["approach"]} for c in seq])
     sequence = [{"run_id": c["run_id"], "offset_s": c["offset_s"]} for c in seq]
+    rationale(jid, seq, lang)
     db.collection("audit").add({"run_id": run_id, "junction_id": jid, "action": "preempt_requested", "stage": stage,
                                 "approach": seq[0]["approach"], "sequence": sequence, "at": datetime.now(timezone.utc)})
     log(event="preempt_requested", run_id=run_id, junction_id=jid, sequence=sequence)
@@ -262,6 +281,31 @@ def mark_stale(now, skip):
         if d.id != skip and d.to_dict().get("state") == "en_route":
             d.reference.update({"state": "stale", "ahead_ids": []})
             log(event="run_stale", run_id=d.id)
+
+
+ESCALATE_S = 20
+
+
+def escalate(now, mine, others):
+    """Piggyback on any tick: alerts older than 20 s with no ACK are flagged and audited. Cheap: only this run's alerts
+    plus the runs it shared a preemption sequence with (and only those still en_route). ponytail: no scheduler, so a
+    quiet system escalates on the next tick."""
+    ids = list(mine)
+    for rid in others:
+        r = db.collection("runs").document(rid).get()
+        if r.exists and r.to_dict().get("state") == "en_route":
+            ids.append(rid)
+    for rid in ids:
+        q = (db.collection("runs").document(rid).collection("alerts")
+             .where(filter=FieldFilter("acked_at", "==", None)).where(filter=FieldFilter("escalated", "==", False)))
+        for d in q.stream():
+            a = d.to_dict()
+            if a.get("created_at") is None or (now - a["created_at"]).total_seconds() <= ESCALATE_S:
+                continue
+            d.reference.update({"escalated": True, "escalated_at": SERVER_TIMESTAMP})
+            db.collection("audit").add({"run_id": rid, "junction_id": a["junction_id"], "action": "escalation",
+                                        "alert_n": int(d.id), "stage": a["stage"], "at": now})
+            log(event="escalation", run_id=rid, junction_id=a["junction_id"], alert_n=int(d.id))
 
 
 @app.post("/location")
@@ -319,6 +363,7 @@ def location(l: Loc):
     alerts = dict(run.get("alert_state") or {})
     n = run.get("alert_count", 0)
     upd["ahead"], upd["ahead_ids"] = {}, []
+    contenders = set(run.get("contenders") or [])  # run ids met in a preemption sequence; their alerts get escalation-checked too
     for j, ap in ahead:
         jid, jc, dist = j["doc_id"], (j["lat"], j["lng"]), j["ahead_m"]
         if scenario:  # recorded spans, no Routes call; a junction with none recorded is NORMAL
@@ -352,17 +397,20 @@ def location(l: Loc):
         elif stage == "PREPARE" and not s.get("stop") and jam_m > s.get("jam_m", 0) + 100:
             fire = "UPDATE"
         if fire:
+            text = alert_text(run, fire, jam_m, ap["id"], move, eta_s)
+            audio_url, text_local = speak(text, corridor["lang"], f"alerts/{l.run_id}/{jid}/{fire}-{n}.mp3")  # None: text-only alert
             ref.collection("alerts").document(str(n)).set({
                 "junction_id": jid, "approach": ap["id"], "stage": fire, "jam_m": round(jam_m), "eta_s": round(eta_s),
-                "exit_move": move, "text": alert_text(run, fire, jam_m, ap["id"], move, eta_s), "acked_at": None,
-                "escalated": False, "created_at": now})
+                "exit_move": move, "text": text, "text_local": text_local, "audio_url": audio_url, "acked_at": None,
+                "escalated": False, "created_at": SERVER_TIMESTAMP})
             n += 1
             s.update({"prepare": True, "stop": s.get("stop") or fire == "STOP", "jam_m": jam_m})
             alerts[jid] = s
             upd.update({"alert_state": alerts, "alert_count": n})
             out["alerts_fired"].append({"junction": jid, "stage": fire})
             log(event="alert", run_id=l.run_id, junction_id=jid, stage=fire, jam_m=round(jam_m), eta_s=round(eta_s))
-            preempt(l.run_id, run, jid, ap["id"], eta_s, clear_s, fire)
+            seq = preempt(l.run_id, run, jid, ap["id"], eta_s, clear_s, fire, corridor["lang"])
+            contenders.update(c["run_id"] for c in seq or [])
         if upd["next_junction_id"] is None:  # nearest junction ahead is what the response reports
             upd.update({"next_junction_id": jid, "next_approach": ap["id"], "next_eta_s": eta_s})
             out.update({"next_junction": jid, "approach": ap["id"], "jam_m": round(jam_m), "eta_s": round(eta_s),
@@ -371,11 +419,55 @@ def location(l: Loc):
 
     if eta_h is not None and eta_h <= BRIEF_ETA_S and not run.get("brief_fired") and not run.get("brief_due"):
         upd["brief_due"] = out["brief_due"] = True  # /brief picks this up
+    upd["contenders"] = sorted(contenders - {l.run_id})
     ref.update(upd)
     mark_stale(now, l.run_id)
+    escalate(now, [l.run_id], upd["contenders"])
     return out
 
 
+class Ack(BaseModel):
+    run_id: str
+    alert_n: int
+    junction_id: str
+    device_id: Optional[str] = None
+
+
 @app.post("/ack")
-def ack():
-    return todo("ack")
+def ack(a: Ack):
+    ref = db.collection("runs").document(a.run_id).collection("alerts").document(str(a.alert_n))
+    snap = ref.get()
+    if not snap.exists or snap.to_dict()["junction_id"] != a.junction_id:
+        return err(404, "unknown_alert")
+    d = snap.to_dict()
+    if d.get("acked_at"):  # idempotent: the first ACK stands
+        acked, latency = d["acked_at"], d.get("ack_latency_s")
+    else:
+        acked = datetime.now(timezone.utc)
+        latency = round(max((acked - d["created_at"]).total_seconds(), 0), 1) if d.get("created_at") else None
+        ref.update({"acked_at": acked, "ack_latency_s": latency, "acked_by": a.device_id})
+        log(event="ack", run_id=a.run_id, junction_id=a.junction_id, alert_n=a.alert_n, ack_latency_s=latency)
+    # latency_s: alias the cop page reads today
+    return {"ok": True, "acked_at": acked.isoformat(), "ack_latency_s": latency, "latency_s": latency}
+
+
+class Duty(BaseModel):
+    corridor: str
+    junction_id: str  # "blr_j3" or "j3"
+    device_id: str
+    on: bool
+    name: Optional[str] = None
+
+
+@app.post("/duty")
+def duty(d: Duty):
+    c = CORRIDORS.get(d.corridor)
+    if c is None:
+        return err(400, "unknown_corridor", detail=d.corridor)
+    jid = d.junction_id.removeprefix(d.corridor + "_")
+    if jid not in {j["id"] for j in c["junctions"]}:
+        return err(404, "unknown_junction", detail=d.junction_id)
+    doc = {"device_id": d.device_id, "name": d.name, "on": d.on, "since": datetime.now(timezone.utc)}
+    db.collection("duty").document(f"{d.corridor}_{jid}").set(doc)
+    log(event="duty", junction_id=f"{d.corridor}_{jid}", device_id=d.device_id, on=d.on)
+    return {**doc, "since": doc["since"].isoformat()}
