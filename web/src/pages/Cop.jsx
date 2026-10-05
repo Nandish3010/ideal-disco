@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { collection, collectionGroup, onSnapshot, query, where } from "firebase/firestore";
+import { collection, collectionGroup, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { db } from "../firebase.js";
 import { api } from "../api.js";
 import { corridors } from "../data.js";
-import { store, useDoc, when } from "../ui.jsx";
+import { deviceId, store, useDoc, when } from "../ui.jsx";
 import "../cop.css";
 
 export const ms = (v) => v?.toMillis?.() ?? (v ? Date.parse(v) : null);
@@ -48,8 +48,8 @@ function speak(a, onBlocked) {
   audio.play().catch((e) => (e.name === "NotAllowedError" ? onBlocked() : tts()));
 }
 
-// ---- alerts for one junction. Try collectionGroup first; it needs a collection-group index on
-// alerts.junction_id. Without it Firestore errors, so fall back to en_route runs + each run's alerts.
+// ---- alerts for one junction. collectionGroup(alerts) on (junction_id, created_at desc), which has an index.
+// If the query throws (index missing), fall back to en_route runs + each run's alerts.
 function useAlerts(jid) {
   const [s, setS] = useState({ alerts: [], mode: "collectionGroup" });
   useEffect(() => {
@@ -68,13 +68,17 @@ function useAlerts(jid) {
         for (const id of Object.keys(inner)) if (!ids.has(id)) { inner[id](); delete inner[id]; delete byRun[id]; push(); }
       }, (e) => setS({ alerts: [], mode: "active runs", error: e.message })), () => Object.values(inner).forEach((f) => f()));
     };
-    subs.push(onSnapshot(query(collectionGroup(db, "alerts"), where("junction_id", "==", jid)),
+    subs.push(onSnapshot(query(collectionGroup(db, "alerts"), where("junction_id", "==", jid), orderBy("created_at", "desc"), limit(20)),
       (q) => setS({ mode: "collectionGroup", alerts: q.docs.map(row) }),
       (e) => { subs.forEach((f) => f()); subs = []; fallback(e.code || "error"); }));
     return () => subs.forEach((f) => f());
   }, [jid]);
   return s;
 }
+
+// Fire and forget: until the endpoint exists (501) or offline, duty stays a local-only state.
+const duty_ = (corridor, junction_id, on) =>
+  api("/duty", { corridor, junction_id, device_id: deviceId(), on }).catch(() => {});
 
 const ARROW = { left: "←", straight: "↑", right: "→" };
 const left = (s) => (s >= 60 ? `in ${Math.ceil(s / 60)} min` : s > 0 ? `in ${Math.ceil(s)} s` : "now");
@@ -88,7 +92,9 @@ function Current({ a, t0, now, onAck }) {
     <section className={`alert-full ${a.stage}`}>
       <div>
         <h2 className="stage">{a.stage}</h2>
-        <p className="alert-text">{a.text}</p>
+        {now - t0 > 20000 || a.escalated ? <span className="pill escalated">ESCALATED</span> : null}
+        <p className="alert-text">{a.text_local || a.text}</p>
+        {a.text_local && <p className="alert-en">{a.text}</p>}
         <p className="muted">{run?.vehicle_type ?? "vehicle"}{tier ? ` · ${tier}` : ""}{a.approach ? ` · ${a.approach} approach` : ""}{a.jam_m ? ` · ${a.jam_m} m queue` : ""}</p>
         <p className="eta">arrives {left(rem)}</p>
         {a.exit_move && <p className="move">{ARROW[a.exit_move]} turning {a.exit_move.toUpperCase()}</p>}
@@ -130,12 +136,13 @@ function Duty({ corridor, junction, onOff }) {
   async function ack(a) {
     setLocal((l) => ({ ...l, [a.key]: { s: "sent" } })); // optimistic: the cop sees it done at once
     try {
-      const r = await api("/ack", { run_id: a.run_id, alert_n: Number(a.n), junction_id: jid });
-      setLocal((l) => ({ ...l, [a.key]: { s: "ok", latency: r.latency_s } }));
+      const r = await api("/ack", { run_id: a.run_id, alert_n: Number(a.n), junction_id: jid, device_id: deviceId() });
+      setLocal((l) => ({ ...l, [a.key]: { s: "ok", latency: r.ack_latency_s } }));
     } catch { /* 501 or offline: stays "sent"; server-side ack lands later */ }
   }
-  const state = (a) => a.acked_at ? `ACKED ${when(a.acked_at)}` : local[a.key]?.s === "ok" ? `ACKED${local[a.key].latency != null ? ` ${local[a.key].latency} s` : ""}`
+  const state = (a) => a.acked_at ? `ACKED ${when(a.acked_at)}` : local[a.key]?.s === "ok" ? `ACK${local[a.key].latency != null ? ` · ${local[a.key].latency} s` : ""}`
     : local[a.key] ? "sent" : now - t0(a) < STALE_MS ? "waiting" : "no ACK";
+  const since = useDoc(`duty/${jid}`).data;
   const n = runs.filter((r) => (r.corridor ?? corridor) === corridor).length;
 
   return (
@@ -156,7 +163,8 @@ function Duty({ corridor, junction, onOff }) {
             <b style={{ float: "right" }}>{state(a)}</b><div className="muted">{when(a.created_at)} · {a.run_id}</div></li>
         ))}
       </ul>
-      <p className="muted">Feed: {mode}</p>
+      {since && since.on !== false && <p className="muted">On duty since {when(since.since ?? since.updated_at ?? since.created_at)}</p>}
+      <details className="muted"><summary>debug</summary>Feed: {mode}</details>
       <a className="duty-off" href="#" onClick={(e) => { e.preventDefault(); onOff(); }}>Off duty</a>
     </>
   );
@@ -175,11 +183,15 @@ export default function Cop() {
 
   if (duty) {
     return <Duty corridor={duty.corridor} junction={find(duty.corridor, duty.junction)}
-      onOff={() => { store.set("cop_duty", null); setDuty(null); }} />;
+      onOff={() => {
+        duty_(duty.corridor, duty.junction, false);
+        store.set("cop_duty", null); setDuty(null);
+      }} />;
   }
   const go = () => {
     unlock(); wake(); // inside the tap: audio unlock and wake lock need the gesture
     const d = { corridor, junction: j.id };
+    duty_(corridor, j.id, true);
     store.set("cop_duty", JSON.stringify(d));
     setDuty(d);
   };
