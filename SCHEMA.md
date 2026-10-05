@@ -298,11 +298,12 @@ Side effect: any `/location` call marks other `en_route` runs with no tick for 3
 ### `POST /housekeeping`
 No body. The sweep that otherwise piggybacks on `/location`, runnable without any tick: marks `en_route` runs with no tick for 30 s as `stale` (newest 20), and flags every unacknowledged alert older than 20 s as `escalated` (with its `audit/` entry) across the first 200 runs in `en_route`, `off_route` or `stale`. Header `X-Housekeeping-Token` must equal env `HOUSEKEEPING_TOKEN`: 403 `{ "error": "forbidden" }` otherwise; when the env is unset the endpoint is disabled and answers 404 `{ "error": "not_found" }`.
 200 `{ "stale": 1, "escalated": 2, "runs_checked": 5 }`.
-The token lives in Secret Manager as `corridor-housekeeping-token` and reaches the service through `--set-secrets HOUSEKEEPING_TOKEN=corridor-housekeeping-token:latest` in `deploy-api.yml`. Cloud Scheduler calls it every minute:
+The token lives in Secret Manager as `corridor-housekeeping-token` and reaches the service through `--set-secrets HOUSEKEEPING_TOKEN=corridor-housekeeping-token:latest` in `deploy-api.yml`. Cloud Scheduler calls it every 30 minutes:
 ```
-gcloud scheduler jobs create http corridor-housekeeping --location asia-south1 --schedule "* * * * *" \
+gcloud scheduler jobs create http corridor-housekeeping --location asia-south1 --schedule "*/30 * * * *" \
   --uri <API>/housekeeping --http-method POST --headers X-Housekeeping-Token=<secret>
 ```
+Ticks run the same sweeps, so the scheduler only covers idle periods and is spaced to let Cloud Run scale to zero.
 
 ### `POST /duty`
 ```json
