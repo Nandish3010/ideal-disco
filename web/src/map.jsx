@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 //   phases     optional {docId: phase} that wins over junctions[docId].phase
 //   vehicles   [{id, type: ambulance|fire|police, lat, lng}]
 //   spans      {junction_id: [{from_m,to_m,speed}]} (or a recorded [{ts, intervals}] list: latest snapshot is used);
-//              from_m/to_m are metres from the junction back along the approach polyline
+//              from_m/to_m are metres along the approach polyline from its origin to the stop line (route order)
 //   onReady    called with the google.maps.Map once created (never called by the SVG fallback)
 // Without VITE_MAPS_BROWSER_KEY (or if Maps fails to load) a plain SVG drawing is rendered instead.
 
@@ -31,7 +31,7 @@ const rad = Math.PI / 180;
 const dist = (a, b) => Math.hypot((b[1] - a[1]) * Math.cos(((a[0] + b[0]) / 2) * rad), b[0] - a[0]) * rad * 6371000;
 const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 
-// Sub-path of an approach polyline (stored far -> junction) between d0..d1 metres from the junction.
+// Sub-path of an approach polyline between d0..d1 metres from the junction along the reversed polyline.
 export function slice(poly, d0, d1) {
   const p = [...poly].reverse(), out = [];
   let acc = 0;
@@ -60,9 +60,13 @@ function scene({ corridor, junctions, phases, spans, vehicles }, now) {
     const iv = intervals(spans?.[key] ?? spans?.[j.id]);
     for (const a of j.approaches ?? []) {
       lines.push({ path: a.polyline, color: SPEED.NORMAL, w: 4 });
+      const polyLen = a.polyline.reduce((sum, p, i, arr) => i > 0 ? sum + dist(arr[i - 1], p) : 0, 0);
       for (const s of iv) {
         if (!SPEED[s.speed] || s.speed === "NORMAL") continue;
-        const path = slice(a.polyline, s.from_m, s.to_m);
+        // Convert from route order (0 at approach origin, max at stop line) to junction-from distances
+        const d0 = polyLen - s.to_m;
+        const d1 = polyLen - s.from_m;
+        const path = slice(a.polyline, d0, d1);
         if (path.length) lines.push({ path, color: SPEED[s.speed], w: 7 });
       }
     }
