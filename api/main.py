@@ -23,12 +23,14 @@ import report
 import routes_api
 from corridor import CORRIDORS, SCENARIOS, bearing, distance_m, junctions_ahead, locate
 from firestore_client import db
-from gemini import ExtractionFailed, extract, log
+from gemini import ExtractionFailed, extract, log, offline
 from hospitals import by_id
 from signal_adapter import SimAdapter
 from tts import speak, store_photo, translate
 
 app = FastAPI(title="corridor-api")
+if offline():
+    log(event="offline_ai")
 # ponytail: demo, no auth, any origin
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
@@ -262,6 +264,7 @@ class Loc(BaseModel):
 
 LIVE = {"en_route", "off_route", "stale"}  # ticks revive stale and off_route runs; ended/arrived get 403
 OFF_ROUTE_M, STALE_S, BRIEF_ETA_S, MIN_TICK_GAP_S, ARRIVE_M = 80, 30, 300, 5, 100
+BRIEF_MIN_M, PREPARE_MIN_JAM_M = 500, 50  # brief needs a junction passed or this far driven; PREPARE needs a queue this long
 LABEL = {"ambulance": "AMBULANCE", "fire": "FIRE ENGINE", "police": "POLICE"}
 COMPASS = {"N": "north", "NE": "north-east", "E": "east", "SE": "south-east", "S": "south", "SW": "south-west",
            "W": "west", "NW": "north-west"}
@@ -298,7 +301,7 @@ def rationale(jid, seq, lang):
     """Gemini's one-line 'why this order' on the phase, English plus the junction language. Failure: omit and log.
     Always rewritten (deleted when fewer than 2 vehicles) so a stale line never outlives its sequence."""
     out = {"phase.rationale": DELETE_FIELD, "phase.rationale_local": DELETE_FIELD}
-    if len(seq) >= 2:
+    if len(seq) >= 2 and not offline():
         try:
             en = gemini.explain_sequence(
                 [{k: c[k] for k in ("vehicle_type", "tier", "approach", "offset_s")} for c in seq], "en")
@@ -322,7 +325,7 @@ def preempt(run_id, run, jid, approach, eta_s, clear_s, stage, lang):
                 rows.append(c)
     seq = priority.sequence(rows)
     SimAdapter(db).request_green(
-        jid, seq[0]["approach"], clear_s + 30 + seq[-1]["offset_s"], [c["run_id"] for c in seq],
+        jid, seq[0]["approach"], clear_s + 30 + seq[-1]["offset_s"] + priority.spread_s(seq), [c["run_id"] for c in seq],
         [{"run_id": c["run_id"], "offset_s": c["offset_s"], "approach": c["approach"]} for c in seq])
     sequence = [{"run_id": c["run_id"], "offset_s": c["offset_s"]} for c in seq]
     rationale(jid, seq, lang)
@@ -382,6 +385,7 @@ def location(l: Loc):
     now = datetime.now(timezone.utc)
     t = l.t if l.t and l.t.tzinfo else (l.t.replace(tzinfo=timezone.utc) if l.t else now)
     me = (l.lat, l.lng)
+    first = run.get("first_tick_at") is None
 
     # tick history: last 12, at most one per 5 s so they span ~60 s
     prev = run.get("ticks") or []
@@ -396,8 +400,9 @@ def location(l: Loc):
 
     # hospital route: ETA, polyline for junction and off-route detection. While off_route the old polyline stays pinned
     # so the state holds until the vehicle rejoins it (the cache is per instance; a restart heals it).
-    dest = by_id((run.get("routing") or {}).get("hospital_id")) or run.get("destination") or corridor["hospital"]
     scenario = run.get("scenario") in SCENARIOS  # replays follow the corridor config, not Google's road choice
+    # a replay keeps its own destination (routing is recorded, not applied)
+    dest = (None if scenario else by_id((run.get("routing") or {}).get("hospital_id"))) or run.get("destination") or corridor["hospital"]
     if scenario:
         hosp = {"polyline_points": [], "steps": [], "age_s": 0, "duration_s": distance_m(me, (dest["lat"], dest["lng"])) / max(observed, 3)}
     else:
@@ -415,10 +420,13 @@ def location(l: Loc):
            "observed_speed_60s": round(observed, 1), "traffic": None}
     upd = {"ticks": ticks, "last_tick_at": now, "source": l.source, "state": state, "heading": heading,
            "eta_hospital_s": eta_h, "next_junction_id": None}
+    if first:
+        upd["first_tick_at"] = t  # the drive starts at the first tick, not at run creation (report card)
 
     # every junction ahead is evaluated, not just the next: a long queue needs the cop warned minutes before the vehicle
     # reaches the junction, while nearer junctions are still to come. One Routes call per (run, junction) per 20 s.
-    ahead = junctions_ahead(corridor, l.lat, l.lng, heading, pts) if state == "en_route" else []
+    passed = list(run.get("passed_junctions") or [])  # always a prefix of corridor["junctions"]: route order
+    ahead = [(j, ap) for j, ap in junctions_ahead(corridor, l.lat, l.lng, heading, pts) if j["doc_id"] not in passed] if state == "en_route" else []
     alerts = dict(run.get("alert_state") or {})
     n = run.get("alert_count", 0)
     upd["ahead"], upd["ahead_ids"] = {}, []
@@ -451,7 +459,7 @@ def location(l: Loc):
         fire = None
         if stage == "STOP" and not s.get("stop"):
             fire = "STOP"
-        elif stage == "PREPARE" and not s.get("prepare"):
+        elif stage == "PREPARE" and not s.get("prepare") and jam_m >= PREPARE_MIN_JAM_M:
             fire = "PREPARE"
         elif stage == "PREPARE" and not s.get("stop") and jam_m > s.get("jam_m", 0) + 100:
             fire = "UPDATE"
@@ -476,14 +484,25 @@ def location(l: Loc):
                         "stage": stage, "exit_move": move, "traffic": traffic})
     upd["last_eval"] = {k: out[k] for k in ("next_junction", "approach", "jam_m", "eta_s", "stage", "exit_move", "traffic")}
 
-    # brief: once per run at ETA <= 300 s (also the first tick of a short run). Needs log entries, else retried next tick;
-    # on Gemini failure brief_due stays true and the hospital's Regenerate button (POST /brief) takes over.
+    # passed: a junction is passed once the step from the last tick crossed its stop-line circle and the vehicle is out of it
+    # again; passing one passes every earlier one (corridor order is route order), so next_junction never goes backwards
+    hi = len(passed) - 1
+    for i, j in enumerate(corridor["junctions"]):
+        jc = (j["lat"], j["lng"])
+        if i > hi and last and locate([(last["lat"], last["lng"]), me], jc)[1] <= j["approaches"][0]["radius_m"] < distance_m(me, jc):
+            hi = i
+    upd["passed_junctions"] = passed = [f"{corridor['id']}_{j['id']}" for j in corridor["junctions"][:hi + 1]]
+
+    # brief: ambulances only, once per run at ETA <= 300 s, and only once the run is under way (a junction passed or 500 m
+    # driven; never a scenario run's first tick). Needs log entries, else retried next tick; on Gemini failure brief_due stays
+    # true and the hospital's Regenerate button (POST /brief) takes over.
     entries = []
-    if eta_h is not None and eta_h <= BRIEF_ETA_S and not run.get("brief_fired") and not run.get("brief_due"):
+    upd["distance_m"] = round(run.get("distance_m", 0) + (distance_m((last["lat"], last["lng"]), me) if last else 0))
+    if (run["vehicle_type"] == "ambulance" and eta_h is not None and eta_h <= BRIEF_ETA_S and (passed or upd["distance_m"] >= BRIEF_MIN_M)
+            and not (scenario and first) and not run.get("brief_fired") and not run.get("brief_due")):
         entries = log_entries(ref)
         upd["brief_due"] = out["brief_due"] = bool(entries)
     upd["contenders"] = sorted(contenders - {l.run_id})
-    upd["distance_m"] = round(run.get("distance_m", 0) + (distance_m((last["lat"], last["lng"]), me) if last else 0))
     arrived = distance_m(me, (dest["lat"], dest["lng"])) <= ARRIVE_M
     if arrived:
         upd.update({"state": "arrived", "ahead_ids": [], "ahead": {}})

@@ -10,6 +10,8 @@ from google.api_core.exceptions import GoogleAPIError
 from google.cloud import storage, texttospeech, translate_v3
 from google.genai import types
 
+from gemini import offline
+
 PROJECT = os.environ.get("GCP_PROJECT", "green-corridor-2026")
 BUCKET = os.environ.get("MEDIA_BUCKET", "green-corridor-2026-media")
 # Wavenet/Neural2 where the language has one; te-IN has only Standard. Unknown language falls back to en-IN.
@@ -131,7 +133,7 @@ def localize_alert(text_en: str, lang: str, parts: dict | None = None) -> str:
     """Spoken-register alert line (conversational Indian English for `en`; Bengaluru Kannada / Hyderabad Telugu with English loanwords) via Gemini; on any
     failure a deterministic template of the same register. Never raises. `parts`: vehicle, tier, jam_m, approach,
     exit_move, eta_s, stage; parsed from text_en when omitted."""
-    if lang not in SHOTS:
+    if lang not in SHOTS or offline():
         return text_en
     key = (text_en, lang)
     if key not in _loc_cache:
@@ -165,6 +167,8 @@ def localize_alert(text_en: str, lang: str, parts: dict | None = None) -> str:
 def speak(text: str, lang: str, path: str, parts: dict | None = None) -> tuple:
     """Returns (audio_url, text_local); (None, None) when synthesis fails.
     `path` is the object name, e.g. alerts/{run_id}/{junction}/{stage}-{n}.mp3."""
+    if offline():
+        return None, text
     lang = _alert_lang(lang)
     key = hashlib.sha256(f"{lang}\0{text}".encode()).hexdigest()
     if key in _cache:
@@ -257,4 +261,8 @@ if __name__ == "__main__":  # offline self-check: stub every client
     os.environ["ALERT_LANG"] = "te"
     speak(pre2, "kn", "a/5.mp3")
     assert calls[-2] == "te-IN-Standard-A"
+    # OFFLINE_AI: English text back, no Gemini/TTS/Storage call
+    os.environ["OFFLINE_AI"] = "1"
+    calls.clear(), gem.clear()
+    assert speak(pre + "    ", "kn", "a/6.mp3") == (None, pre + "    ") and localize_alert(EN, "kn") == EN and not calls and not gem
     print("tts ok")

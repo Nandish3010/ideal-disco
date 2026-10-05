@@ -1,10 +1,11 @@
 """Hospital handover brief: ATMIST + prep checklist from the transit log. Transcription support; Gemini only restates the log."""
 import json
+import os
 
 from google.genai import types
 from pydantic import BaseModel, Field
 
-from gemini import LONG_TIMEOUT_MS, NO_THINKING, generate_json, text_models
+from gemini import LONG_TIMEOUT_MS, NO_THINKING, generate_json, offline, text_models
 
 DISCLAIMER = "Synthetic patient. Clinician confirms."
 SYSTEM = ("You help clinicians by turning an ambulance crew's transit log into a handover brief; this is transcription "
@@ -33,8 +34,14 @@ class Brief(BaseModel):
     summary: str
 
 
+OFFLINE_BRIEF = {"atmist": {k: "offline" for k in Atmist.model_fields}, "checklist": ["Offline stub", "Offline stub", "Offline stub"],
+                 "summary": "Offline stub brief."}
+
+
 def generate(run, log_entries, lang="en", run_id=None):
     """Returns ({atmist, checklist, summary}, model). Raises gemini.ExtractionFailed when no model gives a valid brief."""
+    if offline():
+        return OFFLINE_BRIEF, "offline"
     keep = ("vehicle_type", "acuity_tier", "confirmed_tier", "destination", "eta_hospital_s")
     ctx = {"run": {k: run.get(k) for k in keep}, "log": log_entries}
     cfg = types.GenerateContentConfig(system_instruction=SYSTEM + f" Write in language code '{lang}'.",
@@ -53,4 +60,8 @@ if __name__ == "__main__":
         except ValueError:
             continue
         raise AssertionError("checklist length not enforced")
+    os.environ["OFFLINE_AI"] = "1"
+    out, model = generate({}, [])
+    Brief.model_validate(out)
+    assert model == "offline"
     print("brief ok")

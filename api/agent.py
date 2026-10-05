@@ -21,7 +21,7 @@ from google.genai import types
 
 import routes_api
 from corridor import CORRIDORS, distance_m
-from gemini import log
+from gemini import log, offline
 from hospitals import HOSPITALS, by_id
 
 TIMEOUT_S = 20
@@ -53,6 +53,8 @@ def eta_to(lat: float, lng: float, dest_lat: float, dest_lng: float) -> dict:
         dest_lng: destination longitude.
     """
     a, b = (lat, lng), (dest_lat, dest_lng)
+    if offline():  # no Routes call: straight line
+        return {"eta_s": round(distance_m(a, b) / FALLBACK_SPEED_MPS), "source": "straight_line_estimate"}
     r = routes_api.traffic_to_point(a, b, key=("eta_to", a, b), ttl=30)
     if r["duration_s"] is not None:
         return {"eta_s": round(max(r["duration_s"] - r["age_s"], 0)), "source": "routes_traffic_aware"}
@@ -188,6 +190,8 @@ def route(run: dict) -> dict:
     reasons, trace}. Never raises: any agent failure, timeout or invalid choice falls back to the nearest eligible hospital."""
     need = set(required_capabilities(run.get("confirmed_tier"), run.get("fields") or {})["required"])
     origin = _origin(run)
+    if offline():
+        return _fallback(run, need, origin, "offline_ai")
     try:
         final, trace = asyncio.run(asyncio.wait_for(_ask(run, need, origin), TIMEOUT_S))
         return _validated(final, trace, run["corridor"], need)
@@ -210,9 +214,13 @@ def apply(ref):
     fields["transcript_en"] = " ".join(said)[:600]
     out = route({**run, "id": ref.id, "fields": fields})
     out["decided_at"] = datetime.now(timezone.utc)
+    scenario = bool(run.get("scenario"))  # a replay keeps its corridor hospital: routing is recorded, not applied
+    out["applied"] = not scenario
+    if scenario:
+        out["reason"] = "scenario run keeps corridor hospital"
     upd = {"routing": out}
     cur = run.get("destination")
-    if cur is None or cur.get("name") == (run.get("routing") or {}).get("destination"):
+    if not scenario and (cur is None or cur.get("name") == (run.get("routing") or {}).get("destination")):
         h = by_id(out["hospital_id"])
         upd["destination"] = {"name": h["name"], "lat": h["lat"], "lng": h["lng"]}
     ref.update(upd)
@@ -240,4 +248,7 @@ if __name__ == "__main__":
         raise SystemExit("accepted an ineligible hospital")
     except InvalidChoice:
         pass
+    os.environ["OFFLINE_AI"] = "1"  # no model, no Routes: the fallback comes back at once
+    r = route({"corridor": "blr", "confirmed_tier": "critical", "fields": {"complaint": "chest pain"}})
+    assert r["hospital_id"] == "blr_jayadeva" and r["trace"] == [{"fallback": "offline_ai"}], r
     print("agent ok")
