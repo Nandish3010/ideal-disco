@@ -19,6 +19,30 @@ def get_api_base() -> str:
     return os.getenv("API_BASE", "https://green-corridor-2026-emg.run.app")
 
 
+def bind_device(api_base: str, plate: str = "KA01AB1234", device_id: str = "eval-runner") -> str | None:
+    """Bind device to vehicle and return device_token (or None on error)."""
+    try:
+        body = json.dumps({"plate": plate, "device_id": device_id}).encode()
+        req = urllib.request.Request(
+            f"{api_base}/vehicles/bind",
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            response = json.loads(resp.read())
+            # Extract device_token from response (schema: returns the vehicle doc with bound_device_id)
+            # The token should be in response or we use the device_id as fallback
+            return response.get("device_token") or device_id
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode()
+        print(f"Error binding device (HTTP {e.code}): {error_body}", file=sys.stderr)
+        return None
+    except Exception as e:
+        print(f"Error binding device: {e}", file=sys.stderr)
+        return None
+
+
 def load_labels(path: Path) -> dict[str, Any]:
     """Load expected labels from JSON file."""
     with open(path) as f:
@@ -113,7 +137,9 @@ def dry_run_plan(data_dir: Path, labels: dict, clips: list[str]) -> str:
     return "\n".join(lines)
 
 
-def create_incident_and_run(api_base: str, corridor: str = "blr") -> str | None:
+def create_incident_and_run(
+    api_base: str, device_token: str | None = None, corridor: str = "blr"
+) -> str | None:
     """Create a throwaway incident and run, return run_id (or None on error)."""
     try:
         # Create incident
@@ -132,14 +158,17 @@ def create_incident_and_run(api_base: str, corridor: str = "blr") -> str | None:
         run_body = json.dumps(
             {
                 "action": "start",
-                "plate": "KA01TEST",
+                "plate": "KA01AB1234",
                 "incident_id": incident_id,
                 "corridor": corridor,
                 "source": "sim",
             }
         ).encode()
+        headers = {"Content-Type": "application/json"}
+        if device_token:
+            headers["X-Device-Token"] = device_token
         req = urllib.request.Request(
-            f"{api_base}/runs", data=run_body, headers={"Content-Type": "application/json"}, method="POST"
+            f"{api_base}/runs", data=run_body, headers=headers, method="POST"
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
             run_data = json.loads(resp.read())
@@ -149,14 +178,19 @@ def create_incident_and_run(api_base: str, corridor: str = "blr") -> str | None:
         return None
 
 
-def post_clip_to_triage(api_base: str, run_id: str, clip_audio: str, mime: str) -> dict | None:
+def post_clip_to_triage(
+    api_base: str, run_id: str, clip_audio: str, mime: str, device_token: str | None = None
+) -> dict | None:
     """Post clip to /triage endpoint, return response or None on error."""
     try:
         body = json.dumps(
             {"run_id": run_id, "vehicle_type": "ambulance", "audio_b64": clip_audio, "mime": mime}
         ).encode()
+        headers = {"Content-Type": "application/json"}
+        if device_token:
+            headers["X-Device-Token"] = device_token
         req = urllib.request.Request(
-            f"{api_base}/triage", data=body, headers={"Content-Type": "application/json"}, method="POST"
+            f"{api_base}/triage", data=body, headers=headers, method="POST"
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read())
@@ -169,12 +203,14 @@ def post_clip_to_triage(api_base: str, run_id: str, clip_audio: str, mime: str) 
         return None
 
 
-def run_evaluation(api_base: str, data_dir: Path, labels: dict, clips: list[str]) -> dict[str, Any]:
+def run_evaluation(
+    api_base: str, data_dir: Path, labels: dict, clips: list[str], device_token: str | None = None
+) -> dict[str, Any]:
     """Run evaluation: post clips, compare results, compute accuracy."""
     results = {"clips": {}, "summary": {}}
 
     # Create incident and run (reused for all clips)
-    run_id = create_incident_and_run(api_base)
+    run_id = create_incident_and_run(api_base, device_token)
     if not run_id:
         print("Failed to create incident/run", file=sys.stderr)
         return results
@@ -196,7 +232,7 @@ def run_evaluation(api_base: str, data_dir: Path, labels: dict, clips: list[str]
         # Load and post clip
         audio_b64 = load_clip_audio(clip_path)
         mime = get_mime_type(clip_name)
-        response = post_clip_to_triage(api_base, run_id, audio_b64, mime)
+        response = post_clip_to_triage(api_base, run_id, audio_b64, mime, device_token)
         if not response:
             results["clips"][clip_id] = {"error": "failed_to_post"}
             continue
@@ -305,7 +341,13 @@ def main():
     # Run evaluation
     api_base = get_api_base()
     print(f"Running evaluation against {api_base}...", file=sys.stderr)
-    results = run_evaluation(api_base, data_dir, labels, clips)
+
+    # Bind device to get token
+    device_token = bind_device(api_base)
+    if not device_token:
+        print("Failed to bind device; continuing without token", file=sys.stderr)
+
+    results = run_evaluation(api_base, data_dir, labels, clips, device_token)
 
     # Write results
     results_path = Path("data/eval/results.json")
