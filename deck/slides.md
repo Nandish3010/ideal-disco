@@ -140,12 +140,12 @@ A 500 m queue alerts earlier than a 100 m queue, because the cop needs the time 
 | 1. Extract | Gemini | speech or monitor photo → fixed JSON fields, never a score |
 | 2. Tier | `acuity.py` | deterministic lookup → critical / urgent / stable; crew confirms with one tap |
 | 3. Order | `priority.py` | sort by (tier, ETA): a **sequence, not a hold** |
-| 4. Explain | Gemini | one line, in the cop's language: "Fire engine first, ambulance 12 s later" |
+| 4. Explain | Gemini | rewords the rule-built sentence for the cop ("Fire engine first, ambulance 12 s later"); validated, template if it fails |
 
 A language model must not decide who lives. Rules are auditable, testable and carry self-checks.
 
 <!--
-Hallucination risk is removed from the safety path by construction. The model sits before the rules (extraction) and after them (explanation), never inside them. acuity.py, priority.py and leadtime.py each ship with assert-based self-checks. Priority is a sequence, everyone passes.
+Hallucination risk is removed from the safety path by construction. The model sits before the rules (extraction) and after them (rewording a sentence the rules already built, which is validated), never inside them. acuity.py, priority.py and leadtime.py each ship with assert-based self-checks. Priority is a sequence, everyone passes.
 -->
 
 ---
@@ -155,13 +155,15 @@ Hallucination risk is removed from the safety path by construction. The model si
 <div class="cols wide-left">
 <div>
 
-| Job | Example |
+| Job | What |
 |---|---|
-| Voice extraction | "chest pain, BP 85 over 50" → `sbp: 85` → critical |
-| Monitor photo | vision → same schema |
-| Transit log | "Oxygen 4 litres started" → structured entry |
-| Hospital brief | ATMIST + prep checklist |
-| Alert wording | spoken line per language |
+| Voice and photo extraction | speech, typed text or a monitor photo into a fixed schema, with no tools. |
+| ATMIST handover | the hospital brief and prep checklist, generated at ETA minus 5 minutes. |
+| Alert phrasing | the short spoken line each junction cop hears. |
+| Sequencing sentence | Gemini rewords a rule-built template into one line; the result is validated and the template is used if it fails. |
+| Cop voice notes to rule actions | a spoken report from the junction fills a fixed schema, and plain rules act on it. |
+| After-action report | a plain summary of each finished run, with the timeline built in code. |
+| Hospital routing agent | built on Agent Development Kit, with four tools and a code guard that checks its choice before it is applied. |
 
 </div>
 <div>
@@ -171,10 +173,10 @@ Hallucination risk is removed from the safety path by construction. The model si
 </div>
 </div>
 
-<p class="cite">Synthetic patients only. A clinician confirms every extracted value. Examples are the contract examples in SCHEMA.md.</p>
+<p class="cite">Extraction runs on <code>gemini-3.1-flash-lite</code> with <code>gemini-3-flash-preview</code> as fallback; the brief, report, sequencing sentence and agent text use <code>gemini-3-flash-preview</code>. Synthetic patients only; a clinician confirms every extracted value.</p>
 
 <!--
-Each use changes what a human sees or hears next, and each has a form or template fallback if the model fails. Examples are the contract examples in SCHEMA.md, not captured from a live run. Photo vitals is on main: Gemini reads values visible on a monitor or ECG photo using the same schema, null where unreadable.
+Each use changes what a human sees or hears next, and each has a form or template fallback if the model fails. Extraction runs on gemini-3.1-flash-lite with gemini-3-flash-preview as the fallback; the brief, the report, the sequencing sentence and the agent text use gemini-3-flash-preview. Extraction reads values visible on a monitor or ECG photo using the same schema, null where unreadable. Cop voice notes fill a fixed schema and plain rules act on it, so a misheard report can at worst extend a green by three minutes.
 -->
 
 ---
@@ -185,11 +187,15 @@ Each use changes what a human sees or hears next, and each has a form or templat
 <div>
 
 ```
-list_hospitals(blr) -> 3 hospitals
-eta_to(Jayadeva Institute) -> 438 s
-check_diversion(blr_jayadeva) -> accepting
 required_capabilities(critical) -> cath_lab
+list_hospitals(blr) -> 3 hospitals
+check_diversion(Jayadeva) -> accepting
+check_diversion(Apollo) -> on diversion
+eta_to(Jayadeva) -> 373 s, 2.6 km
+Added to baseline: icu
 ```
+
+Destination Jayadeva, confidence 1.0. Alternatives: Apollo (diversion), Fortis (no cath lab).
 
 An ADK agent on Vertex AI picks the destination after the crew confirms the tier, with up to two rejected alternatives and a confidence. `required_capabilities` is a keyword baseline for validation. A code guard re-checks the choice; any failure or 20 s timeout falls back to the nearest eligible hospital.
 
@@ -202,7 +208,7 @@ An ADK agent on Vertex AI picks the destination after the crew confirms the tier
 </div>
 
 <!--
-The trace on the left is the contract example from SCHEMA.md; the screenshot on the right is the live trace in /vehicle. The agent never changes acuity or signal priority. The roster is invented demo data and the slide says so. Four tools: list_hospitals(corridor) (mock capability and bed roster), eta_to(...) (traffic-aware Routes ETA), check_diversion(hospital_id) (a mock diversion feed), and required_capabilities(tier, fields), which is the keyword-table baseline used to validate the agent's own reading. The code guard rejects a dropped critical capability, an unknown hospital, a diverted one, no bed, or a missing capability. The trace lines on the slide are illustrative of the contract in SCHEMA.md.
+The trace on the left is a live routing trace from a rehearsal run (a critical chest-pain case); the screenshot on the right is the trace in /vehicle. The agent never changes acuity or signal priority. The roster is invented demo data and the slide says so. Four tools: list_hospitals(corridor) (mock capability and bed roster), eta_to(...) (traffic-aware Routes ETA), check_diversion(hospital_id) (a mock diversion feed), and required_capabilities(tier, fields), which is the keyword-table baseline used to validate the agent's own reading. The code guard rejects a dropped critical capability, an unknown hospital, a diverted one, no bed, or a missing capability. In this run the agent added ICU to the keyword baseline for the shock picture, rejected Apollo because it was on diversion and Fortis because it has no cath lab, and the guard accepted Jayadeva.
 -->
 
 ---
@@ -286,14 +292,14 @@ In live runs the queue length comes from the same Routes spans the engine alread
 
 ### Stated plainly
 - Traffic signals are simulated behind an adapter; the demo scenario uses hand-authored traffic spans
-- Patients are synthetic; no authentication in the demo; demo endpoints are rate-limited but public
+- Patients are synthetic; no user accounts; device-scoped tokens protect vehicle, cop and run actions; demo endpoints are rate-limited but reachable
 - Minutes saved is a simulation estimate
 
 </div>
 </div>
 
 <!--
-We would rather be believed on a smaller claim. Cop alerts are the part that needs no city integration. The auth gap is a documented demo decision, so judges can open every screen.
+We would rather be believed on a smaller claim. Cop alerts are the part that needs no city integration. There are no user accounts by design: device-scoped tokens protect vehicle, cop and run actions, and the rest stays reachable so judges can open every screen.
 -->
 
 ---

@@ -504,7 +504,7 @@ function Replay({ scn, setScn }) {
           </div>
           <div className="muted">
             of {(sim.saved_s / 60).toFixed(1)} min over {sim.vehicles.length} vehicles · simulated
-            estimate on recorded traffic
+            estimate on a scripted scenario with hand-authored traffic spans
           </div>
         </section>
         <section className="card controls">
@@ -600,7 +600,10 @@ function Replay({ scn, setScn }) {
             </div>
           </div>
         ))}
-        <p className="muted">{sc.baseline_cycle?.note}</p>
+        <p className="muted">
+          Simulated baseline on a scripted scenario, not a field measurement. Per junction passed:
+          cycle/4 + queue/2 m/s (the expected remaining red plus the queue draining at 2 m/s).
+        </p>
       </section>
     </div>
   );

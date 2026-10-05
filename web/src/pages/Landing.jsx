@@ -7,12 +7,13 @@ import scenario from "../../../data/scenarios/blr-two-vehicles.json";
 const SAVED_MIN = (simulate(scenario, corridors[scenario.corridor]).saved_s / 60).toFixed(1);
 
 const GEMINI = [
-  "Voice and photo extraction: the crew's spoken or photographed triage note becomes a fixed-schema record.",
-  "ATMIST brief: the structured handover the hospital reads before the patient arrives.",
+  "Voice and photo extraction: speech, typed text or a monitor photo into a fixed schema, with no tools.",
+  "ATMIST handover: the hospital brief and prep checklist, generated at ETA minus 5 minutes.",
   "Alert phrasing: the short spoken line each junction cop hears.",
-  "Order rationale: why one vehicle goes first when two reach a junction together.",
-  "After-action report: a plain summary of each finished run.",
-  "Hospital routing agent: built on Agent Development Kit, with a code guard that checks its choice before it is applied.",
+  "Sequencing sentence: Gemini rewords a rule-built template into one line; the result is validated and the template is used if it fails.",
+  "Cop voice notes to rule actions: a spoken report from the junction fills a fixed schema, and plain rules act on it.",
+  "After-action report: a plain summary of each finished run, with the timeline built in code.",
+  "Hospital routing agent: built on Agent Development Kit, with four tools and a code guard that checks its choice before it is applied.",
 ];
 
 const SCREENS = [
@@ -39,7 +40,7 @@ const SCREENS = [
   [
     "/sim",
     "Sim",
-    "Replay recorded scenarios, or feed live GPS ticks, and watch the corridor open.",
+    "Play the scripted scenario, or feed live GPS ticks, and watch the corridor open.",
   ],
   ["/dispatch", "Dispatch", "Issue the incident ID that a run starts from."],
 ];
@@ -50,12 +51,12 @@ export default function Landing() {
       <section className="hero" aria-labelledby="hero-h">
         <h2 id="hero-h">Clear the road before the siren arrives.</h2>
         <p className="lede">
-          Junction police get a spoken heads-up for every ambulance, fire engine and police car on
-          its way, and the hospital gets the brief before arrival.
+          Junction police get a spoken heads-up for every ambulance and fire engine on its way
+          (police vehicles are supported), and the hospital gets the brief before arrival.
         </p>
         <p className="herofig">
           <b>{SAVED_MIN} min</b> saved on the Bengaluru two-vehicle replay{" "}
-          <span className="muted">(simulated estimate on recorded traffic)</span>
+          <span className="muted">(simulated estimate on a scripted scenario)</span>
         </p>
         <a className="cta" href="/sim">
           Watch the replay
@@ -63,8 +64,8 @@ export default function Landing() {
       </section>
 
       <p className="lede">
-        <b>The problem:</b> ambulances, fire engines and police cars lose minutes at red lights and
-        queues, and junction police only find out when the siren is already there.
+        <b>The problem:</b> ambulances and fire engines lose minutes at red lights and queues, and
+        junction police only find out when the siren is already there.
       </p>
       <p className="lede">
         <b>The fix:</b> a green corridor. The moment a vehicle is on its way, each junction on its
@@ -117,8 +118,9 @@ export default function Landing() {
       <h2>Honest limits</h2>
       <p className="banner">
         Traffic signals are simulated behind an adapter; the demo scenario uses hand-authored
-        traffic spans; patients are synthetic; no authentication in the demo. Minutes saved is a
-        simulated estimate, not a measurement.
+        traffic spans; patients are synthetic; no user accounts; device-scoped tokens protect
+        vehicle, cop and run actions; demo endpoints are rate-limited but reachable. Minutes saved
+        is a simulated estimate, not a measurement.
       </p>
       <p className="muted">
         <a className="inline" href="https://github.com/Nandish3010/ideal-disco">
