@@ -58,11 +58,12 @@ Written by `/location` on every tick:
   "junction_id": "blr_j3", "approach": "NE", "stage": "PREPARE", "jam_m": 520, "eta_s": 240,
   "exit_move": "left",
   "text": "AMBULANCE CRITICAL · 520 m queue on your north-east approach · turning LEFT · arrives in 4 min",
-  "audio_url": "gs://green-corridor-2026-media/alerts/blr_j3_run1_prepare.mp3",
-  "acked_at": null, "escalated": false, "created_at": "2026-10-05T09:03:10Z"
+  "text_local": "ಆಂಬ್ಯುಲೆನ್ಸ್ ...",
+  "audio_url": "https://storage.googleapis.com/green-corridor-2026-media/alerts/run-1a2b3c4d/blr_j3/PREPARE-0.mp3",
+  "acked_at": null, "ack_latency_s": null, "escalated": false, "created_at": "2026-10-05T09:03:10Z"
 }
 ```
-`n` counts up from 0 per run (`alert_count`). `stage`: `PREPARE | STOP | UPDATE`; per run and junction PREPARE fires once, UPDATE when `jam_m` grew more than 100 m since the last alert, STOP once at eta <= 30 s (or inside the stop-line geofence). `text` prefix: `STOP CROSS TRAFFIC · ` or `UPDATE · `; the tier word is `confirmed_tier`, else `acuity_tier`, else `UNCONFIRMED` (ambulance). `audio_url` arrives with TTS (not written yet). `exit_move`: `left | straight | right`. `escalated` flips true after 20 s without ACK.
+`n` counts up from 0 per run (`alert_count`). `stage`: `PREPARE | STOP | UPDATE`; per run and junction PREPARE fires once, UPDATE when `jam_m` grew more than 100 m since the last alert, STOP once at eta <= 30 s (or inside the stop-line geofence). `text` prefix: `STOP CROSS TRAFFIC · ` or `UPDATE · `; the tier word is `confirmed_tier`, else `acuity_tier`, else `UNCONFIRMED` (ambulance). `created_at` is a server timestamp. `text_local` is `text` translated to the corridor language (`kn` blr, `te` hyd; same as `text` for `en`); `audio_url` is its MP3 (public, in the media bucket, cached per text and language so an unchanged UPDATE reuses the file). If translation or speech fails both are `null` and the alert is text only. `exit_move`: `left | straight | right`. `acked_at` and `ack_latency_s` (seconds from `created_at`, 0.1 s) are set by `/ack`, with `acked_by` when a `device_id` was sent. `escalated` flips true, with `escalated_at`, once the alert is more than 20 s old with no ACK; checked on every `/location` tick for that run's alerts and those of the other `en_route` runs it shared a preemption sequence with (`runs/{id}.contenders`), and written to `audit/` as `action: "escalation"`.
 
 ### `junctions/{corridor}_{id}`
 ```json
@@ -70,7 +71,13 @@ Written by `/location` on every tick:
             "sequence": [{"run_id": "run-fire-1", "offset_s": 0, "approach": "E"}, {"run_id": "run-amb-1", "offset_s": 12, "approach": "NE"}]},
   "lang": "kn" }
 ```
-`phase` is `null` when no preemption is active. Written by `SimAdapter.request_green`. `sequence` is the `priority.sequence` order: each vehicle gets its approach's green `offset_s` seconds after the phase starts; `approach` at the top is the first vehicle's. `until` = now + clear time + 30 s + the last offset. A phase is a request, not a hold: past `until` it is stale and ignored.
+`phase` may also carry `rationale` (English) and `rationale_local` (corridor language): Gemini's one-line explanation of the order, written when the sequence has two or more vehicles and removed otherwise; omitted if Gemini or translation failed. `phase` is `null` when no preemption is active. Written by `SimAdapter.request_green`. `sequence` is the `priority.sequence` order: each vehicle gets its approach's green `offset_s` seconds after the phase starts; `approach` at the top is the first vehicle's. `until` = now + clear time + 30 s + the last offset. A phase is a request, not a hold: past `until` it is stale and ignored.
+
+### `duty/{corridor}_{junction_id}`
+```json
+{ "device_id": "dev-cop-1", "name": "Constable Rao", "on": true, "since": "2026-10-05T09:00:00Z" }
+```
+Written by `/duty` when a cop goes on or off duty at a junction (doc id like `blr_j3`). `name` may be `null`.
 
 ### `briefs/{run_id}`
 ```json
@@ -86,6 +93,7 @@ Written by `/location` on every tick:
 { "run_id": "run-amb-1", "junction_id": "blr_j3", "action": "preempt_requested", "stage": "PREPARE", "approach": "NE",
   "sequence": [{"run_id": "run-amb-1", "offset_s": 0}], "at": "2026-10-05T09:03:20Z" }
 ```
+Escalations: `{ "run_id": "run-amb-1", "junction_id": "blr_j3", "action": "escalation", "alert_n": 0, "stage": "PREPARE", "at": "..." }`.
 
 ### `reports/{run_id}`
 ```json
@@ -193,6 +201,14 @@ Side effect: any `/location` call marks other `en_route` runs with no tick for 3
 
 ### `POST /ack`
 ```json
-{ "run_id": "run-amb-1", "junction_id": "blr_j3", "alert_n": 0 }
+{ "run_id": "run-amb-1", "junction_id": "blr_j3", "alert_n": 0, "device_id": "dev-cop-1" }
 ```
-200 `{ "acked_at": "2026-10-05T09:03:26Z", "latency_s": 6.2 }`
+`device_id` is optional. Sets `acked_at` (server time) and `ack_latency_s` on `runs/{run_id}/alerts/{alert_n}`; a repeat ACK changes nothing and returns the first values.
+200 `{ "ok": true, "acked_at": "2026-10-05T09:03:26Z", "ack_latency_s": 6.2, "latency_s": 6.2 }` (`latency_s` duplicates `ack_latency_s` for the cop page). 404 `{ "error": "unknown_alert" }` (no such alert, or its `junction_id` differs).
+
+### `POST /duty`
+```json
+{ "corridor": "blr", "junction_id": "blr_j3", "device_id": "dev-cop-1", "on": true, "name": "Constable Rao" }
+```
+`junction_id` may be `blr_j3` or `j3`; `name` is optional. Writes `duty/blr_j3`.
+200 the doc: `{ "device_id": "dev-cop-1", "name": "Constable Rao", "on": true, "since": "2026-10-05T09:00:00Z" }`. 400 `{ "error": "unknown_corridor" }`, 404 `{ "error": "unknown_junction" }`.

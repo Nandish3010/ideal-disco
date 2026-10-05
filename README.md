@@ -47,7 +47,7 @@ Pick a corridor with `?corridor=blr` or `?corridor=hyd`.
 ## API (FastAPI, Cloud Run)
 
 `POST /vehicles/bind` · `POST /incidents` · `POST /runs` (start/end) · `POST /triage` · `POST /log` ·
-`POST /brief` · `POST /location` · `POST /ack` · `GET /health`. Contracts are in [SCHEMA.md](SCHEMA.md).
+`POST /brief` · `POST /location` · `POST /ack` · `POST /duty` · `GET /health`. Contracts are in [SCHEMA.md](SCHEMA.md).
 
 ## Honest notes
 
