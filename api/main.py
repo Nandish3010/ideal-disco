@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import FastAPI
+from fastapi import BackgroundTasks, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from google.api_core.exceptions import GoogleAPIError
@@ -190,7 +190,7 @@ def log_entry(t: Triage):
 
 
 @app.post("/runs/{run_id}/confirm")
-def confirm(run_id: str, c: Confirm):
+def confirm(run_id: str, c: Confirm, bg: BackgroundTasks):
     if c.tier not in TIERS:
         return err(400, "bad_tier", detail=sorted(TIERS))
     ref = db.collection("runs").document(run_id)
@@ -198,8 +198,8 @@ def confirm(run_id: str, c: Confirm):
         return err(404, "unknown_run")
     ref.update({"confirmed_tier": c.tier, "patient_on_board": True})
     log(event="tier_confirmed", run_id=run_id, tier=c.tier)
-    routing = agent.apply(ref)  # hospital routing agent; None when not an ambulance run. Up to 20 s, then rule-based fallback
-    return {"run_id": run_id, "confirmed_tier": c.tier, "patient_on_board": True, "routing": routing}
+    bg.add_task(agent.apply, ref)  # hospital routing agent after the response (Cloud Run runs with --no-cpu-throttling); the UI reads runs/{id}.routing live
+    return {"run_id": run_id, "confirmed_tier": c.tier, "patient_on_board": True, "routing": None}
 
 
 class RouteReq(BaseModel):

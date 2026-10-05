@@ -204,7 +204,7 @@ The crew's one tap.
 ```json
 { "tier": "critical" }
 ```
-200 `{ "run_id": "run-amb-1", "confirmed_tier": "critical", "patient_on_board": true, "routing": { "...": "runs.routing" } }` (`routing` is `null` for fire and police runs; the call takes about 8 s because the routing agent runs inside it, 20 s at most). 400 `{ "error": "bad_tier" }`, 404 `{ "error": "unknown_run" }`.
+200 `{ "run_id": "run-amb-1", "confirmed_tier": "critical", "patient_on_board": true, "routing": { "...": "runs.routing" } }` (`routing` is always `null` here: the routing agent runs after the response as a background task, up to 20 s, and writes `runs/{id}.routing`, which the UI reads live from Firestore; it stays absent for fire and police runs). 400 `{ "error": "bad_tier" }`, 404 `{ "error": "unknown_run" }`.
 
 ### `POST /route`
 Re-runs the hospital routing agent for a confirmed ambulance run (for example after the patient's condition or position changed).
