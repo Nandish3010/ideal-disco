@@ -6,6 +6,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import httpx
 from fastapi import BackgroundTasks, FastAPI, Header, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -235,6 +236,9 @@ def runs(r: RunReq, x_device_token: str = Header("")):
                 {"state": "ended", "ended_reason": "superseded", "ahead_ids": [], "ahead": {}}
             )  # no report card
             log(event="run_superseded", run_id=old.id, plate=r.plate)
+    dest = r.destination
+    if dest is None and r.scenario and (c := CORRIDORS.get(r.corridor)):
+        dest = c["hospital"]  # a replay is bound for the corridor hospital: the run card never reads "to —"
     run_id = "run-" + uuid.uuid4().hex[:8]
     db.collection("runs").document(run_id).set(
         {
@@ -242,7 +246,7 @@ def runs(r: RunReq, x_device_token: str = Header("")):
             "vehicle_type": v.to_dict()["type"],
             "incident_id": r.incident_id,
             "corridor": r.corridor,
-            "destination": r.destination,
+            "destination": dest,
             "source": r.source,
             "state": "en_route",
             "patient_on_board": False,
@@ -592,19 +596,23 @@ def brief_from_tick(run_id, run_ref, run, entries):
 
 
 def rationale(jid, seq, lang):
-    """Gemini's one-line 'why this order' on the phase, English plus the junction language. Failure: omit and log.
+    """The phase's 'why this order' line, English plus the junction language. The stored text is the deterministic
+    template; Gemini only paraphrases it, and its rewrite replaces the template only if valid_paraphrase accepts it.
     Always rewritten (deleted when fewer than 2 vehicles) so a stale line never outlives its sequence."""
     out: dict[str, Any] = {"phase.rationale": DELETE_FIELD, "phase.rationale_local": DELETE_FIELD}
     if len(seq) >= 2 and not offline():
+        facts = priority.rationale_facts(seq)
+        en = priority.template_rationale(facts)
         try:
-            facts = priority.rationale_facts(seq)
-            en = gemini.explain_sequence(facts, "en")
-            if not priority.valid_rationale(
-                en, facts
-            ):  # a made-up reason or number: the deterministic sentence instead
-                log(event="rationale_template", junction_id=jid, rejected=en[:200])
-                en = priority.template_rationale(facts)
-            out["phase.rationale"] = en
+            alt = gemini.paraphrase_sequence(en, facts)
+            if priority.valid_paraphrase(alt, en):
+                en = alt
+            else:
+                log(event="rationale_template", junction_id=jid, rejected=alt[:200])
+        except (genai_errors.APIError, GoogleAPIError, httpx.TimeoutException) as e:
+            log(event="rationale_error", junction_id=jid, error=type(e).__name__, detail=str(e)[:200])
+        out["phase.rationale"] = en
+        try:
             out["phase.rationale_local"] = translate(en, lang)
         except (genai_errors.APIError, GoogleAPIError) as e:
             log(event="rationale_error", junction_id=jid, error=type(e).__name__, detail=str(e)[:200])

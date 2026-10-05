@@ -5,7 +5,7 @@ from priority import (
     sequence,
     spread_s,
     template_rationale,
-    valid_rationale,
+    valid_paraphrase,
 )
 
 FIRE = {"run_id": "f", "vehicle_type": "fire", "tier": "fire_with_trapped", "eta_s": 90}
@@ -107,28 +107,45 @@ def test_facts_attach_meaning_to_the_order() -> None:
     )  # alone: nothing to compare
 
 
-def test_validator_needs_the_first_vehicle_and_only_given_numbers() -> None:
-    facts = rationale_facts(sequence([AMB, FIRE]))  # fire first, offsets 0 and 12, etas 90 and 30
-    assert valid_rationale("The fire engine goes first because its tier is higher.", facts)
-    assert valid_rationale("The fire engine goes first; the ambulance follows 12 s later.", facts)
-    assert not valid_rationale("The ambulance goes first.", facts)  # first vehicle not named
-    assert not valid_rationale(
-        "The fire engine goes first because it arrives 12 seconds earlier than 7 others.", facts
+def test_paraphrase_keeps_vehicles_in_template_order_and_only_given_numbers() -> None:
+    want = template_rationale(rationale_facts(sequence([AMB, FIRE])))  # fire first, ambulance 12 s later
+    assert valid_paraphrase(
+        "The fire engine goes first because its tier is higher; the ambulance follows.", want
     )
-    assert not valid_rationale("The fire engine goes first, 60 seconds ahead.", facts)  # a number nobody gave
-    assert not valid_rationale(
-        "The fire engine goes first because it arrives 12 seconds earlier.", facts
-    )  # false cause
-    assert not valid_rationale("  ", facts)
+    assert valid_paraphrase("The fire engine goes first; the ambulance follows 12 s later.", want)
+    assert not valid_paraphrase("The ambulance goes first.", want)  # wrong first vehicle, fire dropped
+    assert not valid_paraphrase(
+        "The ambulance goes first, then the fire engine 12 s later.", want
+    )  # order swapped
+    assert not valid_paraphrase("The fire engine goes first.", want)  # ambulance missing
+    assert not valid_paraphrase(
+        "The fire engine goes first, then the ambulance 60 s later.", want
+    )  # a number nobody gave
+    assert not valid_paraphrase("The fire engine goes first, then the ambulance and a police car.", want)
+    assert not valid_paraphrase(
+        "The fire engine goes first then the ambulance 12 s later." * 5, want
+    )  # too long
+    assert not valid_paraphrase("  ", want)
+
+
+def test_paraphrase_rejects_the_leaks_from_the_live_run() -> None:
+    want = template_rationale(rationale_facts(sequence([AMB, FIRE])))
+    assert not valid_paraphrase("The fire engine goes first because of higher_tier, ambulance after.", want)
+    assert not valid_paraphrase("Fire engine and ambulance: reason_code platoon_shared_approach.", want)
+    assert not valid_paraphrase(
+        "The fire engine goes first because it arrives earlier, ambulance later.", want
+    )
     near = {**AMB, "run_id": "n", "eta_s": 10}
-    same = rationale_facts(sequence([AMB, near]))  # equal tiers: arrival time is the real reason here
-    assert valid_rationale("The ambulance with the earlier arrival goes first.", same)
+    same = template_rationale(
+        rationale_facts(sequence([AMB, near]))
+    )  # equal tiers: arrival is the real reason
+    assert valid_paraphrase("The ambulance with the earlier arrival goes first, the other 12 s later.", same)
 
 
 def test_template_sentence_is_deterministic() -> None:
     facts = rationale_facts(sequence([AMB, FIRE]))
     want = "Fire engine with trapped persons goes first: higher priority tier. Ambulance follows 12 s later."
-    assert template_rationale(facts) == want and valid_rationale(want, facts)
+    assert template_rationale(facts) == want and valid_paraphrase(want, want)
     a1 = {**AMB, "run_id": "a1", "approach": "E", "eta_s": 17}
     a2 = {**AMB, "run_id": "a2", "approach": "E", "eta_s": 44}
     pol = {"run_id": "p", "vehicle_type": "police", "tier": "police_with_incident", "eta_s": 80}

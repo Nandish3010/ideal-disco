@@ -189,17 +189,15 @@ def cop_note(audio_bytes, mime, text) -> dict:
     )[0]
 
 
-def explain_sequence(facts: list, lang: str) -> str:
-    """facts: priority.rationale_facts. The model only narrates the reason codes, never the raw offsets."""
+def paraphrase_sequence(template: str, facts: list) -> str:
+    """Rewrites the deterministic `template` sentence (priority.template_rationale) for a constable. The facts only
+    keep it honest; the caller discards the reply unless priority.valid_paraphrase accepts it."""
     client = _client()  # keep a reference: a temporary Client closes its HTTP session on garbage collection
     prompt = (
-        f"Vehicles in the order a junction will serve them, decided by rules: {json.dumps(facts)}. "
-        "offset_s is a gap the rules assigned, not an arrival order. Each reason_code says why that vehicle sits where it does "
-        "against its neighbour: higher_tier = its priority tier beats the other's (tier beats ETA); earlier_eta_same_tier = equal "
-        "tiers, the earlier ETA goes first; platoon_shared_approach = same approach, they share one green. Explain the ORDER using "
-        "only these reason codes. Never claim that arrival order or timing caused the priority. Name the first vehicle's type. "
-        "Use no numbers other than those given. "
-        f"Answer in one short plain-text sentence in language code '{lang}'."
+        f"Sentence: {template}\nFacts it was written from: {json.dumps(facts)}\n"
+        "Rewrite this sentence for a traffic constable in one plain sentence; keep the same vehicles in the same order; "
+        "do not add reasons or numbers. Plain English words only: no code names, underscores or field names. "
+        "Reply with the sentence only."
     )
     models = text_models()
     for model in models:
