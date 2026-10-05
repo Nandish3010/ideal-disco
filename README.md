@@ -30,7 +30,7 @@ A crew binds a registered vehicle, starts a run against a dispatched incident, s
 
 Pick a corridor with `?corridor=blr` or `?corridor=hyd`; a corridor is one JSON file in `data/corridors/`.
 
-The replay on the current scenario (`blr-two-vehicles`: a critical ambulance, a platoon ambulance behind it, and a fire engine) saves ≈ {MINUTES} min <!-- update from replay test --> across the three vehicles. The scenario is a scripted demo scenario: GPS ticks generated along the real corridor roads, with hand-authored traffic spans (a 500 m queue at junction 3, 100 m at junction 4). The saving is one simulated baseline, not a field measurement: per junction passed, the "Today" lane waits `cycle_s / 4 + queue_m / 2` seconds (expected remaining red for an arrival at a random point of the cycle, plus the queue draining at 2 m/s). The replay and the run report cards use the same formula.
+The replay on the current scenario (`blr-two-vehicles`: a critical ambulance, a platoon ambulance behind it, and a fire engine) saves ≈ 16.5 min <!-- update from replay test --> across the three vehicles. The scenario is a scripted demo scenario: GPS ticks generated along the real corridor roads, with hand-authored traffic spans (a 500 m queue at junction 3, 100 m at junction 4). The saving is one simulated baseline, not a field measurement: per junction passed, the "Today" lane waits `cycle_s / 4 + queue_m / 2` seconds (expected remaining red for an arrival at a random point of the cycle, plus the queue draining at 2 m/s). The replay and the run report cards use the same formula.
 
 ## How a cop gets warned
 
