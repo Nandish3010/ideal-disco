@@ -4,6 +4,7 @@ import { db } from "../firebase.js";
 import { corridors } from "../data.js";
 import { LIVE, useActiveRuns, useJunctions } from "../live.js";
 import CorridorMap from "../map.jsx";
+import { Rationale, TraceCard } from "../trace.jsx";
 import { ErrCard, Offline, StateBadge, useListen, useNow } from "../ui.jsx";
 import "../control.css";
 
@@ -256,6 +257,12 @@ export default function Control() {
                 <dd>{s.patient_on_board ? "yes" : "no"}</dd>
               </dl>
             )}
+            {s && (
+              <TraceCard
+                routing={s.routing}
+                pending={!!s.confirmed_tier && s.vehicle_type === "ambulance"}
+              />
+            )}
           </section>
 
           <section className="card">
@@ -281,6 +288,7 @@ export default function Control() {
                     <div className={green ? "ph on" : "ph"}>
                       {green ? `GREEN for ${ph.approach} until ${clock(ph.until)}` : "Normal cycle"}
                     </div>
+                    {green && <Rationale phase={ph} runs={runs} />}
                     <div className="muted">
                       {d
                         ? `Cop: ${d.name ?? d.cop ?? d.cop_name ?? "on duty"}`

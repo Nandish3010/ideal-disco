@@ -4,6 +4,7 @@ import blrTwoVehicles from "../../../data/scenarios/blr-two-vehicles.json";
 import { startFeed, startFeedAll, startRun } from "../feeder.js";
 import { useActiveRuns, useAlerts, useJunctions } from "../live.js";
 import CorridorMap, { HAS_MAPS_KEY } from "../map.jsx";
+import { Rationale } from "../trace.jsx";
 import { ErrCard, Offline, StateBadge, useNow } from "../ui.jsx";
 import { at, savedAt, simulate, spansAt, stage } from "../replay.js";
 import "../sim.css";
@@ -199,6 +200,10 @@ function Live({ scn, setScn }) {
   const spans = running && sc.corridor === cid ? spansAt(sc.recorded_spans, tNow) : undefined;
   const stageOf = (r) => r.stage ?? alerts.rows.find((a) => a.run_id === r.id)?.stage;
   const seen = sc.vehicles.filter((x) => progs[x.plate]);
+  const ms = (v) => (v?.toMillis ? v.toMillis() : v ? new Date(v).getTime() : 0);
+  const seqs = corridor.junctions
+    .map((j) => ({ j, ph: junctions[`${cid}_${j.id}`]?.phase }))
+    .filter(({ ph }) => ms(ph?.until) > now && ph.sequence?.length >= 2);
 
   return (
     <>
@@ -253,6 +258,17 @@ function Live({ scn, setScn }) {
               </div>
             ))}
           </section>
+          {seqs.length > 0 && (
+            <section className="card">
+              <h2>Junction sequencing</h2>
+              {seqs.map(({ j, ph }) => (
+                <div key={j.id}>
+                  <b>{j.id.toUpperCase()}</b>
+                  <Rationale phase={ph} runs={runs} />
+                </div>
+              ))}
+            </section>
+          )}
           <section className="card">
             <h2>GPS feeder</h2>
             <ScenarioSelect value={scn} disabled={running} onChange={pickScn} />
@@ -345,7 +361,8 @@ function Live({ scn, setScn }) {
                 onChange={(e) => setCreate(e.target.checked)}
               />
               Create runs: start each run (incident, run, ambulance tier confirm) right before that
-              vehicle&apos;s first tick
+              vehicle&apos;s first tick; the critical ambulance also gets an &quot;aspirin 300 mg
+              given&quot; log entry so the hospital brief can generate
             </label>
             {sc.vehicles
               .filter((x) => map[x.plate])
@@ -365,7 +382,7 @@ function Live({ scn, setScn }) {
               Reset demo data (ends old runs, clears alerts, audit and duty):{" "}
               <code>python3 scripts/demo_reset.py --apply</code>, see the{" "}
               <a
-                href="https://github.com/Nandish3010/ideal-disco#run"
+                href="https://github.com/Nandish3010/ideal-disco#reset-demo-data"
                 target="_blank"
                 rel="noreferrer"
               >
