@@ -14,7 +14,9 @@ const veh = (plate, start_offset_s, times) => ({
 beforeEach(() => {
   vi.useFakeTimers();
   api.mockReset();
-  api.mockResolvedValue({});
+  api.mockImplementation(async (path, body) =>
+    path === "/vehicles/bind" ? { device_token: `tok-${body.plate}` } : {},
+  );
 });
 afterEach(() => vi.useRealTimers());
 
@@ -40,7 +42,14 @@ describe("startFeedAll", () => {
     await vi.advanceTimersByTimeAsync(2000); // B's second tick at 7 s
     expect(seen).toEqual(["A1", "A2", "B1", "B2", "done"]);
     expect(Date.now() - t0).toBe(7000);
-    expect(api.mock.calls.map((c) => c[1].run_id)).toEqual(["run-A", "run-A", "run-B", "run-B"]);
+    const ticks = api.mock.calls.filter((c) => c[0] === "/location");
+    expect(ticks.map((c) => c[1].run_id)).toEqual(["run-A", "run-A", "run-B", "run-B"]);
+    // each vehicle binds as sim-<plate> first and sends its own token on every tick
+    expect(api.mock.calls.filter((c) => c[0] === "/vehicles/bind").map((c) => c[1])).toEqual([
+      { plate: "A", device_id: "sim-A" },
+      { plate: "B", device_id: "sim-B" },
+    ]);
+    expect(ticks.map((c) => c[2])).toEqual(["tok-A", "tok-A", "tok-B", "tok-B"]);
   });
 
   it("stop cancels vehicles that have not started yet", async () => {
@@ -97,6 +106,36 @@ describe("startFeed with begin", () => {
     );
     expect(onDone).toHaveBeenCalled();
     expect(api).not.toHaveBeenCalled();
+  });
+});
+
+describe("startRun tokens", () => {
+  it("binds first and carries the token on run start, confirm, log and the tick that follows", async () => {
+    api.mockImplementation(async (path) => {
+      if (path === "/vehicles/bind") return { device_token: "T" };
+      return { incident_id: "I", run_id: "R" };
+    });
+    const r = await startRun({
+      vehicle: { plate: "P", type: "ambulance", tier: "critical" },
+      scenarioName: "s",
+      corridor: "blr",
+    });
+    expect(r.token).toBe("T");
+    const paths = api.mock.calls.map((c) => c[0]);
+    expect(paths[0]).toBe("/vehicles/bind");
+    for (const path of ["/runs", "/runs/R/confirm", "/log"])
+      expect(api.mock.calls.find((c) => c[0] === path)[2]).toBe("T");
+    api.mockClear();
+    startFeed({
+      vehicle: veh("P", 0, [0]),
+      begin: async () => r,
+      speed: 1,
+      onTick: () => {},
+      onDone: () => {},
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.mock.calls[0][0]).toBe("/location");
+    expect(api.mock.calls[0][2]).toBe("T");
   });
 });
 

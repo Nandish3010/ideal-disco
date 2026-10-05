@@ -9,10 +9,25 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../firebase.js";
-import { api } from "../api.js";
+import { api, copTokenKey } from "../api.js";
 import { corridors } from "../data.js";
 import { SampleAlert } from "../samples.jsx";
-import { ErrCard, Offline, StateBadge, deviceId, store, useDoc, useNow, when } from "../ui.jsx";
+import {
+  Err,
+  ErrCard,
+  MAX_S,
+  Offline,
+  StateBadge,
+  b64,
+  deviceId,
+  holdProps,
+  store,
+  useDoc,
+  useHold,
+  useNow,
+  when,
+} from "../ui.jsx";
+import { dur } from "../format.js";
 import "../cop.css";
 
 export const ms = (v) => v?.toMillis?.() ?? (v ? Date.parse(v) : null);
@@ -172,9 +187,12 @@ function useAlerts(jid) {
   return { ...s, retry: () => setN((x) => x + 1) };
 }
 
-// Fire and forget: when offline, duty stays a local-only state.
+// Fire and forget: when offline, duty stays a local-only state. Going on duty returns the junction's device token
+// (api.js sends it on /ack and /duty off); going off drops it.
 const duty_ = (corridor, junction_id, on) =>
-  api("/duty", { corridor, junction_id, device_id: deviceId(), on }).catch(() => {});
+  api("/duty", { corridor, junction_id, device_id: deviceId(), on })
+    .then((r) => store.set(copTokenKey(corridor, junction_id), on ? r.device_token : null))
+    .catch(() => {});
 
 const ARROW = { left: "←", straight: "↑", right: "→" };
 const left = (s) =>
@@ -223,6 +241,94 @@ function Current({ a, t0, now, onAck }) {
   );
 }
 
+// Hold to report: the cop's voice (or typed) note to control. The server extracts {kind, extra_seconds, reason} and its
+// rules act on it (green extended, alert acknowledged, escalation); action_text says what happened.
+const KIND = { delay: "Delay", cleared: "Cleared", cannot_clear: "Cannot clear", other: "Note" };
+function Report({ corridor, junction }) {
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState(null);
+  const [err, setErr] = useState(null);
+  const [note, setNote] = useState("");
+  const [text, setText] = useState("");
+  async function send(extra) {
+    setBusy(true);
+    setErr(null);
+    setRes(null);
+    setNote("");
+    try {
+      setRes(await api("/cop-note", { corridor, junction_id: junction.id, ...extra }));
+      if (extra.text) setText("");
+    } catch (x) {
+      setErr(x);
+    }
+    setBusy(false);
+  }
+  const hold = useHold(async (blob) => {
+    if (!blob) return setNote("Too short. Hold the button while you speak.");
+    send({ audio_b64: await b64(blob), mime: blob.type.split(";")[0] || "audio/webm" });
+  });
+  return (
+    <section>
+      <button className={"giant" + (hold.on ? " live" : "")} disabled={busy} {...holdProps(hold)}>
+        {busy ? "Thinking…" : hold.on ? `Listening ${Math.floor(hold.s)} s` : "Hold to report"}
+        {hold.on && (
+          <small>
+            {Math.max(0, Math.ceil(MAX_S - hold.s))} s left
+            <span className="meter">
+              <i style={{ width: Math.min(100, (hold.s / MAX_S) * 100) + "%" }} />
+            </span>
+          </small>
+        )}
+      </button>
+      {note && <p className="muted">{note}</p>}
+      {hold.mic && (
+        <p className="card bad">
+          {hold.mic === "denied"
+            ? "Microphone is blocked for this site."
+            : "Voice recording is not available on this device."}{" "}
+          Type it below instead.
+        </p>
+      )}
+      <form
+        className="row"
+        onSubmit={(e) => {
+          e.preventDefault();
+          send({ text });
+        }}
+      >
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="or type: bus stalled, need 2 more minutes"
+          aria-label="Report to control"
+          required
+        />
+        <button disabled={busy}>Send</button>
+      </form>
+      {res && (
+        <div className="card" role="status">
+          <p className="big">
+            {KIND[res.kind] ?? res.kind}
+            {res.extra_seconds ? ` · +${dur(res.extra_seconds)}` : ""}
+          </p>
+          <p>{res.reason}</p>
+          <p>
+            <b>{res.action_text}</b>
+          </p>
+          {res.transcript_en && <p className="muted">Heard: {res.transcript_en}</p>}
+        </div>
+      )}
+      {err?.body?.error === "extraction_failed" ? (
+        <p className="card bad">Could not understand that. Type it instead.</p>
+      ) : err && [401, 403].includes(err.status) ? (
+        <p className="card bad">Not allowed: go off duty, then on again.</p>
+      ) : (
+        <Err e={err} />
+      )}
+    </section>
+  );
+}
+
 function Duty({ corridor, junction, onOff }) {
   const jid = `${corridor}_${junction.id}`;
   const { alerts, mode, error, loading, retry } = useAlerts(jid);
@@ -230,6 +336,7 @@ function Duty({ corridor, junction, onOff }) {
   const now = useNow();
   const [local, setLocal] = useState({});
   const [blocked, setBlocked] = useState(false);
+  const [denied, setDenied] = useState(false); // the server refused our device token on an ACK
   const [seen] = useState({}); // first-seen time for alerts whose created_at has not resolved yet
   const [onDutyAt] = useState(Date.now); // alerts created before this are shown but never spoken
   const [muted, setMuted] = useState(() => store.get("cop_muted") === "1");
@@ -300,8 +407,12 @@ function Duty({ corridor, junction, onOff }) {
         device_id: deviceId(),
       });
       setLocal((l) => ({ ...l, [a.key]: { s: "ok", latency: r.ack_latency_s } }));
-    } catch {
-      /* offline: stays "sent" */
+    } catch (e) {
+      // offline: stays "sent"; a rejected token means someone else took this junction: the alert stays open
+      if (e.status === 401 || e.status === 403) {
+        setDenied(true);
+        setLocal(({ [a.key]: _, ...rest }) => rest);
+      }
     }
   }
   const state = (a) =>
@@ -323,6 +434,11 @@ function Duty({ corridor, junction, onOff }) {
       <button className="mute" onClick={toggleMute} aria-pressed={muted}>
         {muted ? "🔇 Sound off" : "🔊 Sound on"}
       </button>
+      {denied && (
+        <p className="banner pulse">
+          ACK refused: another device is on duty here. Go off duty, then on again.
+        </p>
+      )}
       {muted && cur && <p className="banner pulse">SOUND OFF · ALERT ON SCREEN</p>}
       {blocked && (
         <button
@@ -347,6 +463,7 @@ function Duty({ corridor, junction, onOff }) {
           </section>
         )}
       </div>
+      <Report corridor={corridor} junction={junction} />
       <ErrCard what="alerts" error={error} retry={retry} />
       <SampleAlert play={speak} />
       <h2>Last alerts here</h2>

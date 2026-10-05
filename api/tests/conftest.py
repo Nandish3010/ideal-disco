@@ -10,6 +10,9 @@ os.environ["OFFLINE_AI"] = "1"
 os.environ["RATE_LIMIT_DISABLED"] = (
     "1"  # tests call far faster than a person; test_ratelimit.py turns it back on
 )
+os.environ["DEVICE_TOKENS_DISABLED"] = (
+    "1"  # the older tests call endpoints with no token; test_tokens.py deletes this to enforce them
+)
 os.environ.setdefault("GCP_PROJECT", "test-project")
 
 import pytest

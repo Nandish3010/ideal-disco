@@ -7,9 +7,9 @@ Clients read; only the Cloud Run service account writes. Every server log line c
 
 ### `vehicles/{plate}`
 ```json
-{ "type": "ambulance", "agency": "108 Karnataka", "active": true, "bound_device_id": "dev-1" }
+{ "type": "ambulance", "agency": "108 Karnataka", "active": true, "bound_device_id": "dev-1", "device_token_hash": "9f86d0..." }
 ```
-`bound_device_id` is set by `/vehicles/bind`. `type`: `ambulance | fire | police`.
+`bound_device_id` and `device_token_hash` (sha256 of the device token, hex) are set by `/vehicles/bind`; the token itself is never stored. `type`: `ambulance | fire | police`.
 
 ### `incidents/{id}`
 ```json
@@ -92,7 +92,7 @@ Server-side guards (the model's answer is used only if all hold): it may add cap
   "acked_at": null, "ack_latency_s": null, "escalated": false, "created_at": "2026-10-05T09:03:10Z"
 }
 ```
-`n` counts up from 0 per run (`alert_count`). `stage`: `PREPARE | STOP | UPDATE`; per run and junction PREPARE fires once (the check and the write of `alert_state` / `alert_count` for a run, junction and stage are one Firestore transaction, so two concurrent ticks never fire the same alert twice) and only when `jam_m >= 50` (a shorter queue needs no warning), UPDATE when `jam_m` grew more than 100 m since the last alert, STOP once at eta <= 30 s (or inside the stop-line geofence) whatever the queue. `text` prefix: `STOP CROSS TRAFFIC · ` or `UPDATE · `; the tier word is `confirmed_tier`, else `acuity_tier`, else `UNCONFIRMED` (ambulance). `created_at` is a server timestamp. An alert is written first with `text_local: null` and `audio_url: null`; a background task patches both in a few seconds, so a client that listens live sees the text at once and the voice follow. `text_local` is `text` rewritten as a spoken line by Gemini (template fallback), in the language set by env `ALERT_LANG`: conversational Indian English by default (`en`), or colloquial Kannada / Telugu with English loanwords (`kn` / `te`; `corridor` = the corridor's language: `kn` blr, `te` hyd); `text` itself stays the terse structured line; `audio_url` is its MP3 (public, in the media bucket, cached per text and language so an unchanged UPDATE reuses the file). If speech synthesis fails both stay `null` and the alert is text only. `exit_move`: `left | straight | right`. `acked_at` and `ack_latency_s` (seconds from `created_at`, 0.1 s) are set by `/ack`, with `acked_by` when a `device_id` was sent. `escalated` flips true, with `escalated_at`, once the alert is more than 20 s old with no ACK; checked on every `/location` tick for that run's alerts (and, for all live runs, by `POST /housekeeping`) and those of the other `en_route` runs it shared a preemption sequence with (`runs/{id}.contenders`), and written to `audit/` as `action: "escalation"`.
+`n` counts up from 0 per run (`alert_count`). `stage`: `PREPARE | STOP | UPDATE`; per run and junction PREPARE fires once (the check and the write of `alert_state` / `alert_count` for a run, junction and stage are one Firestore transaction, so two concurrent ticks never fire the same alert twice) and only when `jam_m >= 50` (a shorter queue needs no warning), UPDATE when `jam_m` grew more than 100 m since the last alert, STOP once at eta <= 30 s (or inside the stop-line geofence) whatever the queue. `text` prefix: `STOP CROSS TRAFFIC · ` or `UPDATE · `; the tier word is `confirmed_tier`, else `acuity_tier`, else `UNCONFIRMED` (ambulance). `created_at` is a server timestamp. An alert is written first with `text_local: null` and `audio_url: null`; a background task patches both in a few seconds, so a client that listens live sees the text at once and the voice follow. `text_local` is `text` rewritten as a spoken line by Gemini (template fallback), in the language set by env `ALERT_LANG`: conversational Indian English by default (`en`), or colloquial Kannada / Telugu with English loanwords (`kn` / `te`; `corridor` = the corridor's language: `kn` blr, `te` hyd); `text` itself stays the terse structured line; `audio_url` is its MP3 (public, in the media bucket, cached per text and language so an unchanged UPDATE reuses the file). If speech synthesis fails both stay `null` and the alert is text only. `cop_note` (the note below, with `junction_id`, `n` and `at`) and `cop_delay_s` (seconds of delay the cop has reported, cumulative; `eta_s` itself is not changed) are added by `POST /cop-note` to the alerts at that junction of runs still heading for it, and the vehicle page shows them ("Cop at J3: bus stalled, +2 min"); `escalation_reason` (`cop_reported_delay | cop_cannot_clear`) is set when a note escalates the alert; a `cleared` note acks the newest unacked alert with `acked_by: "cop-note"`. `exit_move`: `left | straight | right`. `acked_at` and `ack_latency_s` (seconds from `created_at`, 0.1 s) are set by `/ack`, with `acked_by` when a `device_id` was sent. `escalated` flips true, with `escalated_at`, once the alert is more than 20 s old with no ACK; checked on every `/location` tick for that run's alerts (and, for all live runs, by `POST /housekeeping`) and those of the other `en_route` runs it shared a preemption sequence with (`runs/{id}.contenders`), and written to `audit/` as `action: "escalation"`.
 
 ### `junctions/{corridor}_{id}`
 ```json
@@ -100,13 +100,21 @@ Server-side guards (the model's answer is used only if all hold): it may add cap
             "sequence": [{"run_id": "run-fire-1", "offset_s": 0, "approach": "E"}, {"run_id": "run-amb-1", "offset_s": 12, "approach": "NE"}]},
   "lang": "kn" }
 ```
-`phase` may also carry `rationale` (English) and `rationale_local` (corridor language): Gemini's one-line explanation of the order (grounded: see below), written when the sequence has two or more vehicles and removed otherwise, a few seconds after the phase itself (background task); omitted if Gemini or translation failed. Grounding: Gemini never sees raw offsets as arrival order. It gets one entry per slot, `{vehicle_type, tier, approach, eta_s, offset_s, reason_code, offset_s_is_gap_assigned_by_rules: true}`, where `reason_code` is why the slot sits where it does against its neighbour (the first slot: why it beats the next; later slots: why they follow the one before): `higher_tier` (tier beats ETA), `earlier_eta_same_tier` (equal tier, earlier ETA first) or `platoon_shared_approach` (same approach, one shared green). It is told to explain the order from those codes only, in one sentence, with no numbers other than those given. The reply is kept only if it names the first vehicle's type, contains no number absent from the entries, and does not give arrival timing as the reason unless a slot's code is `earlier_eta_same_tier`; otherwise `phase.rationale` is a deterministic sentence from `priority.template_rationale`, e.g. "Fire engine with trapped persons goes first: higher priority tier. Ambulance follows 12 s later." (`rationale_template` is logged). `phase` is `null` when no preemption is active. Written by `SimAdapter.request_green`. `sequence` is the `priority.sequence` order: each vehicle gets its approach's green `offset_s` seconds after the phase starts; `approach` at the top is the first vehicle's. Vehicles on the same approach whose ETAs are within 45 s of the slot leader's share the leader's `offset_s` (one slot, no extra 12 s gap); otherwise each slot is 12 s after the previous. `until` = now + clear time + 30 s + the last offset + the ETA spread inside the last slot. A phase is a request, not a hold: past `until` it is stale and ignored.
+`phase` may also carry `rationale` (English) and `rationale_local` (corridor language): Gemini's one-line explanation of the order (grounded: see below), written when the sequence has two or more vehicles and removed otherwise, a few seconds after the phase itself (background task); omitted if Gemini or translation failed. Grounding: Gemini never sees raw offsets as arrival order. It gets one entry per slot, `{vehicle_type, tier, approach, eta_s, offset_s, reason_code, offset_s_is_gap_assigned_by_rules: true}`, where `reason_code` is why the slot sits where it does against its neighbour (the first slot: why it beats the next; later slots: why they follow the one before): `higher_tier` (tier beats ETA), `earlier_eta_same_tier` (equal tier, earlier ETA first) or `platoon_shared_approach` (same approach, one shared green). It is told to explain the order from those codes only, in one sentence, with no numbers other than those given. The reply is kept only if it names the first vehicle's type, contains no number absent from the entries, and does not give arrival timing as the reason unless a slot's code is `earlier_eta_same_tier`; otherwise `phase.rationale` is a deterministic sentence from `priority.template_rationale`, e.g. "Fire engine with trapped persons goes first: higher priority tier. Ambulance follows 12 s later." (`rationale_template` is logged). `phase.blocked` is `true` when a cop reported the junction cannot clear while this phase was requested (its clear time was doubled); `cop_block_until` (top level, set by a `cannot_clear` note, now + 5 min) is what `/location` checks: while it is in the future the junction's clear time is doubled, so alerts fire earlier and the green is requested longer. `phase` is `null` when no preemption is active. Written by `SimAdapter.request_green`. `sequence` is the `priority.sequence` order: each vehicle gets its approach's green `offset_s` seconds after the phase starts; `approach` at the top is the first vehicle's. Vehicles on the same approach whose ETAs are within 45 s of the slot leader's share the leader's `offset_s` (one slot, no extra 12 s gap); otherwise each slot is 12 s after the previous. `until` = now + clear time + 30 s + the last offset + the ETA spread inside the last slot. A phase is a request, not a hold: past `until` it is stale and ignored.
 
 ### `duty/{corridor}_{junction_id}`
 ```json
-{ "device_id": "dev-cop-1", "name": "Constable Rao", "on": true, "since": "2026-10-05T09:00:00Z" }
+{ "device_id": "dev-cop-1", "name": "Constable Rao", "on": true, "since": "2026-10-05T09:00:00Z", "device_token_hash": "5e8848..." }
 ```
-Written by `/duty` when a cop goes on or off duty at a junction (doc id like `blr_j3`). `name` may be `null`.
+Written by `/duty` when a cop goes on or off duty at a junction (doc id like `blr_j3`). `name` may be `null`. `device_token_hash` is the sha256 of the token handed to the cop who went on duty; it is removed when that cop goes off duty. `note_count` is the number of cop notes so far (below); going on duty again keeps it.
+
+### `duty/{corridor}_{junction_id}/notes/{n}`
+```json
+{ "kind": "delay", "extra_seconds": 120, "reason": "bus stalled", "transcript_en": "A bus has stalled in the junction",
+  "t": "2026-10-05T09:03:40Z", "device_id": "dev-cop-1",
+  "effects": { "phase_extended_s": 120, "acked": 0, "escalated": 1, "blocked_s": 0 } }
+```
+Written by `POST /cop-note`, `n` counting up from 0 per junction. `kind`: `delay | cleared | cannot_clear | other`; `extra_seconds` only for a `delay` (after the cap); `reason` at most 80 characters, `transcript_en` at most 500. `effects` is what the rules did (see `POST /cop-note`).
 
 ### `briefs/{run_id}`
 ```json
@@ -138,7 +146,8 @@ Written by `POST /runs/{id}/after-action`. `timeline` is built in code, not by G
 { "run_id": "run-amb-1", "junction_id": "blr_j3", "action": "preempt_requested", "stage": "PREPARE", "approach": "NE",
   "sequence": [{"run_id": "run-amb-1", "offset_s": 0}], "at": "2026-10-05T09:03:20Z" }
 ```
-Escalations: `{ "run_id": "run-amb-1", "junction_id": "blr_j3", "action": "escalation", "alert_n": 0, "stage": "PREPARE", "at": "..." }`.
+Escalations: `{ "run_id": "run-amb-1", "junction_id": "blr_j3", "action": "escalation", "alert_n": 0, "stage": "PREPARE", "at": "..." }`; one raised by a cop note also carries `"reason": "cop_reported_delay" | "cop_cannot_clear"` and counts in the report like a timed one.
+Cop notes (one per note, no `run_id`): `{ "junction_id": "blr_j3", "action": "cop_delay", "note_n": 0, "extra_seconds": 120, "reason": "bus stalled", "run_ids": ["run-amb-1"], "device_id": "dev-cop-1", "at": "..." }`; `action` is `cop_delay | cop_cleared | cop_cannot_clear | cop_note` (kind `other`).
 
 ### `reports/{run_id}`
 ```json
@@ -158,12 +167,32 @@ The same row is inserted into BigQuery `corridor.run_reports` (created on first 
 
 All bodies JSON. Errors: `{"error": "<code>", "detail": "..."}` with 4xx/5xx. Request bodies that fail validation return 422 `{"error": "validation_error", "detail": "<field>: <message>; ..."}`; `detail` is always text, and some errors add keys (`state`, `fallback`). Firestore failures return 503 `{"error": "store_unavailable"}`, anything unexpected 500 `{"error": "internal_error"}`. Every response carries an `X-Request-Id` header (the caller's, else a new uuid4) that is also on every server log line. CORS allows only the two Firebase Hosting origins, `localhost:5173` / `127.0.0.1:5173` and the comma-separated env `EXTRA_ORIGINS`.
 
+### Device tokens
+There are no accounts. Instead a device holds a random token (32 bytes, urlsafe) and the calls that change a run or a junction must send it in the header `X-Device-Token`. Only its sha256 is stored (`vehicles/{plate}.device_token_hash`, `duty/{junction}.device_token_hash`), so a read of Firestore gives nobody a usable token.
+
+| Token | Handed out by | Rotated by |
+|---|---|---|
+| vehicle token | `POST /vehicles/bind` (`device_token` in the response) | the next bind of that plate, from any device: the previous device's calls then get 403 |
+| junction token | `POST /duty` with `on: true` (`device_token` in the response) | the next go-on-duty at that junction; removed by go-off-duty |
+
+Which token each protected call needs:
+
+| Call | Token that must match |
+|---|---|
+| `POST /runs` (start and end), `POST /triage`, `POST /log`, `POST /location`, `POST /runs/{id}/confirm` | the vehicle token of the run's plate (for a start, of the `plate` in the body) |
+| `POST /ack` | the token of the cop on duty at the alert's junction, or the vehicle token of the run's plate |
+| `POST /duty` with `on: false` | the junction token of that junction (going on duty needs none) |
+
+Errors: 401 `{ "error": "device_token_required" }` (no header), 403 `{ "error": "device_token_mismatch" }` (not a token that call accepts, including a vehicle that was never bound, or a cop who is off duty). A missing run or alert is still 404 first. Left open on purpose: `/health`, every read, `POST /incidents` (the dispatch console; per-IP rate limited), `POST /route`, `POST /brief` (the hospital's Regenerate), `POST /runs/{id}/after-action`, and `POST /housekeeping` (its own `X-Housekeeping-Token`).
+This is a demo-grade control, not authentication: `/vehicles/bind` stands in for the agency registry and `/duty` for a roster, and both are open, so anyone who knows a registered plate or a junction can take its token over (which also locks the previous holder out). Real binding would sit behind agency sign-in. The web sim feeder binds each scenario vehicle itself (`device_id: "sim-<plate>"`) and uses that token, which rotates the token of a real phone bound to the same plate: the phone must bind again.
+Env `DEVICE_TOKENS_DISABLED=1` turns the check off (for `api/offline_replay.py` only); unset, the default, it is enforced.
+
 ### Rate limits and caps
-The endpoints are unauthenticated by decision (demo), so they are limited instead. Per client IP (the last `X-Forwarded-For` entry, else the socket address), an in-memory token bucket per Cloud Run instance, refilled continuously:
+The endpoints are unauthenticated apart from the device tokens above, so they are limited per client. Per client IP (the last `X-Forwarded-For` entry, else the socket address), an in-memory token bucket per Cloud Run instance, refilled continuously:
 
 | Bucket | Paths | Limit |
 |---|---|---|
-| heavy | `/triage`, `/log`, `/brief`, `/route`, `/runs/{id}/after-action` | 10 per minute |
+| heavy | `/triage`, `/log`, `/brief`, `/route`, `/cop-note`, `/runs/{id}/after-action` | 10 per minute |
 | location | `/location` | 900 per minute (three simulated vehicles at 20x send 720) |
 | general | everything else except `/health` (never limited) | 60 per minute |
 
@@ -177,7 +206,7 @@ Response `{"ok": true, "model": "gemini-3.1-flash-lite"}`
 ```json
 { "plate": "KA01AB1234", "device_id": "dev-1" }
 ```
-200 `{ "plate": "KA01AB1234", "type": "ambulance", "agency": "108 Karnataka", "active": true, "bound_device_id": "dev-1" }`
+200 `{ "plate": "KA01AB1234", "type": "ambulance", "agency": "108 Karnataka", "active": true, "bound_device_id": "dev-1", "device_token": "<43 characters>" }` (a new token on every bind; see Device tokens)
 404 `{ "error": "unregistered_vehicle" }` (also when the vehicle is inactive) (the UI shows a visible rejection)
 
 ### `POST /incidents` (mock dispatch console)
@@ -292,7 +321,7 @@ Side effect: any `/location` call marks other `en_route` runs with no tick for 3
 ```json
 { "run_id": "run-amb-1", "junction_id": "blr_j3", "alert_n": 0, "device_id": "dev-cop-1" }
 ```
-`device_id` is optional. Sets `acked_at` (server time) and `ack_latency_s` on `runs/{run_id}/alerts/{alert_n}`; a repeat ACK changes nothing and returns the first values.
+`device_id` is optional. Needs `X-Device-Token`: the on-duty cop's junction token or the run's vehicle token (401 / 403, see Device tokens). Sets `acked_at` (server time) and `ack_latency_s` on `runs/{run_id}/alerts/{alert_n}`; a repeat ACK changes nothing and returns the first values.
 200 `{ "ok": true, "acked_at": "2026-10-05T09:03:26Z", "ack_latency_s": 6.2, "latency_s": 6.2 }` (`latency_s` duplicates `ack_latency_s` for the cop page). 404 `{ "error": "unknown_alert" }` (no such alert, or its `junction_id` differs).
 
 ### `POST /housekeeping`
@@ -310,7 +339,24 @@ Ticks run the same sweeps, so the scheduler only covers idle periods and is spac
 { "corridor": "blr", "junction_id": "blr_j3", "device_id": "dev-cop-1", "on": true, "name": "Constable Rao" }
 ```
 `junction_id` may be `blr_j3` or `j3`; `name` is optional. Writes `duty/blr_j3`.
-200 the doc: `{ "device_id": "dev-cop-1", "name": "Constable Rao", "on": true, "since": "2026-10-05T09:00:00Z" }`. 400 `{ "error": "unknown_corridor" }`, 404 `{ "error": "unknown_junction" }`.
+200 the doc: `{ "device_id": "dev-cop-1", "name": "Constable Rao", "on": true, "since": "2026-10-05T09:00:00Z", "device_token": "<43 characters>" }`; `device_token` is present only when `on` is true and is new every time (see Device tokens). `on: false` needs the header `X-Device-Token` with that junction's token (401 / 403) and answers without a token. 400 `{ "error": "unknown_corridor" }`, 404 `{ "error": "unknown_junction" }`.
+
+### `POST /cop-note`
+The on-duty cop's voice back-channel: one spoken or typed report to control. Needs `X-Device-Token` of the cop on duty at that junction (401 / 403, see Device tokens).
+```json
+{ "corridor": "blr", "junction_id": "blr_j3", "audio_b64": "...", "mime": "audio/webm" }
+```
+or `"text": "bus stalled, need two more minutes"` instead of audio. `junction_id` may be `blr_j3` or `j3`. Gemini (no tools) only fills a fixed schema: `{ "kind": "delay" | "cleared" | "cannot_clear" | "other", "extra_seconds": int | null, "reason": "<at most 6 words>", "transcript_en": "..." }`, told to treat the report as data. Plain rules then act on it, so a misheard report can at worst extend a green by 3 minutes:
+
+| kind | Effect |
+|---|---|
+| `delay` | `extra_seconds` (none, zero or negative: 60; capped at 180) is added to the junction's running `phase.until` (a missing or already ended phase is left alone); every alert at that junction of a run still heading there gets `cop_delay_s` and `cop_note`; written to `audit/` as `cop_delay`. If the delay is over 90 s the active alert (the newest unacked one, else the newest) is escalated: `escalated: true`, `escalation_reason: "cop_reported_delay"`, plus an `escalation` audit entry. |
+| `cleared` | the newest unacked alert at the junction gets `acked_at`, `ack_latency_s`, `acked_by: "cop-note"` (the same as an ACK); audit `cop_cleared`. |
+| `cannot_clear` | the active alert is escalated at once (`cop_cannot_clear`); `cop_block_until` is set to now + 5 min and `phase.blocked: true` when a phase exists; from then on `/location` doubles the junction's clear time (earlier PREPARE, longer green); audit `cop_cannot_clear`. |
+| `other` | only the `cop_note` on the alerts and audit `cop_note`. |
+
+An alert the 20 s timer already escalated is not flagged twice. The note is stored at `duty/{junction}/notes/{n}`. Rate limit: the heavy bucket.
+200 `{ "n": 0, "kind": "delay", "extra_seconds": 120, "reason": "bus stalled", "transcript_en": "...", "effects": { "phase_extended_s": 120, "acked": 0, "escalated": 1, "blocked_s": 0 }, "action_text": "Green extended by 2 min, escalated" }`. `action_text` is English text for the cop page ("Alert acknowledged", "Escalated: junction cannot clear, earlier warnings for the next 5 min", "Noted", ...). 400 `{ "error": "bad_request" }` (no audio or text, or `audio_b64` not base64) or `unknown_corridor`, 404 `{ "error": "unknown_junction" }`, 422 `{ "error": "extraction_failed", "fallback": "text" }` (nothing is changed).
 
 ## Routes call budget
 
@@ -323,6 +369,6 @@ A live run makes **one** Routes `computeRoutes` call (vehicle to hospital, `TRAF
 
 Scenario runs make no Routes calls (recorded spans). The routing agent's `eta_to` calls are separate (cached 30 s per origin and destination) and happen only when a tier is confirmed or `/route` is called.
 
-## Dev-only: `OFFLINE_AI=1`
+## Dev-only: `OFFLINE_AI=1` and `DEVICE_TOKENS_DISABLED=1`
 
-Local testing without any paid Google call (never set in a deploy workflow; the API logs `{"event": "offline_ai"}` once at startup when it is on). Firestore is still used. With it set: `tts.localize_alert` returns the English text, `tts.speak` returns `(None, text)` so alerts are text only (no Translation, TTS or Storage), `brief.generate` returns a fixed stub (`model: "offline"`), `aar.generate` a fixed summary, issues and recommendations (`model: "offline"`, the timeline is still built from the record), the routing agent returns its rule-based fallback at once (`trace: [{"fallback": "offline_ai"}]`, straight-line ETAs, no Routes call), the preemption `rationale` is skipped, and `/triage` and `/log` answer 422 `extraction_failed` (set tiers through `/runs/{id}/confirm`). `api/offline_replay.py` replays a scenario against a local API in this mode; start that API with `RATE_LIMIT_DISABLED=1` too (see Rate limits and caps) so the replay is never throttled.
+Local testing without any paid Google call (never set in a deploy workflow; the API logs `{"event": "offline_ai"}` once at startup when it is on). Firestore is still used. With it set: `tts.localize_alert` returns the English text, `tts.speak` returns `(None, text)` so alerts are text only (no Translation, TTS or Storage), `brief.generate` returns a fixed stub (`model: "offline"`), `aar.generate` a fixed summary, issues and recommendations (`model: "offline"`, the timeline is still built from the record), the routing agent returns its rule-based fallback at once (`trace: [{"fallback": "offline_ai"}]`, straight-line ETAs, no Routes call), the preemption `rationale` is skipped, `/cop-note` answers from a stub (text containing "bus": `delay`, 120 s, "bus stalled"; anything else, or audio alone: `cleared`), and `/triage` and `/log` answer 422 `extraction_failed` (set tiers through `/runs/{id}/confirm`). `api/offline_replay.py` replays a scenario against a local API in this mode; start that API with `RATE_LIMIT_DISABLED=1` too (see Rate limits and caps) so the replay is never throttled, and with `DEVICE_TOKENS_DISABLED=1` because the replay sends no device tokens (see Device tokens).

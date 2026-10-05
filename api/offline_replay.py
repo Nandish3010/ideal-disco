@@ -1,6 +1,6 @@
 """Offline replay check: plays data/scenarios/blr-two-vehicles.json through a local API started with OFFLINE_AI=1 (no Gemini,
 TTS, Translation, Routes or agent calls; Firestore is real). Run from api/:
-    OFFLINE_AI=1 RATE_LIMIT_DISABLED=1 GOOGLE_APPLICATION_CREDENTIALS=<key> uvicorn main:app --port 8080
+    OFFLINE_AI=1 RATE_LIMIT_DISABLED=1 DEVICE_TOKENS_DISABLED=1 GOOGLE_APPLICATION_CREDENTIALS=<key> uvicorn main:app --port 8080
     python offline_replay.py [http://127.0.0.1:8080]
 Writes test runs, alerts and reports to Firestore like any other run. Exits 1 if a check fails."""
 

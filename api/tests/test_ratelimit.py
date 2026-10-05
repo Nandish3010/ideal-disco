@@ -35,7 +35,7 @@ def test_heavy_endpoints_allow_10_a_minute_then_429(client: TestClient, limits: 
 
 
 def test_every_heavy_path_shares_the_budget(client: TestClient, limits: None) -> None:
-    for path in ("/triage", "/log", "/brief", "/route", "/runs/run-x/after-action"):
+    for path in ("/triage", "/log", "/brief", "/route", "/cop-note", "/runs/run-x/after-action"):
         assert ratelimit.kind(path) == "heavy", path
     assert ratelimit.kind("/location") == "location" and ratelimit.kind("/ack") == "general"
     for _ in range(5):

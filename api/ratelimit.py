@@ -4,7 +4,7 @@ import math
 import os
 import time
 
-HEAVY = {"/triage", "/log", "/brief", "/route"}  # each can start a Gemini, Routes or agent call
+HEAVY = {"/triage", "/log", "/brief", "/route", "/cop-note"}  # each can start a Gemini, Routes or agent call
 PER_MIN = {
     "heavy": 10,
     "general": 60,

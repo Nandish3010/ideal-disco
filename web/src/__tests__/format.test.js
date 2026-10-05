@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { mmss, seqLine, traceLine, vehicleLabel } from "../format.js";
+import {
+  copNoteText,
+  currentAlert,
+  dur,
+  mmss,
+  seqLine,
+  traceLine,
+  vehicleLabel,
+} from "../format.js";
 
 describe("traceLine", () => {
   it("prefers text and uses an arrow", () => {
@@ -53,5 +61,37 @@ describe("vehicleLabel", () => {
     expect(vehicleLabel("ambulance", "critical")).toBe("Ambulance · critical");
     expect(vehicleLabel("fire", "fire")).toBe("Fire engine");
     expect(vehicleLabel("police", "police_with_incident")).toBe("Police · incident");
+  });
+});
+
+describe("cop note on the vehicle page", () => {
+  it("reads like a line: who, what, how long", () => {
+    expect(dur(120)).toBe("2 min");
+    expect(dur(90)).toBe("90 s");
+    const delay = { kind: "delay", extra_seconds: 120, reason: "bus stalled" };
+    expect(copNoteText(delay, "blr_j3")).toBe("Cop at J3: bus stalled, +2 min");
+    expect(copNoteText({ kind: "delay", extra_seconds: null, reason: "" }, "blr_j3")).toBe(
+      "Cop at J3: delay",
+    );
+    expect(copNoteText({ kind: "cleared", reason: "" }, "blr_j4")).toBe("Cop at J4: clear");
+    expect(copNoteText({ kind: "cannot_clear", reason: "crowd" }, "blr_j4")).toBe(
+      "Cop at J4: cannot clear (crowd)",
+    );
+    expect(copNoteText({ kind: "other", reason: "rain" }, "blr_j1")).toBe("Cop at J1: rain");
+    expect(copNoteText(undefined, "blr_j1")).toBe("");
+  });
+
+  it("follows the alert at the vehicle's next junction, else the newest", () => {
+    const at = (ms) => ({ toMillis: () => ms });
+    const alerts = [
+      { junction_id: "blr_j3", created_at: at(1), cop_note: { kind: "delay" } },
+      { junction_id: "blr_j4", created_at: at(2) },
+      { junction_id: "blr_j3", created_at: at(3), cop_note: { kind: "cleared" } },
+    ];
+    expect(currentAlert(alerts, "blr_j3").cop_note.kind).toBe("cleared");
+    expect(currentAlert(alerts, "blr_j4").created_at.toMillis()).toBe(2);
+    expect(currentAlert(alerts, null).created_at.toMillis()).toBe(3);
+    expect(currentAlert(alerts, "blr_j9").created_at.toMillis()).toBe(3); // nothing there: the newest overall
+    expect(currentAlert([], "blr_j3")).toBeUndefined();
   });
 });

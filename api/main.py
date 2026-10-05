@@ -21,12 +21,14 @@ import aar
 import acuity
 import agent
 import brief
+import copnote
 import gemini
 import leadtime
 import priority
 import ratelimit
 import report
 import routes_api
+import tokens
 from corridor import CORRIDORS, MATCH_M, SCENARIOS, bearing, distance_m, junctions_ahead, locate
 from firestore_client import db
 from gemini import ExtractionFailed, extract, offline
@@ -52,6 +54,26 @@ TIERS = {"critical", "urgent", "stable", "fire", "fire_with_trapped", "police", 
 def err(status: int, code: str, detail: str = "", **kw) -> JSONResponse:
     """The one error envelope: {"error": code, "detail": text}, plus any extra keys a client reads (state, fallback)."""
     return JSONResponse({"error": code, "detail": detail or code.replace("_", " "), **kw}, status_code=status)
+
+
+def deny(token: str, *hashes: str | None) -> JSONResponse | None:
+    """401 device_token_required / 403 device_token_mismatch unless `token` is one of the stored hashes."""
+    p = tokens.problem(token, list(hashes))
+    return err(p[0], p[1]) if p else None
+
+
+def deny_run(token: str, run: dict) -> JSONResponse | None:
+    """The token must be the one handed out when the run's vehicle was bound."""
+    if tokens.disabled():
+        return None
+    v = db.collection("vehicles").document(run.get("vehicle_plate") or "-").get().to_dict() or {}
+    return deny(token, v.get("device_token_hash"))
+
+
+def duty_hash(jid: str) -> str | None:
+    """sha256 of the token the cop on duty at this junction (`blr_j3`) was given; None when off duty or never on."""
+    d = db.collection("duty").document(jid).get().to_dict() or {}
+    return d.get("device_token_hash") if d.get("on") else None
 
 
 @app.middleware("http")
@@ -169,8 +191,10 @@ def vehicles_bind(b: Bind):
     if not v.exists or not v.to_dict().get("active"):
         log(event="bind_rejected", plate=b.plate)
         return err(404, "unregistered_vehicle")
-    ref.update({"bound_device_id": b.device_id})
-    return {"plate": b.plate, **v.to_dict(), "bound_device_id": b.device_id}
+    token, h = tokens.mint()  # a re-bind rotates it: the previous device's calls then get 403
+    ref.update({"bound_device_id": b.device_id, "device_token_hash": h})
+    doc = {k: x for k, x in v.to_dict().items() if k != "device_token_hash"}
+    return {"plate": b.plate, **doc, "bound_device_id": b.device_id, "device_token": token}
 
 
 @app.post("/incidents")
@@ -183,11 +207,14 @@ def incidents(i: Incident):
 
 
 @app.post("/runs")
-def runs(r: RunReq):
+def runs(r: RunReq, x_device_token: str = Header("")):
     if r.action == "end":
         ref = db.collection("runs").document(r.run_id or "-")
-        if not ref.get().exists:
+        snap = ref.get()
+        if not snap.exists:
             return err(404, "unknown_run")
+        if bad := deny_run(x_device_token, snap.to_dict() or {}):
+            return bad
         ref.update({"state": "ended", "ahead_ids": [], "ahead": {}})
         log(event="run_ended", run_id=r.run_id)
         return {"run_id": r.run_id, "state": "ended", "report": report.write(r.run_id, ref)}
@@ -197,6 +224,8 @@ def runs(r: RunReq):
     inc = db.collection("incidents").document(r.incident_id).get()
     if not (v.exists and v.to_dict().get("active")):
         return err(403, "unregistered_vehicle")
+    if bad := deny(x_device_token, v.to_dict().get("device_token_hash")):
+        return bad
     if not (inc.exists and inc.to_dict().get("state") == "open"):
         return err(403, "no_active_incident")
     # one active run per vehicle: the new one supersedes. ponytail: equality-only query (no composite index), state filtered here
@@ -248,13 +277,15 @@ def next_log_n(run_ref) -> int:
     return bump(db.transaction())
 
 
-def _extract_and_log(t: Triage, interventions=False):
+def _extract_and_log(t: Triage, token: str, interventions=False):
     """Returns (run, fields, run_ref, n, interventions, photo_url) or a JSONResponse error."""
     run_ref = db.collection("runs").document(t.run_id)
     run = run_ref.get()
     if not run.exists:
         return err(404, "unknown_run")
     run = run.to_dict()
+    if bad := deny_run(token, run):
+        return bad
     audio = base64.b64decode(t.audio_b64) if t.audio_b64 else None
     image = base64.b64decode(t.image_b64) if t.image_b64 else None
     if not (audio or image or t.text):
@@ -301,8 +332,8 @@ def _extract_and_log(t: Triage, interventions=False):
 
 
 @app.post("/triage")
-def triage(t: Triage):
-    out = _extract_and_log(t)
+def triage(t: Triage, x_device_token: str = Header("")):
+    out = _extract_and_log(t, x_device_token)
     if isinstance(out, JSONResponse):
         return out
     run, fields, run_ref, _, _, photo_url = out
@@ -319,8 +350,8 @@ def triage(t: Triage):
 
 
 @app.post("/log")
-def log_entry(t: Triage):
-    out = _extract_and_log(t, interventions=True)
+def log_entry(t: Triage, x_device_token: str = Header("")):
+    out = _extract_and_log(t, x_device_token, interventions=True)
     if isinstance(out, JSONResponse):
         return out
     _, fields, _, n, given, photo_url = out
@@ -335,12 +366,15 @@ def log_entry(t: Triage):
 
 
 @app.post("/runs/{run_id}/confirm")
-def confirm(run_id: str, c: Confirm, bg: BackgroundTasks):
+def confirm(run_id: str, c: Confirm, bg: BackgroundTasks, x_device_token: str = Header("")):
     if c.tier not in TIERS:
         return err(400, "bad_tier", "tier must be one of: " + ", ".join(sorted(TIERS)))
     ref = db.collection("runs").document(run_id)
-    if not ref.get().exists:
+    snap = ref.get()
+    if not snap.exists:
         return err(404, "unknown_run")
+    if bad := deny_run(x_device_token, snap.to_dict() or {}):
+        return bad
     ref.update({"confirmed_tier": c.tier, "patient_on_board": True})
     log(event="tier_confirmed", run_id=run_id, tier=c.tier)
     bg.add_task(
@@ -577,7 +611,13 @@ def rationale(jid, seq, lang):
     db.collection("junctions").document(jid).update(out)
 
 
-def preempt(run_id, run, jid, approach, eta_s, clear_s, stage, lang, bg):
+def cop_blocked(jid, now) -> bool:
+    """True while a cop's `cannot_clear` report on this junction is in force (copnote.BLOCK_S)."""
+    until = (db.collection("junctions").document(jid).get().to_dict() or {}).get("cop_block_until")
+    return bool(until and until > now)
+
+
+def preempt(run_id, run, jid, approach, eta_s, clear_s, stage, lang, bg, blocked=False):
     me = contender(run_id, run, eta_s, approach)
     if me is None:
         return None
@@ -597,6 +637,7 @@ def preempt(run_id, run, jid, approach, eta_s, clear_s, stage, lang, bg):
         clear_s + 30 + seq[-1]["offset_s"] + priority.spread_s(seq),
         [c["run_id"] for c in seq],
         [{"run_id": c["run_id"], "offset_s": c["offset_s"], "approach": c["approach"]} for c in seq],
+        blocked,
     )
     sequence = [{"run_id": c["run_id"], "offset_s": c["offset_s"]} for c in seq]
     defer(bg, rationale, jid, seq, lang)  # Gemini + translation: patched onto the phase after the response
@@ -700,12 +741,14 @@ def housekeeping(x_housekeeping_token: str = Header("")):
 
 
 @app.post("/location")
-def location(loc: Loc, bg: BackgroundTasks):
+def location(loc: Loc, bg: BackgroundTasks, x_device_token: str = Header("")):
     ref = db.collection("runs").document(loc.run_id)
     snap = ref.get()
     if not snap.exists:
         return err(404, "unknown_run")
     run = snap.to_dict()
+    if bad := deny_run(x_device_token, run):
+        return bad
     if run["state"] not in LIVE:
         return err(403, "run_not_active", state=run["state"])
     corridor = CORRIDORS.get(run.get("corridor"))
@@ -835,7 +878,10 @@ def location(loc: Loc, bg: BackgroundTasks):
             traffic = "stale" if hosp["stale"] else "live"
             routes_eta = dist * pace if pace else dist / max(observed, 3)
         jam_m = leadtime.jam_metres(intervals)
-        clear_s = leadtime.clear_seconds(jam_m)
+        blocked = cop_blocked(jid, now)
+        clear_s = leadtime.clear_seconds(jam_m) * (
+            2 if blocked else 1
+        )  # the cop said it cannot clear: warn earlier, hold longer
         eta_s = leadtime.blended_eta(routes_eta, dist, observed)
         stage = leadtime.stage(eta_s, clear_s)
         if stage is None and jam_m > 0 and jam_m >= dist - 25:  # vehicle is inside the queue: alert now
@@ -894,7 +940,7 @@ def location(loc: Loc, bg: BackgroundTasks):
                 jam_m=round(jam_m),
                 eta_s=round(eta_s),
             )
-            seq = preempt(loc.run_id, run, jid, ap["id"], eta_s, clear_s, fire, corridor["lang"], bg)
+            seq = preempt(loc.run_id, run, jid, ap["id"], eta_s, clear_s, fire, corridor["lang"], bg, blocked)
             contenders.update(c["run_id"] for c in seq or [])
         if upd["next_junction_id"] is None:  # nearest junction ahead is what the response reports
             upd.update({"next_junction_id": jid, "next_approach": ap["id"], "next_eta_s": eta_s})
@@ -976,11 +1022,17 @@ class Ack(BaseModel):
 
 
 @app.post("/ack")
-def ack(a: Ack):
-    ref = db.collection("runs").document(a.run_id).collection("alerts").document(str(a.alert_n))
+def ack(a: Ack, x_device_token: str = Header("")):
+    run_ref = db.collection("runs").document(a.run_id)
+    ref = run_ref.collection("alerts").document(str(a.alert_n))
     snap = ref.get()
     if not snap.exists or snap.to_dict()["junction_id"] != a.junction_id:
         return err(404, "unknown_alert")
+    if not tokens.disabled():  # the cop on duty at that junction, or the run's own vehicle
+        run = run_ref.get().to_dict() or {}
+        v = db.collection("vehicles").document(run.get("vehicle_plate") or "-").get().to_dict() or {}
+        if bad := deny(x_device_token, duty_hash(a.junction_id), v.get("device_token_hash")):
+            return bad
     d = snap.to_dict()
     if d.get("acked_at"):  # idempotent: the first ACK stands
         acked, latency = d["acked_at"], d.get("ack_latency_s")
@@ -1001,16 +1053,64 @@ class Duty(BaseModel):
     name: str | None = None
 
 
-@app.post("/duty")
-def duty(d: Duty):
-    c = CORRIDORS.get(d.corridor)
+def junction_key(corridor: str, junction_id: str) -> str | JSONResponse:
+    """`blr_j3` for ("blr", "j3" or "blr_j3"), else the 400/404 response."""
+    c = CORRIDORS.get(corridor)
     if c is None:
-        return err(400, "unknown_corridor", d.corridor)
-    jid = d.junction_id.removeprefix(d.corridor + "_")
+        return err(400, "unknown_corridor", corridor)
+    jid = junction_id.removeprefix(corridor + "_")
     if jid not in {j["id"] for j in c["junctions"]}:
-        return err(404, "unknown_junction", d.junction_id)
+        return err(404, "unknown_junction", junction_id)
+    return f"{corridor}_{jid}"
+
+
+@app.post("/duty")
+def duty(d: Duty, x_device_token: str = Header("")):
+    key = junction_key(d.corridor, d.junction_id)
+    if isinstance(key, JSONResponse):
+        return key
     since = datetime.now(UTC)
     doc = {"device_id": d.device_id, "name": d.name, "on": d.on, "since": since}
-    db.collection("duty").document(f"{d.corridor}_{jid}").set(doc)
-    log(event="duty", junction_id=f"{d.corridor}_{jid}", device_id=d.device_id, on=d.on)
-    return {**doc, "since": since.isoformat()}
+    ref = db.collection("duty").document(key)
+    extra: dict[str, Any] = {}
+    if d.on:  # going on duty rotates the junction's token: the previous cop's calls then get 403
+        token, h = tokens.mint()
+        ref.set({**doc, "device_token_hash": h}, merge=True)  # merge keeps note_count
+        extra["device_token"] = token
+    else:
+        if bad := deny(x_device_token, duty_hash(key)):
+            return bad
+        ref.set({**doc, "device_token_hash": DELETE_FIELD}, merge=True)
+    log(event="duty", junction_id=key, device_id=d.device_id, on=d.on)
+    return {**doc, "since": since.isoformat(), **extra}
+
+
+class CopNoteReq(BaseModel):
+    corridor: str
+    junction_id: str
+    audio_b64: str | None = None
+    mime: str | None = None
+    text: str | None = None
+
+
+@app.post("/cop-note")
+def cop_note(n: CopNoteReq, x_device_token: str = Header("")):
+    """The on-duty cop's spoken or typed report. Gemini only fills the {kind, extra_seconds, reason} schema; what happens
+    next is copnote.apply, plain rules."""
+    key = junction_key(n.corridor, n.junction_id)
+    if isinstance(key, JSONResponse):
+        return key
+    if bad := deny(x_device_token, duty_hash(key)):
+        return bad
+    try:
+        audio = base64.b64decode(n.audio_b64, validate=True) if n.audio_b64 else None
+    except ValueError:
+        return err(400, "bad_request", "audio_b64 is not valid base64")
+    if not (audio or n.text):
+        return err(400, "bad_request", "audio_b64 or text required")
+    try:
+        note = gemini.cop_note(audio, n.mime, n.text)
+    except ExtractionFailed:
+        log(event="cop_note_extraction_failed", junction_id=key)
+        return err(422, "extraction_failed", fallback="text")
+    return copnote.apply(db, key, note, datetime.now(UTC))

@@ -2,9 +2,21 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import { corridors } from "../data.js";
 import { TraceCard } from "../trace.jsx";
-import { Err, deviceId, store, useDoc, useLog, when } from "../ui.jsx";
+import {
+  Err,
+  MAX_S,
+  b64,
+  deviceId,
+  holdProps,
+  store,
+  useDoc,
+  useHold,
+  useLog,
+  when,
+} from "../ui.jsx";
 import { LastRouting } from "../samples.jsx";
-import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
+import { collection, getDocs, limit, onSnapshot, orderBy, query } from "firebase/firestore";
+import { copNoteText, currentAlert } from "../format.js";
 import { db } from "../firebase.js";
 import { latestOpen } from "../pick.js";
 
@@ -28,11 +40,17 @@ function Bind({ bound, setBound }) {
     setBound(null);
     store.set("plate", p);
     try {
-      const r = await api("/vehicles/bind", { plate: p, device_id: deviceId() });
+      // the token goes in its own key (api.js sends it as X-Device-Token), not into the bound record
+      const { device_token, ...r } = await api("/vehicles/bind", {
+        plate: p,
+        device_id: deviceId(),
+      });
+      store.set("vehicle_token", device_token);
       store.set("bound", JSON.stringify(r));
       setBound(r);
     } catch (x) {
       store.set("bound", null);
+      store.set("vehicle_token", null);
       setErr(x);
     }
     setBusy(false);
@@ -131,14 +149,6 @@ function useGps(runId, active) {
   return note;
 }
 
-const MAX_S = 20;
-const b64 = (blob) =>
-  new Promise((ok, no) => {
-    const f = new FileReader();
-    f.onload = () => ok(f.result.split(",")[1]);
-    f.onerror = no;
-    f.readAsDataURL(blob);
-  });
 const flat = (o, p = "") =>
   Object.entries(o ?? {}).flatMap(([k, v]) =>
     k === "transcript_en" || v == null
@@ -151,73 +161,6 @@ const show = (v) => (v === true ? "yes" : v === false ? "no" : String(v));
 const clock = (s) => `0:${String(Math.floor(s)).padStart(2, "0")}`;
 const heard = (t, v) =>
   new RegExp("\\b" + show(v).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(t ?? "");
-
-// Press-and-hold recorder. onClip(blob) on release, onClip(null) when the hold was too short.
-function useHold(onClip) {
-  const [st, setSt] = useState({ on: false, s: 0 });
-  const [mic, setMic] = useState(null); // "denied" | "unavailable"
-  const x = useRef({});
-  x.current.onClip = onClip;
-
-  async function start() {
-    const c = x.current;
-    if (c.rec || c.starting) return;
-    c.held = true;
-    c.starting = true;
-    let stream;
-    try {
-      if (!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia)
-        throw new Error("unsupported");
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (e) {
-      c.starting = false;
-      c.held = false;
-      setMic(e.name === "NotAllowedError" || e.name === "SecurityError" ? "denied" : "unavailable");
-      return;
-    }
-    c.starting = false;
-    setMic(null);
-    if (!c.held) {
-      stream.getTracks().forEach((t) => t.stop());
-      return;
-    } // released before the mic opened
-    const type = ["audio/webm;codecs=opus", "audio/mp4"].find((t) =>
-      MediaRecorder.isTypeSupported(t),
-    );
-    const rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
-    const chunks = [];
-    const t0 = Date.now();
-    rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-    rec.onstop = () => {
-      clearInterval(c.tick);
-      stream.getTracks().forEach((t) => t.stop());
-      c.rec = null;
-      setSt({ on: false, s: 0 });
-      c.onClip(Date.now() - t0 < 600 ? null : new Blob(chunks, { type: rec.mimeType }));
-    };
-    c.rec = rec;
-    rec.start();
-    setSt({ on: true, s: 0 });
-    c.tick = setInterval(() => {
-      const s = (Date.now() - t0) / 1000;
-      setSt({ on: true, s });
-      if (s >= MAX_S) stop();
-    }, 100);
-  }
-  function stop() {
-    const c = x.current;
-    c.held = false;
-    if (c.rec?.state === "recording") c.rec.stop();
-  }
-  useEffect(
-    () => () => {
-      stop();
-      clearInterval(x.current.tick);
-    },
-    [],
-  );
-  return { ...st, mic, start, stop };
-}
 
 // Downscale a photo to <= 1280 px, JPEG q0.8; shrink again while the base64 is over 2 MB. -> {b64, url}
 const MAX_PX = 1280,
@@ -385,27 +328,7 @@ function Triage({ runId, vehicleType, confirmed, setDone }) {
           </button>
         ))}
       </div>
-      <button
-        className={"giant" + (hold.on ? " live" : "")}
-        disabled={busy}
-        onPointerDown={(e) => {
-          e.currentTarget.setPointerCapture?.(e.pointerId);
-          hold.start();
-        }}
-        onPointerUp={hold.stop}
-        onPointerCancel={hold.stop}
-        onBlur={hold.stop}
-        onKeyDown={(e) => {
-          if ((e.key === " " || e.key === "Enter") && !e.repeat) {
-            e.preventDefault();
-            hold.start();
-          }
-        }}
-        onKeyUp={(e) => {
-          if (e.key === " " || e.key === "Enter") hold.stop();
-        }}
-        onContextMenu={(e) => e.preventDefault()}
-      >
+      <button className={"giant" + (hold.on ? " live" : "")} disabled={busy} {...holdProps(hold)}>
         {busy
           ? shot
             ? "Reading the monitor…"
@@ -554,6 +477,25 @@ function Log({ runId }) {
   );
 }
 
+// What the cop at the vehicle's next junction last reported on its alert (alerts/{n}.cop_note), e.g. a stalled bus.
+function CopNote({ runId, next }) {
+  const [alerts, setAlerts] = useState([]);
+  useEffect(() => {
+    setAlerts([]);
+    return onSnapshot(
+      collection(db, `runs/${runId}/alerts`),
+      (q) => setAlerts(q.docs.map((d) => d.data())),
+      () => {},
+    );
+  }, [runId]);
+  const a = currentAlert(alerts, next);
+  return a?.cop_note ? (
+    <p className="card" role="status">
+      {copNoteText(a.cop_note, a.junction_id)}
+    </p>
+  ) : null;
+}
+
 function Run({ bound }) {
   const [incident, setIncident] = useState(store.get("incident_id") ?? "");
   const [corridor, setCorridor] = useState(store.get("corridor") ?? "blr");
@@ -648,6 +590,7 @@ function Run({ bound }) {
                   )}
                 </>
               )}
+              <CopNote runId={runId} next={r?.next_junction_id} />
               <p className="muted">{gps}</p>
               <button className="danger" disabled={busy} onClick={end}>
                 {busy ? "Ending…" : "End run"}
@@ -687,11 +630,13 @@ function Run({ bound }) {
           </form>
         )}
         {ended && <p className="card good">Run {ended} ended.</p>}
-        {err?.status === 403 ? (
+        {err?.status === 403 || err?.status === 401 ? (
           <p className="card reject">
             {err.message === "no_active_incident"
               ? "No active incident: that incident ID is unknown or not open."
-              : "Unregistered vehicle: run refused."}
+              : err.message.startsWith("device_token")
+                ? "This device is no longer bound to the vehicle (another device took it over). Bind again."
+                : "Unregistered vehicle: run refused."}
           </p>
         ) : (
           <Err e={err} />
