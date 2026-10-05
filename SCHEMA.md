@@ -41,16 +41,18 @@ Written by `/location` on every tick:
   "alert_state": {"blr_j3": {"prepare": true, "stop": false, "jam_m": 520}}, "alert_count": 1
 }
 ```
-`ticks` keeps the last 12 (at most one per 5 s, so they span about a minute; `t` is the client's tick time). `last_tick_at` is server time and drives the stale check. `ahead` / `ahead_ids` list every junction still ahead (nearest first in `next_*`); other runs read them to find contenders. `last_eval.traffic`: `live | stale | scenario`; `stale` means Routes failed and no spans under 60 s old were left, so the queue was treated as NORMAL (control room shows "traffic data stale"). `brief_due` is set once `eta_hospital_s <= 300` and `brief_fired` is false; `/brief` consumes it. Optional `scenario: "<name>"` (set by the scenario runner, not by `/runs`) makes `/location` read `recorded_spans` from `data/scenarios/<name>.json` instead of calling Routes, and follow the corridor config instead of the Routes polyline (no off-route check).
+`ticks` keeps the last 12 (at most one per 5 s, so they span about a minute; `t` is the client's tick time). `last_tick_at` is server time and drives the stale check. `ahead` / `ahead_ids` list every junction still ahead (nearest first in `next_*`); other runs read them to find contenders. `last_eval.traffic`: `live | stale | scenario`; `stale` means Routes failed and no spans under 60 s old were left, so the queue was treated as NORMAL (control room shows "traffic data stale"). `brief_due` is set once `eta_hospital_s <= 300`, `brief_fired` is false and the run has at least one log entry (a run that is already inside 300 s on its first tick qualifies; with no log yet the check repeats on later ticks). The same tick then generates the brief inline (about 5-10 s) exactly once, writes `briefs/{run_id}`, sets `brief_fired: true` and clears `brief_due`. If Gemini fails the tick logs `brief_error` and leaves `brief_due: true` with `brief_fired: false`, so the hospital's Regenerate button (`POST /brief`) is the retry; nothing else retries. Optional `scenario: "<name>"` (set by the scenario runner, not by `/runs`) makes `/location` read `recorded_spans` from `data/scenarios/<name>.json` instead of calling Routes, and follow the corridor config instead of the Routes polyline (no off-route check).
 
 ### `runs/{id}/log/{n}`
 ```json
 {
   "t": "2026-10-05T09:02:00Z", "kind": "voice", "transcript_en": "Patient has chest pain, BP 85 over 50",
-  "fields": {"complaint": "chest pain", "vitals": {"sbp": 85, "dbp": 50}}, "confirmed": true
+  "fields": {"age": 58, "sex": "male", "complaint": "chest pain", "vitals": {"sbp": 85, "dbp": 50}},
+  "interventions": [{"kind": "drug", "name": "aspirin", "dose": "300 mg", "route": null, "time_note": null}],
+  "confirmed": true
 }
 ```
-`kind`: `voice | photo | form`.
+`kind`: `voice | photo | form`. `interventions` is written by `/log` only (always present, `[]` when none): each is `{kind: drug | procedure | observation, name, dose, route, time_note}` exactly as the crew said it, `null` for any part not said. `/triage` entries carry `interventions: []`.
 
 ### `runs/{id}/alerts/{n}`
 ```json
@@ -84,9 +86,12 @@ Written by `/duty` when a cop goes on or off duty at a junction (doc id like `bl
 {
   "atmist": {"age": "58", "time": "08:55", "mechanism": "n/a", "injuries": "chest pain",
              "signs": "SBP 85, SpO2 91", "treatment": "oxygen 4 L"},
-  "checklist": ["Cath lab on standby", "12-lead ECG on arrival"], "generated_at": "2026-10-05T09:03:00Z"
+  "checklist": ["Activate cath lab", "Page cardiology", "Prepare heparin"],
+  "summary": "A 58-year-old male with chest pain since about 08:55 ...",
+  "disclaimer": "Synthetic patient. Clinician confirms.", "generated_at": "2026-10-05T09:03:00Z", "model": "gemini-3-flash-preview"
 }
 ```
+Written by `POST /brief` (and the `/location` trigger). `atmist` keys are lowercase; every value is a string, and anything the log does not say reads `unknown` or `unconfirmed`. `checklist` has 3 to 8 short imperative items. One doc per run, overwritten on regenerate.
 
 ### `audit/{n}`
 ```json
@@ -145,11 +150,13 @@ Request (audio or text; image later). Audio is base64 in JSON; multipart is not 
 { "fields": { "...": "Gemini response schema below" }, "transcript_en": "...", "suggested_tier": "critical" }
 ```
 Each call appends `runs/{id}/log/{n}` with `confirmed: false`.
-422 `{ "error": "extraction_failed", "fallback": "form" }` (after one retry on the primary model, then one try on the fallback model; the UI shows the form).
+422 `{ "error": "extraction_failed", "fallback": "form" }` (after one retry on the first model, then one try on the other; the UI shows the form).
 
 Gemini response schema:
 ```json
 {
+  "age": 58,
+  "sex": "male",
   "complaint": "chest pain",
   "conscious": true,
   "breathing": true,
@@ -159,7 +166,8 @@ Gemini response schema:
   "transcript_en": "Patient has chest pain, blood pressure 85 over 50"
 }
 ```
-Unknown values are `null`. Gemini never returns a score.
+Unknown values are `null` (`age` is an integer, `sex` free text as said). Gemini never returns a score.
+Models: text input uses `GEMINI_MODEL`; audio input uses `GEMINI_AUDIO_MODEL` (default `gemini-3.1-flash-lite`, about 3x faster on the same clip with the same fields). Attempts per call: the first model twice, then once on the other (`GEMINI_FALLBACK_MODEL`, or `GEMINI_MODEL` when audio already runs on the fallback model). Per-attempt timeout is 15 s for audio, 8 s for text.
 
 ### `POST /runs/{run_id}/confirm`
 The crew's one tap.
@@ -173,13 +181,15 @@ Same request and 422 as `/triage` (optional `kind`: `voice | photo | form`); app
 ```json
 { "run_id": "run-amb-1", "kind": "voice", "audio_b64": "...", "mime": "audio/webm" }
 ```
-200 `{ "n": 3, "transcript_en": "Oxygen started", "fields": {"treatment": "oxygen 4 L"}, "confirmed": false }`
+200 `{ "n": 3, "transcript_en": "Oxygen 4 litres started", "fields": {"...": "same schema as /triage"}, "interventions": [{"kind": "drug", "name": "oxygen", "dose": "4 litres", "route": null, "time_note": null}], "confirmed": false }`
+The `/log` response schema is the `/triage` one plus `interventions: [{kind: "drug" | "procedure" | "observation", name, dose, route, time_note}]`. Gemini lists only what was said, never infers. `interventions` is returned and stored beside `fields`, not inside it.
 
 ### `POST /brief`
 ```json
 { "run_id": "run-amb-1" }
 ```
-200 `{ "atmist": { "...": "..." }, "checklist": ["..."], "generated_at": "2026-10-05T09:03:00Z" }`. 502 `{ "error": "brief_failed" }` (hospital page offers "regenerate brief").
+Generates from the run's log entries (Gemini on `GEMINI_MODEL`, then the fallback; 15 s per attempt), writes `briefs/{run_id}` and sets `runs/{id}.brief_fired: true` (`brief_due: false`). Also what the hospital's Regenerate button calls.
+200 the stored doc: `{ "atmist": { "...": "..." }, "checklist": ["..."], "summary": "...", "disclaimer": "Synthetic patient. Clinician confirms.", "generated_at": "2026-10-05T09:03:00Z", "model": "gemini-3-flash-preview" }`. 404 `{ "error": "unknown_run" }`, 422 `{ "error": "no_log_entries" }`, 502 `{ "error": "brief_failed" }` (hospital page offers "regenerate brief").
 
 ### `POST /location`
 ```json
