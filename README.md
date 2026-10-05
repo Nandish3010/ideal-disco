@@ -96,6 +96,7 @@ Traffic logger: Cloud Run Job `corridor-traffic-logger` (`jobs/traffic_logger.py
 | `GEMINI_LOCATION` | `global` |
 | `MAPS_SERVER_KEY` | from Secret Manager `corridor-maps-server-key` |
 | `MEDIA_BUCKET` | `green-corridor-2026-media` |
+| `ALERT_LANG` | `en` (default): conversational English alerts and voice; `kn` / `te`: colloquial Kannada / Telugu with English loanwords; `corridor`: the corridor's own language |
 
 ## Layout
 
