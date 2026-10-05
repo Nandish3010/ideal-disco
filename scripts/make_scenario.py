@@ -73,7 +73,7 @@ def speed_at(path, s, jams):
         if d - 60 < s < d + 20:
             v = min(v, 10.5)
         if j in jams and d - jams[j] < s <= d:
-            v = min(v, 8.4 + 0.5 * math.sin(s / 20) if j == "j3" else 10)
+            v = min(v, 8.9 + 0.5 * math.sin(s / 20) if j == "j3" else 10)
     return rnd(v, 1)
 
 
@@ -98,9 +98,9 @@ def time_at(ticks, s):
 
 hosp = [C["hospital"]["lat"], C["hospital"]["lng"]]
 main = build([
-    (tail(appr("j1", "SE"), 250), "j1"),
+    (tail(appr("j1", "E"), 250), "j1"),
     (tail(appr("j2", "SE"), 250), "j2"),
-    (appr("j3", "SE"), "j3"),
+    (appr("j3", "E"), "j3"),
     (tail(appr("j4", "E"), 250), "j4"),
     (tail(appr("j5", "E"), 250), "j5"),
     ([hosp], None),
@@ -115,7 +115,7 @@ amb2 = [{**k, "t": i * DT} for i, k in enumerate(amb[a:a + 30])]
 amb2_start = round(a * DT + 40)
 
 # fire engine: last 330 m of j3's cross approach, then on toward j4; at the j3 stop line ~3 s before the ambulance
-fire_path = build([(tail(appr("j3", "NE"), 330), "j3"), ([tail(appr("j4", "E"), 250)[0]], None)])
+fire_path = build([(tail(appr("j3", "S"), 330), "j3"), ([tail(appr("j4", "E"), 140)[0]], None)])
 fire = drive(fire_path, 0, {}, 12)
 fire_start = round(amb_j3 - 3 - time_at(fire, fire_path[2]["j3"]))
 
@@ -137,8 +137,8 @@ def snaps(items):
     return [{"ts": stamp(ts), "intervals": iv} for ts, iv in items]
 
 
-def j3snap(ts, jam):  # the 500 m tail is on the corridor (SE) approach only
-    return {"ts": stamp(ts), "approach": "SE", "intervals": full(jam, 40)}
+def j3snap(ts, jam):  # the 500 m tail is on the corridor (E) approach only
+    return {"ts": stamp(ts), "approach": "E", "intervals": full(jam, 40)}
 
 
 def clean(ticks):
@@ -154,11 +154,11 @@ out = {
     },
     "vehicles": [
         {"run_id": "run-amb-1", "plate": "KA01AB1234", "type": "ambulance", "tier": "critical", "start_offset_s": 0,
-         "approaches": {"j1": "SE", "j2": "SE", "j3": "SE", "j4": "E", "j5": "E"}, "ticks": clean(amb)},
+         "approaches": {"j1": "E", "j2": "SE", "j3": "E", "j4": "E", "j5": "E"}, "ticks": clean(amb)},
         {"run_id": "run-fire-1", "plate": "KA01FE5678", "type": "fire", "tier": "fire_with_trapped", "start_offset_s": fire_start,
-         "approaches": {"j3": "NE"}, "ticks": clean(fire)},
+         "approaches": {"j3": "S"}, "ticks": clean(fire)},
         {"run_id": "run-amb-2", "plate": "KA01AB4321", "type": "ambulance", "tier": "urgent", "start_offset_s": amb2_start,
-         "approaches": {"j3": "SE", "j4": "E", "j5": "E"}, "ticks": clean(amb2)},
+         "approaches": {"j3": "E", "j4": "E", "j5": "E"}, "ticks": clean(amb2)},
     ],
     "recorded_spans": {
         "blr_j1": snaps([("00:00", full(0, 60))]),
