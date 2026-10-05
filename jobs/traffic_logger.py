@@ -63,16 +63,22 @@ def main():
                         "destination": {"location": {"latLng": {"latitude": j["lat"], "longitude": j["lng"]}}},
                         "travelMode": "DRIVE", "routingPreference": "TRAFFIC_AWARE",
                         "extraComputations": ["TRAFFIC_ON_POLYLINE"]}
-                r = httpx.post(URL, json=body, headers={"X-Goog-Api-Key": KEY, "X-Goog-FieldMask": MASK}, timeout=15)
-                if r.status_code != 200:
-                    print(f"routes {r.status_code} junction={c['id']}_{j['id']} approach={ap['id']}", file=sys.stderr)
-                    continue  # skip the row; a gap in the log beats a fake zero
-                route = r.json()["routes"][0]
-                iv = spans(route)
-                rows.append({"junction_id": f"{c['id']}_{j['id']}", "approach": ap["id"], "ts": now,
+                jid = f"{c['id']}_{j['id']}"
+                try:  # never log the exception itself: its repr/traceback can carry request headers (the key)
+                    r = httpx.post(URL, json=body, headers={"X-Goog-Api-Key": KEY, "X-Goog-FieldMask": MASK}, timeout=15)
+                    if r.status_code != 200:
+                        print(f"routes_error junction={jid} status={r.status_code}", file=sys.stderr)
+                        continue  # skip the row; a gap in the log beats a fake zero
+                    route = r.json()["routes"][0]
+                    iv = spans(route)
+                    eta = float(route["duration"].rstrip("s"))
+                except Exception as e:
+                    print(f"routes_error junction={jid} status={type(e).__name__}", file=sys.stderr)
+                    continue
+                rows.append({"junction_id": jid, "approach": ap["id"], "ts": now,
                              "jam_m": jam_metres(iv),
                              "slow_m": sum(i["to_m"] - i["from_m"] for i in iv if i["speed"] == "SLOW"),
-                             "routes_eta_s": float(route["duration"].rstrip("s")), "corridor": c["id"]})
+                             "routes_eta_s": eta, "corridor": c["id"]})
     errs = bq.insert_rows_json(TABLE, rows) if rows else []
     print(f"inserted={len(rows)} errors={errs}")
     if errs: sys.exit(1)
