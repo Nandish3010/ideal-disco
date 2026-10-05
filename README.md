@@ -82,6 +82,14 @@ python3 api/acuity.py && python3 api/priority.py && python3 api/leadtime.py
 python3 scripts/demo_seed.py
 ```
 
+## Reset demo data
+
+Before a demo take, clear old runs, alerts, audit, reports, briefs, duty and junction phases (dry run without `--apply` first; needs `GOOGLE_APPLICATION_CREDENTIALS`):
+
+```
+python3 scripts/demo_reset.py --apply
+```
+
 ## Configuration
 
 Project `green-corridor-2026`, Firestore `(default)` database, hosting https://green-corridor-2026.web.app, Cloud Run service `corridor-api` in asia-south1.

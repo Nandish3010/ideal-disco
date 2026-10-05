@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import { corridors } from "../data.js";
+import { TraceCard } from "../trace.jsx";
 import { Err, deviceId, store, useDoc, useLog, when } from "../ui.jsx";
 
 function Bind({ bound, setBound }) {
@@ -593,30 +594,33 @@ function Run({ bound }) {
         {!bound ? (
           <p className="muted">Bind a registered vehicle first.</p>
         ) : runId ? (
-          <div className="card">
-            <div className={"tierpill " + (confirmed ? "t-" + confirmed : "")}>
-              {confirmed ? confirmed.toUpperCase() : "Tier not confirmed"}
+          <>
+            <div className="card">
+              <div className={"tierpill " + (confirmed ? "t-" + confirmed : "")}>
+                {confirmed ? confirmed.toUpperCase() : "Tier not confirmed"}
+              </div>
+              <div className="muted">Run {runId}</div>
+              {run.loading && <p>Loading run…</p>}
+              {run.error && <p className="bad">Could not load run: {run.error}</p>}
+              {run.missing && <p>Run document not found yet.</p>}
+              {r && (
+                <>
+                  <div className="big">{r.state}</div>
+                  <p>
+                    {r.vehicle_plate} · incident {r.incident_id} · to {r.destination?.name ?? "—"}
+                  </p>
+                  {r.eta_hospital_s != null && (
+                    <p>Hospital ETA: {Math.round(r.eta_hospital_s / 60)} min</p>
+                  )}
+                </>
+              )}
+              <p className="muted">{gps}</p>
+              <button className="danger" disabled={busy} onClick={end}>
+                {busy ? "Ending…" : "End run"}
+              </button>
             </div>
-            <div className="muted">Run {runId}</div>
-            {run.loading && <p>Loading run…</p>}
-            {run.error && <p className="bad">Could not load run: {run.error}</p>}
-            {run.missing && <p>Run document not found yet.</p>}
-            {r && (
-              <>
-                <div className="big">{r.state}</div>
-                <p>
-                  {r.vehicle_plate} · incident {r.incident_id} · to {r.destination?.name ?? "—"}
-                </p>
-                {r.eta_hospital_s != null && (
-                  <p>Hospital ETA: {Math.round(r.eta_hospital_s / 60)} min</p>
-                )}
-              </>
-            )}
-            <p className="muted">{gps}</p>
-            <button className="danger" disabled={busy} onClick={end}>
-              {busy ? "Ending…" : "End run"}
-            </button>
-          </div>
+            <TraceCard routing={r?.routing} pending={!!confirmed && bound?.type === "ambulance"} />
+          </>
         ) : (
           <form className="card" onSubmit={start}>
             <label>

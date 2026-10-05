@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../api.js", () => ({ api: vi.fn() }));
 import { api } from "../api.js";
-import { startFeed, startFeedAll } from "../feeder.js";
+import { startFeed, startFeedAll, startRun } from "../feeder.js";
 
 const veh = (plate, start_offset_s, times) => ({
   plate,
@@ -97,5 +97,25 @@ describe("startFeed with begin", () => {
     );
     expect(onDone).toHaveBeenCalled();
     expect(api).not.toHaveBeenCalled();
+  });
+});
+
+describe("startRun demo log", () => {
+  const go = (type, tier) =>
+    startRun({ vehicle: { plate: "P", type, tier }, scenarioName: "s", corridor: "blr" });
+  const logs = () => api.mock.calls.filter((c) => c[0] === "/log");
+
+  it("seeds one log entry for the critical ambulance only, and ignores a failed post", async () => {
+    api.mockImplementation(async (path) => {
+      if (path === "/log") throw new Error("422");
+      return { incident_id: "I", run_id: "R" };
+    });
+    expect((await go("ambulance", "critical")).runId).toBe("R");
+    expect(logs()).toHaveLength(1);
+    expect(logs()[0][1]).toMatchObject({ run_id: "R", text: "aspirin 300 mg given" });
+    api.mockClear();
+    await go("ambulance", "urgent");
+    await go("fire", undefined);
+    expect(logs()).toHaveLength(0);
   });
 });

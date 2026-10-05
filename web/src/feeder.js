@@ -24,6 +24,15 @@ export async function startRun({ vehicle: x, scenarioName, corridor, destination
     } catch (e) {
       warn = `confirm failed: ${e.message}`;
     }
+    // demo seed: the hospital brief needs one log entry; one call, failures ignored
+    if (!warn && x.type === "ambulance" && x.tier === "critical") {
+      api("/log", {
+        run_id,
+        vehicle_type: x.type,
+        kind: "form",
+        text: "aspirin 300 mg given",
+      }).catch(() => {});
+    }
   }
   return { runId: run_id, warn };
 }

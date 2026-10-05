@@ -398,3 +398,21 @@ body:has(.offline) .bar {
   background: #59616d;
   color: #fff;
 }
+.trace h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+.trace ul,
+.trace ol {
+  margin: 4px 0;
+  padding-left: 22px;
+  font-size: 16px;
+}
+.rat {
+  margin: 6px 0 0;
+  font-size: 15px;
+}
+.rat i {
+  display: block;
+  color: var(--muted);
+}
