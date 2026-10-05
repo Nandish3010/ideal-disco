@@ -320,7 +320,7 @@ We would rather be believed on a smaller claim. Cop alerts are the part that nee
 A corridor is one JSON file: junctions, approaches, signal cycle, language. No code change.
 
 <!--
-Adding a city is a config change plus a hospital roster, no code. The Hyderabad corridor proves the schema is not Bengaluru-shaped. Cop alerts work anywhere Routes reports traffic. The screenshot is /control?corridor=hyd.
+Adding a city is a config change plus a hospital roster, no code. The Hyderabad corridor proves the schema is not Bengaluru-shaped. Cop alerts work anywhere Routes reports traffic. The screenshot is /control?corridor=blr, a live rehearsal run; the Corridor selector on the same page switches to Hyderabad.
 -->
 
 ---
