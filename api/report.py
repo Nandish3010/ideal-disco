@@ -32,13 +32,16 @@ _table_ready = False
 
 
 def compute(run_id, run, alerts, audits, ended_at):
-    """alerts: alert dicts; audits: audit dicts for this run. Baseline per junction cleared: remaining red (arrival at
-    mid-red = cycle_s / 4) plus the queue drain time jam_m / 2.0, jam_m from that junction's PREPARE alert (0 if none)."""
+    """alerts: alert dicts; audits: audit dicts for this run. A junction is cleared when the vehicle actually passed it
+    (run.passed_junctions) and preemption was requested for it; a request for a junction still ahead when the run ended earns
+    nothing. Baseline per junction cleared: remaining red (arrival at mid-red = cycle_s / 4) plus the queue drain time
+    jam_m / 2.0, jam_m from that junction's PREPARE alert (0 if none)."""
     started = (
         run.get("first_tick_at") or run["started_at"]
     )  # the drive starts at the first tick, not at run creation
     actual_s = max((ended_at - started).total_seconds(), 0)
-    cleared = {a["junction_id"] for a in audits if a.get("action") == "preempt_requested"}
+    passed = set(run.get("passed_junctions") or [])
+    cleared = {a["junction_id"] for a in audits if a.get("action") == "preempt_requested"} & passed
     cycles = {f"{run['corridor']}_{j['id']}": j["cycle_s"] for j in CORRIDORS[run["corridor"]]["junctions"]}
     # PREPARE's jam_m wins; a junction with only a STOP alert uses that one
     jam = {
@@ -136,6 +139,7 @@ if __name__ == "__main__":
         "confirmed_tier": "critical",
         "started_at": t0,
         "distance_m": 5200,
+        "passed_junctions": ["blr_j1", "blr_j2", "blr_j3", "blr_j4"],
     }
     t1 = datetime(2026, 10, 5, 9, 9, tzinfo=UTC)
     alerts = [
@@ -164,6 +168,9 @@ if __name__ == "__main__":
         r["ack_latency_s"],
         r["avg_ack_latency_s"],
     ) == (2, 3, 1, [4.0, 8.0], 6.0)
+    assert (
+        compute("r", {**run, "passed_junctions": ["blr_j3"]}, alerts, audits, t1)["junctions_cleared"] == 1
+    )  # j4 not passed
     first = datetime(2026, 10, 5, 9, 4, tzinfo=UTC)  # run created at 9:00, first tick at 9:04: 5 min drive
     r2 = compute("r", {**run, "first_tick_at": first}, [], [], t1)
     assert r2["actual_s"] == 300 and r2["started_at"] == first

@@ -348,7 +348,7 @@ def test_brief_waits_for_distance_driven(client: TestClient, seeded: FakeFiresto
     out.append(
         tick(client, rid, 12.9145 + 0.006, t=(t0 + timedelta(seconds=12)).isoformat()).json()
     )  # 660 m driven
-    assert out[-1]["brief_due"] is False  # generated inline in the same tick, so no longer due
+    assert out[-1]["brief_due"] is True  # due in this response; the brief itself is written after it
     assert (
         run_doc(seeded, rid)["brief_fired"] is True and seeded.collection("briefs").document(rid).get().exists
     )

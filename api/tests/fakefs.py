@@ -72,7 +72,7 @@ class Doc:
     def collection(self, name: str) -> "Collection":
         return Collection(self.fs, f"{self.path}/{name}")
 
-    def get(self) -> Snapshot:
+    def get(self, transaction: Any = None) -> Snapshot:
         return Snapshot(self, self.fs.docs.get(self.path))
 
     def set(self, data: dict, merge: bool = False) -> None:
@@ -121,7 +121,7 @@ class Query:
     def limit(self, n: int) -> "Query":
         return self._with(n=n)
 
-    def stream(self) -> list[Snapshot]:
+    def stream(self, transaction: Any = None) -> list[Snapshot]:
         rows = []
         for path, data in self.fs.docs.items():
             if self.match(path) and all(
@@ -150,9 +150,33 @@ class Collection(Query):
         return datetime.now(UTC), ref
 
 
+class Transaction:
+    """Just enough of firestore.Transaction for @firestore.transactional: writes apply at once (the fake has one thread of
+    control), so a transaction here checks the call shape, not contention."""
+
+    _id = b"tx"
+    _max_attempts = 5
+    _read_only = False
+
+    def _clean_up(self) -> None: ...
+
+    def _begin(self, retry_id: Any = None) -> None: ...
+
+    def _commit(self) -> list:
+        return []
+
+    def _rollback(self) -> None: ...
+
+    def update(self, ref: Doc, data: dict) -> None:
+        ref.update(data)
+
+
 class FakeFirestore:
     def __init__(self) -> None:
         self.docs: dict[str, dict] = {}
+
+    def transaction(self) -> Transaction:
+        return Transaction()
 
     def clear(self) -> None:
         self.docs.clear()

@@ -7,6 +7,9 @@ from collections.abc import Iterator
 from types import ModuleType
 
 os.environ["OFFLINE_AI"] = "1"
+os.environ["RATE_LIMIT_DISABLED"] = (
+    "1"  # tests call far faster than a person; test_ratelimit.py turns it back on
+)
 os.environ.setdefault("GCP_PROJECT", "test-project")
 
 import pytest
@@ -21,6 +24,7 @@ stub.db = fake  # type: ignore[attr-defined]
 sys.modules["firestore_client"] = stub
 
 import main  # noqa: E402
+import ratelimit  # noqa: E402
 import report  # noqa: E402
 
 
@@ -40,6 +44,7 @@ def no_network() -> Iterator[None]:
 @pytest.fixture(autouse=True)
 def db() -> Iterator[FakeFirestore]:
     fake.clear()
+    ratelimit._buckets.clear()
     yield fake
 
 
