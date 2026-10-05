@@ -5,6 +5,7 @@ import { api } from "../api.js";
 import { corridors } from "../data.js";
 import { useDoc, when } from "../ui.jsx";
 import { ms, useEnRoute, useNow } from "./Cop.jsx";
+import { Chips, Thumb } from "./Vehicle.jsx";
 import "../cop.css";
 
 const eta = (r, now) => r.eta_hospital_s == null ? null : Math.max(0, r.eta_hospital_s - (now - (ms(r.last_tick_at) ?? now)) / 1000);
@@ -23,14 +24,24 @@ function useLog(id) {
   return rows;
 }
 
+// "Aspirin 300 mg · Oxygen 4 L": every intervention across the log, once each, in the order given.
+function Treatment({ log }) {
+  const seen = new Set();
+  const items = log.flatMap((e) => e.interventions ?? []).map((i) => [i.name, i.dose].filter(Boolean).join(" "))
+    .filter((t) => t && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()))
+    .map((t) => t[0].toUpperCase() + t.slice(1));
+  return items.length ? <p><b>Treatment so far:</b> {items.join(" · ")}</p> : null;
+}
+
 function Vitals({ log }) {
+  // newest entry that has the value wins, photo entries included
   const series = (k) => log.map((e) => e.fields?.vitals?.[k]).filter((v) => v != null);
   return (
     <div className="vitals">
       {[["sbp", "SBP"], ["hr", "HR"], ["spo2", "SpO2"]].map(([k, label]) => {
         const s = series(k);
         return <div key={k}><span className="muted">{label}</span><b>{s.length ? s.at(-1) : "—"}</b>
-          <span className="muted">{s.length > 1 ? s.slice(-4).join(" → ") : ""}</span></div>;
+          <span className="muted">{s.length > 1 ? `${label} ${s.slice(-3).join(" → ")}` : ""}</span></div>;
       })}
     </div>
   );
@@ -59,12 +70,14 @@ function Brief({ runId }) {
             {[["age", "Age"], ["time", "Time"], ["mechanism", "Mechanism"], ["injuries", "Injuries"], ["signs", "Signs"], ["treatment", "Treatment"]]
               .map(([k, l]) => <div key={k} style={{ display: "contents" }}><dt>{l}</dt><dd>{b.atmist?.[k] ?? "—"}</dd></div>)}
           </dl>
+          {b.summary && <p className="summary">{b.summary}</p>}
           {(b.checklist ?? []).map((c, i) => (
             <label className="check" key={i}>
               <input type="checkbox" checked={!!ticks[i]} onChange={(e) => setTicks({ ...ticks, [i]: e.target.checked })} />{c}
             </label>
           ))}
-          <p className="muted">Generated {when(b.generated_at)}. A clinician confirms these values.</p>
+          <p className="banner">{b.disclaimer ?? "A clinician confirms these values."}</p>
+          <p className="muted">Generated {when(b.generated_at)}.</p>
         </>
       )}
       <button onClick={regen} disabled={busy}>{busy ? "Working…" : "Regenerate brief"}</button>
@@ -79,6 +92,7 @@ function Selected({ run }) {
     <>
       <h2>Vitals</h2>
       <Vitals log={log} />
+      <Treatment log={log} />
       <h2>Transit log</h2>
       {log.length === 0 && <p className="muted">No log entries yet.</p>}
       <ol className="timeline">
@@ -86,7 +100,9 @@ function Selected({ run }) {
           <li key={e.n}>
             <span className="muted">{when(e.t)}</span> <span className="pill">{e.kind}</span>
             {e.confirmed ? <b className="tier-stable"> ✓ crew confirmed</b> : <span className="muted"> unconfirmed</span>}
+            <Thumb url={e.photo_url} />
             <div>{e.transcript_en}</div>
+            <Chips items={e.interventions} />
             <dl className="kv">{flat(e.fields).map(([k, v]) => <div key={k} style={{ display: "contents" }}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
           </li>
         ))}

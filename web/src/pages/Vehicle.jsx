@@ -142,17 +142,53 @@ function useHold(onClip) {
   return { ...st, mic, start, stop };
 }
 
-function Fields({ fields, transcript }) {
+// Downscale a photo to <= 1280 px, JPEG q0.8; shrink again while the base64 is over 2 MB. -> {b64, url}
+const MAX_PX = 1280, MAX_B64 = 2 * 1024 * 1024;
+async function shrink(file) {
+  const img = await createImageBitmap(file, { imageOrientation: "from-image" });
+  let scale = Math.min(1, MAX_PX / Math.max(img.width, img.height)), url;
+  const cv = document.createElement("canvas");
+  for (let i = 0; i < 6; i++) {
+    cv.width = Math.round(img.width * scale); cv.height = Math.round(img.height * scale);
+    cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+    url = cv.toDataURL("image/jpeg", 0.8 - i * 0.05);
+    if (url.length - 23 <= MAX_B64) break;
+    scale *= 0.75;
+  }
+  img.close?.();
+  return { b64: url.split(",")[1], url };
+}
+
+const ICON = { drug: "💊", procedure: "🩺", observation: "👁" };
+const label = (i) => [i.name, i.dose].filter(Boolean).join(" ");
+// Intervention chips + tap-to-open photo thumbnail, shared with the hospital page.
+export const Chips = ({ items }) => items?.length ? (
+  <div className="chips">
+    {items.map((i, k) => (
+      <span key={k} className={"chip " + (i.kind ?? "")} title={[i.route, i.time_note].filter(Boolean).join(" · ") || undefined}>
+        {ICON[i.kind] ?? "•"} {label(i)}
+      </span>
+    ))}
+  </div>
+) : null;
+export const Thumb = ({ url }) => typeof url === "string" && url.startsWith("https://") ? (
+  <a href={url} target="_blank" rel="noopener noreferrer"><img className="thumb" src={url} alt="Monitor photo" loading="lazy" /></a>
+) : null;
+
+function Fields({ fields, transcript, photo }) {
   const rows = flat(fields);
   if (!rows.length) return <p className="muted">No fields extracted.</p>;
   return (
     <dl className="kv">
-      {rows.map(([k, v]) => (
-        <div key={k}>
-          <dt>{k}</dt>
-          <dd>{show(v)}<small className={heard(transcript, v) ? "src" : "inf"}>{heard(transcript, v) ? "in transcript" : "inferred"}</small></dd>
-        </div>
-      ))}
+      {rows.map(([k, v]) => {
+        const ok = photo || heard(transcript, v);
+        return (
+          <div key={k}>
+            <dt>{k}</dt>
+            <dd>{show(v)}<small className={ok ? "src" : "inf"}>{photo ? "from photo" : ok ? "in transcript" : "inferred"}</small></dd>
+          </div>
+        );
+      })}
     </dl>
   );
 }
@@ -166,12 +202,13 @@ function Triage({ runId, vehicleType, confirmed, setDone }) {
   const [confirming, setConfirming] = useState(false);
   const [cerr, setCerr] = useState(null);
   const [note, setNote] = useState("");
+  const [shot, setShot] = useState(null); // data URL of the monitor photo behind the current send, else null
   const area = useRef(null);
   const mode = pick ?? (confirmed ? "log" : "triage");
 
-  async function send(extra, kind) {
+  async function send(extra, kind, url = null) {
     const log = mode === "log";
-    setBusy(true); setErr(null); setRes(null); setNote("");
+    setBusy(true); setErr(null); setRes(null); setNote(""); setShot(url);
     try {
       setRes({ ...(await api(log ? "/log" : "/triage", { run_id: runId, vehicle_type: vehicleType, ...(log && { kind }), ...extra })), log });
       if (kind === "form") setText("");
@@ -184,13 +221,25 @@ function Triage({ runId, vehicleType, confirmed, setDone }) {
     catch (x) { setCerr(x); }
     setConfirming(false);
   }
+  async function photo(e) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    setBusy(true); setErr(null); setRes(null); setNote(""); setShot("pending");
+    let r;
+    try { r = await shrink(f); }
+    catch { setBusy(false); setShot(null); return setNote("Couldn't open that photo, type it instead."); }
+    send({ image_b64: r.b64, mime: "image/jpeg" }, "photo", r.url);
+  }
   const hold = useHold(async (blob) => {
     if (!blob) return setNote("Too short. Hold the button while you speak.");
     setBusy(true);
     send({ audio_b64: await b64(blob), mime: blob.type.split(";")[0] || "audio/webm" }, "voice");
   });
   const failed = err?.body?.error === "extraction_failed";
-  useEffect(() => { if (failed || hold.mic) area.current?.focus(); }, [failed, hold.mic]);
+  // 422 = unreadable; 400/501 = backend without image support yet
+  const unread = shot && [400, 422, 501].includes(err?.status);
+  useEffect(() => { if (failed || unread || hold.mic) area.current?.focus(); }, [failed, unread, hold.mic]);
 
   const tier = res?.suggested_tier;
   const up = String(tier).toUpperCase();
@@ -210,13 +259,17 @@ function Triage({ runId, vehicleType, confirmed, setDone }) {
         onKeyUp={(e) => { if (e.key === " " || e.key === "Enter") hold.stop(); }}
         onContextMenu={(e) => e.preventDefault()}
       >
-        {busy ? "Thinking…" : hold.on ? `Listening ${clock(hold.s)}` : "Hold to speak"}
+        {busy ? (shot ? "Reading the monitor…" : "Thinking…") : hold.on ? `Listening ${clock(hold.s)}` : "Hold to speak"}
         {hold.on && (
           <small>{Math.max(0, Math.ceil(MAX_S - hold.s))} s left
             <span className="meter"><i style={{ width: Math.min(100, hold.s / MAX_S * 100) + "%" }} /></span>
           </small>
         )}
       </button>
+      <label className={"btn photo" + (busy ? " off" : "")}>
+        {busy && shot ? "Reading the monitor…" : "📷 Monitor photo"}
+        <input type="file" accept="image/*" capture="environment" disabled={busy} onChange={photo} hidden />
+      </label>
       {note && <p className="muted">{note}</p>}
       {hold.mic && (
         <p className="card bad">
@@ -229,15 +282,26 @@ function Triage({ runId, vehicleType, confirmed, setDone }) {
         </label>
         <button className="primary" disabled={busy}>{busy ? "Thinking…" : mode === "log" ? "Add note" : "Send"}</button>
       </form>
-      {failed ? <p className="card bad">Couldn't understand, type it. Add more detail in the box above.</p>
+      {unread ? <p className="card bad">Couldn't read the screen, type it instead.</p>
+        : failed ? <p className="card bad">Couldn't understand, type it. Add more detail in the box above.</p>
         : err?.status === 503 ? <p className="card bad">Service busy, try again.</p>
         : <Err e={err} />}
       {res && (
         <div className="card">
-          <div className="muted">Transcript (English)</div>
-          <p className="quote">{res.transcript_en ?? "—"}</p>
-          <div className="muted">Extracted from the transcript</div>
-          <Fields fields={res.fields} transcript={res.transcript_en} />
+          {shot ? (
+            <div className="photo-res">
+              <img className="thumb" src={shot} alt="Monitor photo" />
+              <div><div className="muted">Read from the monitor</div><Fields fields={res.fields} photo /></div>
+            </div>
+          ) : (
+            <>
+              <div className="muted">Transcript (English)</div>
+              <p className="quote">{res.transcript_en ?? "—"}</p>
+              <div className="muted">Extracted from the transcript</div>
+              <Fields fields={res.fields} transcript={res.transcript_en} />
+            </>
+          )}
+          <Chips items={res.interventions} />
           {res.log ? <p className="muted">Added to the transit log.</p> : (
             <>
               <div className="muted">Suggested tier</div>
@@ -269,7 +333,9 @@ function Log({ runId }) {
               <li key={e.id}>
                 <span className="muted">{when(e.t)}</span>
                 <span className="pill">{e.kind === "form" ? "text" : e.kind}</span>
+                <Thumb url={e.photo_url} />
                 <div>{e.transcript_en ?? "—"}</div>
+                <Chips items={e.interventions} />
                 <div className="muted">{flat(e.fields).map(([k, v]) => `${k} ${show(v)}`).join(" · ")}</div>
               </li>
             ))}
