@@ -26,7 +26,7 @@ import priority
 import ratelimit
 import report
 import routes_api
-from corridor import CORRIDORS, SCENARIOS, bearing, distance_m, junctions_ahead, locate
+from corridor import CORRIDORS, MATCH_M, SCENARIOS, bearing, distance_m, junctions_ahead, locate
 from firestore_client import db
 from gemini import ExtractionFailed, extract, offline
 from hospitals import by_id
@@ -490,6 +490,33 @@ def contender(run_id, r, eta_s, approach):
     return {"run_id": run_id, "vehicle_type": vt, "tier": tier, "eta_s": eta_s, "approach": approach}
 
 
+def defer(bg: BackgroundTasks, fn, *args) -> None:
+    """Run fn after the response is sent (Cloud Run runs with --no-cpu-throttling, so the work continues). An error is
+    logged, never raised: the tick it belongs to has already been answered."""
+
+    def run():
+        try:
+            fn(*args)
+        except Exception as e:
+            log(event="background_error", task=fn.__name__, error=type(e).__name__, detail=str(e)[:200])
+
+    bg.add_task(run)
+
+
+def finish_alert(alert_ref, text, lang, path):
+    """Voice for an alert already written: speech and the spoken-language text patched in (None, None when synthesis fails)."""
+    audio_url, text_local = speak(text, lang, path)
+    alert_ref.update({"audio_url": audio_url, "text_local": text_local})
+
+
+def brief_from_tick(run_id, run_ref, run, entries):
+    """The brief a tick found due, generated after that tick was answered. On Gemini failure brief_due stays true."""
+    try:
+        write_brief(run_id, run_ref, run, entries)
+    except ExtractionFailed:
+        log(event="brief_error", run_id=run_id, via="location")
+
+
 def rationale(jid, seq, lang):
     """Gemini's one-line 'why this order' on the phase, English plus the junction language. Failure: omit and log.
     Always rewritten (deleted when fewer than 2 vehicles) so a stale line never outlives its sequence."""
@@ -506,7 +533,7 @@ def rationale(jid, seq, lang):
     db.collection("junctions").document(jid).update(out)
 
 
-def preempt(run_id, run, jid, approach, eta_s, clear_s, stage, lang):
+def preempt(run_id, run, jid, approach, eta_s, clear_s, stage, lang, bg):
     me = contender(run_id, run, eta_s, approach)
     if me is None:
         return None
@@ -528,7 +555,7 @@ def preempt(run_id, run, jid, approach, eta_s, clear_s, stage, lang):
         [{"run_id": c["run_id"], "offset_s": c["offset_s"], "approach": c["approach"]} for c in seq],
     )
     sequence = [{"run_id": c["run_id"], "offset_s": c["offset_s"]} for c in seq]
-    rationale(jid, seq, lang)
+    defer(bg, rationale, jid, seq, lang)  # Gemini + translation: patched onto the phase after the response
     db.collection("audit").add(
         {
             "run_id": run_id,
@@ -559,6 +586,10 @@ def mark_stale(now, skip):
 
 
 ESCALATE_S = 20
+ROUTE_TTL_S = (
+    20  # one Routes call per run this often: vehicle -> hospital, every junction ahead is read out of it
+)
+PASS_SLACK_M = 15  # projected this far beyond a junction's route offset counts as passed (GPS slack)
 
 
 def escalate(now, mine, others):
@@ -597,7 +628,7 @@ def escalate(now, mine, others):
 
 
 @app.post("/location")
-def location(loc: Loc):
+def location(loc: Loc, bg: BackgroundTasks):
     ref = db.collection("runs").document(loc.run_id)
     snap = ref.get()
     if not snap.exists:
@@ -628,8 +659,9 @@ def location(loc: Loc):
     window = [k["speed_mps"] for k in ticks if (t - k["t"]).total_seconds() <= 60]
     observed = sum(window) / len(window)
 
-    # hospital route: ETA, polyline for junction and off-route detection. While off_route the old polyline stays pinned
-    # so the state holds until the vehicle rejoins it (the cache is per instance; a restart heals it).
+    # hospital route: ETA, polyline for junction and off-route detection, and (TRAFFIC_ON_POLYLINE) the speed spans of the
+    # whole route, which the junctions below slice. While off_route the old polyline stays pinned so the state holds until
+    # the vehicle rejoins it (the cache is per instance; a restart heals it).
     scenario = (
         run.get("scenario") in SCENARIOS
     )  # replays follow the corridor config, not Google's road choice
@@ -650,14 +682,18 @@ def location(loc: Loc):
         hosp = routes_api.traffic_to_point(
             me,
             (dest["lat"], dest["lng"]),
-            key=(loc.run_id, "hospital"),
-            ttl=1e9 if run["state"] == "off_route" else 30,
+            key=(loc.run_id, "route"),
+            ttl=1e9 if run["state"] == "off_route" else ROUTE_TTL_S,
             steps=True,
             run_id=loc.run_id,
             junction_id=None,
         )
     pts = hosp["polyline_points"]
-    off = locate(pts, me)[1] if pts else 0
+    v_along, off = locate(pts, me) if pts else (0.0, 0)
+    route_m = sum(distance_m(a, b) for a, b in zip(pts, pts[1:], strict=False))
+    pace = (
+        hosp["duration_s"] / route_m if hosp["duration_s"] and route_m else None
+    )  # traffic-aware s per metre
     state = "off_route" if off > OFF_ROUTE_M else "en_route"
     eta_h = run.get("eta_hospital_s")
     if hosp["duration_s"] is not None and hosp["age_s"] < 120:  # older means a pinned route: not an ETA
@@ -689,13 +725,17 @@ def location(loc: Loc):
         upd["first_tick_at"] = t  # the drive starts at the first tick, not at run creation (report card)
 
     # every junction ahead is evaluated, not just the next: a long queue needs the cop warned minutes before the vehicle
-    # reaches the junction, while nearer junctions are still to come. One Routes call per (run, junction) per 20 s.
-    passed = list(run.get("passed_junctions") or [])  # always a prefix of corridor["junctions"]: route order
+    # reaches the junction, while nearer junctions are still to come. No Routes call per junction: each reads its queue
+    # out of the run's one route call.
+    # route_index: corridor index of the next junction (= how many are passed, a prefix of corridor order). It only grows,
+    # so a junction never comes back as "next" however the route or the GPS wobbles.
+    ri = max(run.get("route_index", 0), len(run.get("passed_junctions") or []))
+    order = {f"{corridor['id']}_{j['id']}": i for i, j in enumerate(corridor["junctions"])}
     ahead = (
         [
             (j, ap)
             for j, ap in junctions_ahead(corridor, loc.lat, loc.lng, heading, pts)
-            if j["doc_id"] not in passed
+            if order[j["doc_id"]] >= ri
         ]
         if state == "en_route"
         else []
@@ -712,15 +752,17 @@ def location(loc: Loc):
             rec = SCENARIOS[run["scenario"]].get("recorded_spans", {}).get(jid) or [{"intervals": []}]
             intervals, routes_eta, traffic = rec[0]["intervals"], dist / max(observed, 3), "scenario"
         else:
-            tr = routes_api.traffic_to_point(
-                me, jc, key=(loc.run_id, jid), ttl=20, run_id=loc.run_id, junction_id=jid
-            )
-            intervals, traffic = tr["intervals"], "stale" if tr["stale"] else "live"
-            routes_eta = (
-                max(tr["duration_s"] - tr["age_s"], 0)
-                if tr["duration_s"] is not None
-                else dist / max(observed, 3)
-            )
+            # the queue is the stretch of the route's speed spans up to this junction's stop line (the end of its approach
+            # polyline, projected onto the route), at most 600 m back and never behind the vehicle; the ETA is the distance
+            # at the route's average traffic-aware pace
+            intervals = []
+            if pts:
+                end_m = locate(pts, tuple(ap["polyline"][-1]))[0]
+                intervals = leadtime.slice_intervals(
+                    hosp["intervals"], max(end_m - leadtime.JAM_LOOKBACK_M, v_along), end_m
+                )
+            traffic = "stale" if hosp["stale"] else "live"
+            routes_eta = dist * pace if pace else dist / max(observed, 3)
         jam_m = leadtime.jam_metres(intervals)
         clear_s = leadtime.clear_seconds(jam_m)
         eta_s = leadtime.blended_eta(routes_eta, dist, observed)
@@ -752,10 +794,8 @@ def location(loc: Loc):
             fire = "UPDATE"
         if fire:
             text = alert_text(run, fire, jam_m, ap["id"], move, eta_s)
-            audio_url, text_local = speak(
-                text, corridor["lang"], f"alerts/{loc.run_id}/{jid}/{fire}-{n}.mp3"
-            )  # None: text-only alert
-            ref.collection("alerts").document(str(n)).set(
+            alert_ref = ref.collection("alerts").document(str(n))
+            alert_ref.set(
                 {
                     "junction_id": jid,
                     "approach": ap["id"],
@@ -764,12 +804,20 @@ def location(loc: Loc):
                     "eta_s": round(eta_s),
                     "exit_move": move,
                     "text": text,
-                    "text_local": text_local,
-                    "audio_url": audio_url,
+                    "text_local": None,  # speech and the spoken-language text are patched in by finish_alert
+                    "audio_url": None,
                     "acked_at": None,
                     "escalated": False,
                     "created_at": SERVER_TIMESTAMP,
                 }
+            )
+            defer(
+                bg,
+                finish_alert,
+                alert_ref,
+                text,
+                corridor["lang"],
+                f"alerts/{loc.run_id}/{jid}/{fire}-{n}.mp3",
             )
             n += 1
             s.update({"prepare": True, "stop": s.get("stop") or fire == "STOP", "jam_m": jam_m})
@@ -784,7 +832,7 @@ def location(loc: Loc):
                 jam_m=round(jam_m),
                 eta_s=round(eta_s),
             )
-            seq = preempt(loc.run_id, run, jid, ap["id"], eta_s, clear_s, fire, corridor["lang"])
+            seq = preempt(loc.run_id, run, jid, ap["id"], eta_s, clear_s, fire, corridor["lang"], bg)
             contenders.update(c["run_id"] for c in seq or [])
         if upd["next_junction_id"] is None:  # nearest junction ahead is what the response reports
             upd.update({"next_junction_id": jid, "next_approach": ap["id"], "next_eta_s": eta_s})
@@ -803,19 +851,24 @@ def location(loc: Loc):
         k: out[k] for k in ("next_junction", "approach", "jam_m", "eta_s", "stage", "exit_move", "traffic")
     }
 
-    # passed: a junction is passed once the step from the last tick crossed its stop-line circle and the vehicle is out of it
-    # again; passing one passes every earlier one (corridor order is route order), so next_junction never goes backwards
-    hi = len(passed) - 1
+    # passed: a junction is passed once the step from the last tick went through its stop-line circle and the vehicle is out
+    # of it again, or (a 5 s tick can jump the circle) once the vehicle's position along the route is past the junction's
+    # offset on it. Passing one passes every earlier one (corridor order is route order).
+    hi = ri - 1
     for i, j in enumerate(corridor["junctions"]):
+        if i <= hi:
+            continue
         jc = (j["lat"], j["lng"])
-        if (
-            i > hi
-            and last
-            and locate([(last["lat"], last["lng"]), me], jc)[1]
-            <= j["approaches"][0]["radius_m"]
-            < distance_m(me, jc)
-        ):
+        crossed = last and locate([(last["lat"], last["lng"]), me], jc)[1] <= j["approaches"][0][
+            "radius_m"
+        ] < distance_m(me, jc)
+        beyond = False
+        if pts and state == "en_route":
+            along, apart = locate(pts, jc)
+            beyond = apart <= MATCH_M and v_along - along > PASS_SLACK_M
+        if crossed or beyond:
             hi = i
+    upd["route_index"] = hi + 1
     upd["passed_junctions"] = passed = [
         f"{corridor['id']}_{j['id']}" for j in corridor["junctions"][: hi + 1]
     ]
@@ -844,12 +897,8 @@ def location(loc: Loc):
         upd.update({"state": "arrived", "ahead_ids": [], "ahead": {}})
         out["state"] = "arrived"
     ref.update(upd)
-    if entries:
-        try:
-            write_brief(loc.run_id, ref, run, entries)
-            out["brief_due"] = False
-        except ExtractionFailed:
-            log(event="brief_error", run_id=loc.run_id, via="location")
+    if entries:  # brief_due stays true in the response: the brief is being written after it
+        defer(bg, brief_from_tick, loc.run_id, ref, run, entries)
     mark_stale(now, loc.run_id)
     escalate(now, [loc.run_id], upd["contenders"])
     if arrived:
