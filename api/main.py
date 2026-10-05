@@ -16,6 +16,7 @@ from google.genai import errors as genai_errors
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+import aar
 import acuity
 import agent
 import brief
@@ -359,6 +360,33 @@ def brief_endpoint(b: BriefReq):
     except ExtractionFailed:
         log(event="brief_error", run_id=b.run_id, via="endpoint")
         return err(502, "brief_failed")
+
+
+@app.post("/runs/{run_id}/after-action")
+def after_action(run_id: str, regenerate: bool = False):
+    run_ref = db.collection("runs").document(run_id)
+    run = run_ref.get()
+    if not run.exists:
+        return err(404, "unknown_run")
+    r = run.to_dict()
+    if r.get("state") not in ("ended", "arrived"):
+        return err(409, "run_not_finished", "the report is written once the run has ended or arrived")
+    stored = db.collection("after_action").document(run_id)
+    if not regenerate and (old := stored.get()).exists:
+        return old.to_dict()
+    rep = db.collection("reports").document(run_id).get()
+    alerts = [d.to_dict() for d in run_ref.collection("alerts").stream()]
+    try:
+        body, model = aar.generate(
+            r, log_entries(run_ref), alerts, rep.to_dict() if rep.exists else None, r.get("routing"), run_id
+        )
+    except ExtractionFailed:
+        log(event="aar_error", run_id=run_id)
+        return err(502, "after_action_failed")
+    doc = {**body, "generated_at": datetime.now(UTC), "model": model}
+    stored.set(doc)
+    log(event="aar_written", run_id=run_id, model=model)
+    return doc
 
 
 class Loc(BaseModel):
