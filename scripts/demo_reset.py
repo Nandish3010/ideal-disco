@@ -1,11 +1,12 @@
 """Reset the demo Firestore to a clean slate between rehearsals. Dry run by default (prints counts); --apply writes.
 Needs GOOGLE_APPLICATION_CREDENTIALS. Run from the repo root: python3 scripts/demo_reset.py [--apply]
 Ends every run not already ended/arrived; deletes runs/*/alerts, audit/*, reports/*, briefs/*, duty/*;
-closes all incidents; clears junctions/*.phase; nulls vehicles/*.bound_device_id.
+closes all incidents and deletes those already closed for over 1 h (except the seed INC-0001); clears junctions/*.phase; nulls vehicles/*.bound_device_id.
 Keeps vehicles, junctions and incidents docs, and the runs themselves (so ended runs stay readable)."""
 
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 
 from google.cloud import firestore
 
@@ -29,6 +30,17 @@ plan(
 plan("alerts deleted", [a.reference for r in runs for a in r.reference.collection("alerts").stream()])
 for col in ("audit", "reports", "briefs", "duty"):
     plan(f"{col} deleted", [d.reference for d in db.collection(col).stream()])
+old = datetime.now(timezone.utc) - timedelta(hours=1)
+plan(
+    "old closed incidents deleted",
+    [
+        i.reference
+        for i in db.collection("incidents").stream()
+        if i.id != "INC-0001"
+        and i.to_dict().get("state") == "closed"
+        and (i.to_dict().get("created_at") or old) < old
+    ],
+)
 plan(
     "incidents closed",
     [i.reference for i in db.collection("incidents").stream() if i.to_dict().get("state") != "closed"],
@@ -59,6 +71,7 @@ for label in (
     "reports deleted",
     "briefs deleted",
     "duty deleted",
+    "old closed incidents deleted",
     "incidents closed",
     "junction phases cleared",
     "vehicles unbound",

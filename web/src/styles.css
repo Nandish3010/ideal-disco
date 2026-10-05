@@ -301,6 +301,25 @@ pre {
   border-radius: 10px;
   font-weight: 700;
 }
+.btn.photo input {
+  /* visually hidden, still focusable: the label click opens the picker */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  border: 0;
+}
+.btn.photo {
+  position: relative;
+}
+.btn.photo:focus-within {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
 .btn.photo.off {
   opacity: 0.5;
 }
