@@ -2,9 +2,10 @@
 
 Ticks are interpolated along the corridor's approach polylines, so rerun this after the corridor file changes:
     python3 scripts/make_scenario.py
-Ambulance KA01AB1234 (critical) runs all 5 junctions to the hospital; fire engine KA01FE5678
+Ambulance KA01AB1234 (critical) starts LEAD_M (900 m) of straight lead-in before the origin of j1's approach
+polyline, driven at 11 m/s, then runs all 5 junctions to the hospital; fire engine KA01FE5678
 (fire_with_trapped) comes in on j3's cross approach and reaches the stop line ~3 s ahead of it; a second
-ambulance KA01AB4321 (urgent) is the first one's trace 40 s later (platoon on the j3 corridor approach).
+ambulance KA01AB4321 (urgent) is the first one's whole trace, lead-in included, 40 s later (platoon).
 Span intervals use route order (stop line = largest to_m), like api/leadtime.py and the traffic logger.
 """
 import json
@@ -15,6 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 C = json.loads((ROOT / "data/corridors/blr.json").read_text())
 J = {j["id"]: j for j in C["junctions"]}
 DT = 5  # seconds between ticks
+LEAD_M, LEAD_MPS = 900, 11  # straight lead-in before j1's approach: length, speed
 
 
 def dist(a, b):  # equirectangular, fine at junction scale
@@ -66,8 +68,18 @@ def rnd(x, n):  # round half up, like the JS this was prototyped in
     return math.floor(x * 10**n + 0.5) / 10**n
 
 
-def speed_at(path, s, jams):
-    """m/s: 8-14, slower near stop lines and through queues (an emergency vehicle filters through them)."""
+def lead_in(poly, m):
+    """The point m metres behind poly[0], on the reverse of the first segment's bearing."""
+    k = math.cos(math.radians(poly[0][0])) * 111195
+    dx, dy = (poly[1][1] - poly[0][1]) * k, (poly[1][0] - poly[0][0]) * 111195
+    n = math.hypot(dx, dy)
+    return [poly[0][0] - dy / n * m / 111195, poly[0][1] - dx / n * m / k]
+
+
+def speed_at(path, s, jams, lead=0):
+    """m/s: 8-14, slower near stop lines and through queues (an emergency vehicle filters through them); LEAD_MPS on the lead-in."""
+    if s < lead:
+        return LEAD_MPS
     v = min(14, 13 + 1.2 * math.sin(s / 140))
     for j, d in path[2].items():
         if d - 60 < s < d + 20:
@@ -77,12 +89,12 @@ def speed_at(path, s, jams):
     return rnd(v, 1)
 
 
-def drive(path, s0, jams, max_ticks):
+def drive(path, s0, jams, max_ticks, lead=0):
     ticks, s = [], s0
     for k in range(max_ticks):
         if s > path[1][-1]:
             break
-        v = speed_at(path, s, jams)
+        v = speed_at(path, s, jams, lead)
         lat, lng = at(path, s)
         ticks.append({"t": k * DT, "lat": rnd(lat, 5), "lng": rnd(lng, 5), "speed_mps": v, "_s": s})
         s += v * DT
@@ -98,7 +110,8 @@ def time_at(ticks, s):
 
 hosp = [C["hospital"]["lat"], C["hospital"]["lng"]]
 main = build([
-    (tail(appr("j1", "E"), 250), "j1"),
+    ([lead_in(appr("j1", "E"), LEAD_M)], None),
+    (appr("j1", "E"), "j1"),
     (tail(appr("j2", "SE"), 250), "j2"),
     (appr("j3", "E"), "j3"),
     (tail(appr("j4", "E"), 250), "j4"),
@@ -106,13 +119,11 @@ main = build([
     ([hosp], None),
 ])
 JAMS = {"j3": 500, "j4": 100}
-amb = drive(main, 0, JAMS, 200)
+amb = drive(main, 0, JAMS, 200, LEAD_M)
 amb_j3 = time_at(amb, main[2]["j3"])
 
-# platoon: the second ambulance is the first one's trace from tick a, shifted so it is 40 s behind, 30 ticks
-a = max(0, int(amb_j3 // DT) - 12)
-amb2 = [{**k, "t": i * DT} for i, k in enumerate(amb[a:a + 30])]
-amb2_start = round(a * DT + 40)
+# platoon: the second ambulance repeats the first one's trace (same lead-in), starting 40 s later
+amb2, amb2_start = amb, 40
 
 # fire engine: last 330 m of j3's cross approach, then on toward j4; at the j3 stop line ~3 s before the ambulance
 fire_path = build([(tail(appr("j3", "S"), 330), "j3"), ([tail(appr("j4", "E"), 140)[0]], None)])
@@ -158,7 +169,7 @@ out = {
         {"run_id": "run-fire-1", "plate": "KA01FE5678", "type": "fire", "tier": "fire_with_trapped", "start_offset_s": fire_start,
          "approaches": {"j3": "S"}, "ticks": clean(fire)},
         {"run_id": "run-amb-2", "plate": "KA01AB4321", "type": "ambulance", "tier": "urgent", "start_offset_s": amb2_start,
-         "approaches": {"j3": "E", "j4": "E", "j5": "E"}, "ticks": clean(amb2)},
+         "approaches": {"j1": "E", "j2": "SE", "j3": "E", "j4": "E", "j5": "E"}, "ticks": clean(amb2)},
     ],
     "recorded_spans": {
         "blr_j1": snaps([("00:00", full(0, 60))]),
@@ -185,4 +196,6 @@ for k, b in blocks.items():
     text = text.replace(f'"{k}"', b)
 (ROOT / "data/scenarios/blr-two-vehicles.json").write_text(text + "\n")
 json.loads(text)  # fail loudly if the layout trick ever breaks the JSON
-print(f"ambulance {len(amb)} ticks, j3 at {amb_j3:.0f} s; fire +{fire_start} s ({len(fire)} ticks); amb2 +{amb2_start} s ({len(amb2)} ticks)")
+print(f"first tick {main[2]['j1']:.0f} m before j1; ambulance first tick -> j3 {amb_j3:.0f} s ({len(amb)} ticks); "
+      f"fire first tick -> j3 {time_at(fire, fire_path[2]['j3']):.0f} s, starts +{fire_start} s ({len(fire)} ticks); "
+      f"platoon ambulance first tick -> j3 {amb_j3:.0f} s, starts +{amb2_start} s ({len(amb2)} ticks)")
