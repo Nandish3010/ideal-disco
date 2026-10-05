@@ -25,4 +25,4 @@ jobs:
           VITE_MAPS_BROWSER_KEY: ${{ vars.VITE_MAPS_BROWSER_KEY }}
           VITE_API_BASE: ${{ vars.VITE_API_BASE }}
       - name: Deploy to Firebase Hosting
-        run: cd web && npx firebase-tools@latest deploy --only hosting --project green-corridor-2026 --non-interactive
+        run: cd web && npx firebase-tools@latest deploy --only hosting,firestore:rules --project green-corridor-2026 --non-interactive
