@@ -4,6 +4,7 @@ import Cop from "./pages/Cop.jsx";
 import Dispatch from "./pages/Dispatch.jsx";
 import Hospital from "./pages/Hospital.jsx";
 import Sim from "./pages/Sim.jsx";
+import Control from "./pages/Control.jsx";
 import Vehicle from "./pages/Vehicle.jsx";
 
 // ponytail: path switch instead of react-router; the corridor is chosen by ?corridor=blr|hyd
@@ -12,7 +13,7 @@ const routes = {
   "/vehicle": ["Vehicle", Vehicle],
   "/cop": ["Cop", Cop],
   "/hospital": ["Hospital", Hospital],
-  "/control": ["Control room", stub],
+  "/control": ["Control room", Control],
   "/sim": ["Sim", Sim],
   "/dispatch": ["Dispatch", Dispatch],
 };

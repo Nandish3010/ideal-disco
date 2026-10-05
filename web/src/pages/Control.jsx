@@ -1,0 +1,190 @@
+import { useEffect, useState } from "react";
+import { collection, onSnapshot } from "firebase/firestore";
+import { db } from "../firebase.js";
+import { corridors } from "../data.js";
+import { useActiveRuns, useJunctions } from "../live.js";
+import CorridorMap from "../map.jsx";
+import "../control.css";
+
+const ESCALATE_S = 20;
+const ICON = { ambulance: "🚑", fire: "🚒", police: "🚓" };
+const ms = (v) => (v?.toMillis ? v.toMillis() : v ? new Date(v).getTime() : 0);
+const clock = (v) => new Date(ms(v)).toLocaleTimeString([], { hour12: false });
+const dash = (v, f = (x) => x) => (v == null || v === "" ? "—" : f(v));
+const tierOf = (r) => r.confirmed_tier ?? r.acuity_tier;
+const ago = (v, now) => (v ? `${Math.max(0, Math.round((now - ms(v)) / 60000))} min ago` : "—");
+
+const useNow = () => {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  return now;
+};
+
+// Whole (small) collection, optionally keyed by doc id prefix. ponytail: no query, filter client-side.
+function useCol(name, prefix = "") {
+  const [rows, setRows] = useState([]);
+  useEffect(() => {
+    setRows([]);
+    return onSnapshot(
+      collection(db, name),
+      (q) => setRows(q.docs.filter((d) => d.id.startsWith(prefix)).map((d) => ({ id: d.id, ...d.data() }))),
+      (e) => console.warn(`${name} listener:`, e.message),
+    );
+  }, [name, prefix]);
+  return rows;
+}
+
+// Every alert of every active run (runs/{id}/alerts, no index). useAlerts in live.js only returns the newest 5,
+// which would hide an unacked alert behind newer ones; escalations need all of them.
+function useRunAlerts(runIds) {
+  const [per, setPer] = useState({});
+  const key = runIds.join(",");
+  useEffect(() => {
+    setPer({});
+    const offs = runIds.map((id) => onSnapshot(
+      collection(db, `runs/${id}/alerts`),
+      (q) => setPer((p) => ({ ...p, [id]: q.docs.map((d) => ({ id: d.id, run_id: id, ...d.data() })) })),
+      (e) => console.warn("alerts listener:", id, e.message),
+    ));
+    return () => offs.forEach((f) => f());
+  }, [key]);
+  return runIds.flatMap((id) => per[id] ?? []).sort((a, b) => ms(b.created_at) - ms(a.created_at));
+}
+
+const Badge = ({ cls, children }) => <span className={`cb ${cls}`}>{children}</span>;
+
+export default function Control() {
+  const [cid, setCid] = useState(() => { const c = new URLSearchParams(location.search).get("corridor"); return corridors[c] ? c : "blr"; });
+  const corridor = corridors[cid];
+  const pick = (c) => { setCid(c); history.replaceState(null, "", `?corridor=${c}`); };
+  const now = useNow();
+  const junctions = useJunctions(cid);
+  const runs = useActiveRuns(cid);
+  const alerts = useRunAlerts(runs.map((r) => r.id).sort());
+  const duty = Object.fromEntries(useCol("duty", `${cid}_`).map((d) => [d.id, d]));
+  const reports = useCol("reports").filter((r) => !r.corridor || r.corridor === cid)
+    .sort((a, b) => ms(b.generated_at ?? b.created_at) - ms(a.generated_at ?? a.created_at));
+  const [sel, setSel] = useState(null);
+
+  const jname = (id) => corridor.junctions.find((j) => `${cid}_${j.id}` === id || j.id === id)?.name ?? id;
+  const runOf = (id) => runs.find((r) => r.id === id);
+  const age = (a) => (a.created_at ? Math.round((now - ms(a.created_at)) / 1000) : 0);
+  const late = (a) => !a.acked_at && (a.escalated || age(a) > ESCALATE_S);
+  const esc = alerts.filter(late);
+  const stageOf = (r) => r.stage ?? alerts.find((a) => a.run_id === r.id)?.stage;
+
+  const vehicles = runs.map((r) => {
+    const k = r.ticks?.at(-1);
+    return { id: r.id, type: r.vehicle_type, lat: k?.lat ?? r.lat, lng: k?.lng ?? r.lng };
+  }).filter((x) => Number.isFinite(x.lat));
+  const s = runOf(sel);
+
+  return (
+    <div className="control">
+      {esc.length > 0 && (
+        <section className="escs" role="alert">
+          <b>{esc.length} ESCALATED, no ACK in {ESCALATE_S} s</b>
+          {esc.map((a) => {
+            const r = runOf(a.run_id);
+            return (
+              <div key={`${a.run_id}/${a.id}`} className="esc">
+                <span>
+                  <b>{a.junction_id?.split("_").pop().toUpperCase()} {jname(a.junction_id)}</b>: {dash(a.stage)} alert unacked {age(a)} s
+                  {r ? ` · ${r.vehicle_type} ${dash(tierOf(r), (t) => t.toUpperCase())}` : ""}
+                </span>
+                <button title="Placeholder, does nothing yet" onClick={() => {}}>Call junction (placeholder)</button>
+              </div>
+            );
+          })}
+        </section>
+      )}
+      <div className="cgrid">
+        <div className="cmapbox"><CorridorMap corridor={corridor} junctions={junctions} vehicles={vehicles} selected={sel} /></div>
+        <div className="cpanel">
+          <section className="card">
+            <label>Corridor
+              <select value={cid} onChange={(e) => pick(e.target.value)}>
+                {Object.values(corridors).map((c) => <option key={c.id} value={c.id}>{c.id} · {c.name}</option>)}
+              </select>
+            </label>
+            <h2>Active runs ({runs.length})</h2>
+            {runs.length === 0 ? <p className="muted">No active runs. Start one on /vehicle or feed one on /sim.</p> : (
+              <div className="tscroll"><table className="runs">
+                <thead><tr><th></th><th>Plate</th><th>Tier</th><th>State</th><th>Next</th><th>ETA</th><th>Stage</th><th>Incident</th><th>Started</th></tr></thead>
+                <tbody>
+                  {runs.map((r) => (
+                    <tr key={r.id} className={r.id === sel ? "sel" : ""} onClick={() => setSel(r.id === sel ? null : r.id)}>
+                      <td>{ICON[r.vehicle_type] ?? "?"}</td>
+                      <td><b>{r.vehicle_plate ?? r.id}</b></td>
+                      <td>{tierOf(r) ? <Badge cls={`t-${tierOf(r)}`}>{tierOf(r)}</Badge> : "—"}</td>
+                      <td><Badge cls={`st-${r.state}`}>{r.state}</Badge></td>
+                      <td>{dash(r.next_junction_id ?? r.next_junction, jname)}</td>
+                      <td>{dash(r.eta_s, (x) => `${x} s`)}</td>
+                      <td>{dash(stageOf(r))}</td>
+                      <td>{dash(r.incident_id)}</td>
+                      <td>{ago(r.started_at, now)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table></div>
+            )}
+            {s && (
+              <dl className="detail">
+                <dt>Run</dt><dd>{s.id}</dd>
+                <dt>Destination</dt><dd>{dash(s.destination?.name)}</dd>
+                <dt>Hospital ETA</dt><dd>{dash(s.eta_hospital_s, (x) => `${x} s`)}</dd>
+                <dt>Source</dt><dd>{dash(s.source)}</dd>
+                <dt>Last tick</dt><dd>{dash(s.last_tick_at, (x) => clock(x))}</dd>
+                <dt>Patient on board</dt><dd>{s.patient_on_board ? "yes" : "no"}</dd>
+              </dl>
+            )}
+          </section>
+
+          <section className="card">
+            <h2>Junction board</h2>
+            <div className="jboard">
+              {corridor.junctions.map((j) => {
+                const key = `${cid}_${j.id}`;
+                const ph = junctions[key]?.phase;
+                const green = ph && ms(ph.until) > now;
+                const mine = alerts.filter((a) => a.junction_id === key || a.junction_id === j.id);
+                const a = mine[0];
+                const hot = mine.some(late);
+                const d = duty[key];
+                return (
+                  <div key={j.id} className={`jcard${hot ? " hot" : ""}`}>
+                    <div className="jh"><b>{j.id.toUpperCase()} {j.name}</b>{hot && <Badge cls="esc-b">ESCALATED</Badge>}</div>
+                    <div className={green ? "ph on" : "ph"}>
+                      {green ? `GREEN for ${ph.approach} until ${clock(ph.until)}` : "Normal cycle"}
+                    </div>
+                    <div className="muted">{d ? `Cop: ${d.name ?? d.cop ?? d.cop_name ?? "on duty"}` : "no cop registered"}</div>
+                    {a ? (
+                      <div className="ja">
+                        <Badge cls={`s-${a.stage}`}>{dash(a.stage)}</Badge>{" "}
+                        {a.acked_at
+                          ? <>ACKed · {((ms(a.acked_at) - ms(a.created_at)) / 1000).toFixed(1)} s</>
+                          : <span className={late(a) ? "bad" : ""}>unacked {age(a)} s</span>}
+                      </div>
+                    ) : <div className="muted">no alerts</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="card">
+            <h2>Report cards</h2>
+            {reports.length === 0 ? <p className="muted">No completed runs yet.</p> : reports.map((r) => (
+              <div key={r.id} className="rep">
+                <b>{r.id}</b>
+                <span>{dash(r.minutes_saved, (m) => `${m} min saved`)}</span>
+                <span className="muted">{dash(r.baseline_s)} s baseline → {dash(r.actual_s)} s actual · {dash(r.junctions_cleared)} junctions
+                  {r.ack_latency_s?.length ? ` · ACK ${r.ack_latency_s.join(", ")} s` : ""}</span>
+              </div>
+            ))}
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
