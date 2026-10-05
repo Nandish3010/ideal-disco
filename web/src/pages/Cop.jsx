@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { collection, collectionGroup, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { db } from "../firebase.js";
 import { api } from "../api.js";
@@ -40,12 +40,16 @@ function unlock() {
 let lock;
 async function wake() { try { lock = await navigator.wakeLock.request("screen"); } catch { /* unsupported or denied */ } }
 
+// Silence everything: the shared element and any queued speech.
+function stopSound() { try { speechSynthesis.cancel(); } catch { /* ignore */ } try { audio.pause(); } catch { /* ignore */ } }
+
+// One sound at a time. audio_url wins; speech is used only when there is no audio_url.
 function speak(a, onBlocked) {
-  const tts = () => { try { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(a.text)); } catch { /* ignore */ } };
-  if (!a.audio_url) return tts();
+  stopSound();
+  if (!a.audio_url) { try { speechSynthesis.speak(new SpeechSynthesisUtterance(a.text)); } catch { /* ignore */ } return; }
   // gs:// is not fetchable by a browser; the media bucket is served over https
   audio.src = a.audio_url.replace(/^gs:\/\//, "https://storage.googleapis.com/");
-  audio.play().catch((e) => (e.name === "NotAllowedError" ? onBlocked() : tts()));
+  audio.play().catch((e) => e.name === "NotAllowedError" && onBlocked());
 }
 
 // ---- alerts for one junction. collectionGroup(alerts) on (junction_id, created_at desc), which has an index.
@@ -83,6 +87,8 @@ const duty_ = (corridor, junction_id, on) =>
 const ARROW = { left: "←", straight: "↑", right: "→" };
 const left = (s) => (s >= 60 ? `in ${Math.ceil(s / 60)} min` : s > 0 ? `in ${Math.ceil(s)} s` : "now");
 const STALE_MS = 10 * 60 * 1000; // an unacked alert older than this is history, not a live call
+const SOUND_MS = 2 * 60 * 1000; // audio only for alerts younger than this
+const PLAYS = 3, GAP_MS = 20000; // at most 3 plays per alert, 20 s apart
 
 function Current({ a, t0, now, onAck }) {
   const run = useDoc(`runs/${a.run_id}`).data;
@@ -112,12 +118,16 @@ function Duty({ corridor, junction, onOff }) {
   const [local, setLocal] = useState({});
   const [blocked, setBlocked] = useState(false);
   const [seen] = useState({}); // first-seen time for alerts whose created_at has not resolved yet
+  const [onDutyAt] = useState(Date.now); // alerts created before this are shown but never spoken
+  const [muted, setMuted] = useState(() => store.get("cop_muted") === "1");
+  const [visible, setVisible] = useState(document.visibilityState === "visible");
+  const quiet = useRef({}); // alerts silenced by mute/hide: they do not resume when sound returns
 
   useEffect(() => {
     wake();
-    const vis = () => document.visibilityState === "visible" && wake();
+    const vis = () => { setVisible(document.visibilityState === "visible"); document.visibilityState === "visible" && wake(); };
     document.addEventListener("visibilitychange", vis);
-    return () => { document.removeEventListener("visibilitychange", vis); lock?.release().catch(() => {}); };
+    return () => { document.removeEventListener("visibilitychange", vis); lock?.release().catch(() => {}); stopSound(); };
   }, []);
 
   const t0 = (a) => ms(a.created_at) ?? (seen[a.key] ??= Date.now());
@@ -125,13 +135,27 @@ function Duty({ corridor, junction, onOff }) {
   const acked = (a) => a.acked_at || local[a.key];
   const cur = sorted.find((a) => !acked(a) && now - t0(a) < STALE_MS);
 
+  // Audio policy: only the newest alert, if unacked, created after going on duty and under 2 min old.
+  // created_at missing means old. Any change of playKey (ack, stale, newer alert, mute, hidden) stops the sound.
+  const top = sorted[0];
+  const created = top && ms(top.created_at);
+  const fresh = top && !acked(top) && created != null && created > onDutyAt && now - created < SOUND_MS;
+  const playKey = fresh && !muted && visible && !quiet.current[top.key] ? top.key : null;
+
+  useEffect(() => { // mute or hide silences the current alert for good; only a new alert plays again
+    if ((muted || !visible) && fresh) quiet.current[top.key] = true;
+  }, [muted, visible]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
-    if (!cur) return;
-    const say = () => speak(cur, () => setBlocked(true));
+    if (!playKey) return;
+    let n = 0;
+    const say = () => { speak(top, () => setBlocked(true)); if (++n >= PLAYS) clearInterval(id); };
+    const id = setInterval(say, GAP_MS);
     say();
-    const id = setInterval(say, 20000); // repeat until acked
-    return () => { clearInterval(id); try { speechSynthesis.cancel(); audio.pause(); } catch { /* ignore */ } };
-  }, [cur?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { clearInterval(id); stopSound(); };
+  }, [playKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleMute = () => { const m = !muted; setMuted(m); store.set("cop_muted", m ? "1" : "0"); if (m) stopSound(); };
 
   async function ack(a) {
     setLocal((l) => ({ ...l, [a.key]: { s: "sent" } })); // optimistic: the cop sees it done at once
@@ -147,6 +171,8 @@ function Duty({ corridor, junction, onOff }) {
 
   return (
     <>
+      <button className="mute" onClick={toggleMute} aria-pressed={muted}>{muted ? "🔇 Sound off" : "🔊 Sound on"}</button>
+      {muted && cur && <p className="banner pulse">SOUND OFF · ALERT ON SCREEN</p>}
       {blocked && <button className="primary" onClick={() => { unlock(); setBlocked(false); }}>Sound is blocked. Tap to enable.</button>}
       {cur ? <Current a={cur} t0={t0(cur)} now={now} onAck={ack} /> : (
         <section className="card idle">
@@ -160,7 +186,8 @@ function Duty({ corridor, junction, onOff }) {
       <ul className="list">
         {sorted.slice(0, 10).map((a) => (
           <li key={a.key}><span className={`pill stage-${a.stage}`}>{a.stage}</span> {a.approach} {a.exit_move && ARROW[a.exit_move]}
-            <b style={{ float: "right" }}>{state(a)}</b><div className="muted">{when(a.created_at)} · {a.run_id}</div></li>
+            <b style={{ float: "right" }}>{state(a)}</b><div className="muted">{when(a.created_at)} · {a.run_id}
+              <button className="replay" onClick={() => speak(a, () => setBlocked(true))}>▶ Replay</button></div></li>
         ))}
       </ul>
       {since && since.on !== false && <p className="muted">On duty since {when(since.since ?? since.updated_at ?? since.created_at)}</p>}
