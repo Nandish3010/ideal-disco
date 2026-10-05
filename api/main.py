@@ -1,11 +1,12 @@
 import base64
+import hmac
 import os
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, Request
+from fastapi import BackgroundTasks, FastAPI, Header, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -463,6 +464,45 @@ COMPASS = {
 }
 
 
+def alert_to_fire(stage, s, jam_m):
+    """Alerts: PREPARE once, UPDATE if the queue grew > 100 m, STOP once. s: the junction's alert_state so far."""
+    s = s or {}
+    if stage == "STOP" and not s.get("stop"):
+        return "STOP"
+    if stage == "PREPARE" and not s.get("prepare") and jam_m >= PREPARE_MIN_JAM_M:
+        return "PREPARE"
+    if stage == "PREPARE" and not s.get("stop") and jam_m > s.get("jam_m", 0) + 100:
+        return "UPDATE"
+    return None
+
+
+def claim_alert(run_ref, jid, stage, fire, jam_m):
+    """The next alert number for (run, junction, stage), or None when it already fired. The check and the write to
+    runs/{id}.alert_state / alert_count are one transaction, so two concurrent ticks never both fire one alert."""
+
+    @transactional
+    def claim(tx):
+        cur = run_ref.get(transaction=tx).to_dict() or {}
+        s = (cur.get("alert_state") or {}).get(jid) or {}
+        if alert_to_fire(stage, s, jam_m) != fire:
+            return None
+        n = cur.get("alert_count", 0)
+        tx.update(
+            run_ref,
+            {
+                f"alert_state.{jid}": {
+                    "prepare": True,
+                    "stop": bool(s.get("stop")) or fire == "STOP",
+                    "jam_m": jam_m,
+                },
+                "alert_count": n + 1,
+            },
+        )
+        return n
+
+    return claim(db.transaction())
+
+
 def alert_text(run, stage, jam_m, approach, exit_move, eta_s):
     vt = run["vehicle_type"]
     tier = run.get("confirmed_tier") or run.get("acuity_tier") or ("unconfirmed" if vt == "ambulance" else "")
@@ -523,9 +563,13 @@ def rationale(jid, seq, lang):
     out: dict[str, Any] = {"phase.rationale": DELETE_FIELD, "phase.rationale_local": DELETE_FIELD}
     if len(seq) >= 2 and not offline():
         try:
-            en = gemini.explain_sequence(
-                [{k: c[k] for k in ("vehicle_type", "tier", "approach", "offset_s")} for c in seq], "en"
-            )
+            facts = priority.rationale_facts(seq)
+            en = gemini.explain_sequence(facts, "en")
+            if not priority.valid_rationale(
+                en, facts
+            ):  # a made-up reason or number: the deterministic sentence instead
+                log(event="rationale_template", junction_id=jid, rejected=en[:200])
+                en = priority.template_rationale(facts)
             out["phase.rationale"] = en
             out["phase.rationale_local"] = translate(en, lang)
         except (genai_errors.APIError, GoogleAPIError) as e:
@@ -571,8 +615,10 @@ def preempt(run_id, run, jid, approach, eta_s, clear_s, stage, lang, bg):
     return sequence
 
 
-def mark_stale(now, skip):
-    """Piggyback on any tick: runs with no tick for 30 s go stale. ponytail: newest 20 below the cutoff, no scheduler."""
+def mark_stale(now, skip) -> int:
+    """Runs with no tick for 30 s go stale; returns how many. Runs on every tick and from /housekeeping. ponytail: newest 20
+    below the cutoff."""
+    stale = 0
     q = (
         db.collection("runs")
         .where(filter=FieldFilter("last_tick_at", "<", now - timedelta(seconds=STALE_S)))
@@ -583,6 +629,8 @@ def mark_stale(now, skip):
         if d.id != skip and d.to_dict().get("state") == "en_route":
             d.reference.update({"state": "stale", "ahead_ids": []})
             log(event="run_stale", run_id=d.id)
+            stale += 1
+    return stale
 
 
 ESCALATE_S = 20
@@ -592,15 +640,15 @@ ROUTE_TTL_S = (
 PASS_SLACK_M = 15  # projected this far beyond a junction's route offset counts as passed (GPS slack)
 
 
-def escalate(now, mine, others):
-    """Piggyback on any tick: alerts older than 20 s with no ACK are flagged and audited. Cheap: only this run's alerts
-    plus the runs it shared a preemption sequence with (and only those still en_route). ponytail: no scheduler, so a
-    quiet system escalates on the next tick."""
+def escalate(now, mine, others) -> int:
+    """Alerts older than 20 s with no ACK are flagged and audited; returns how many. A tick checks this run's alerts plus
+    the runs it shared a preemption sequence with (those still en_route)."""
     ids = list(mine)
     for rid in others:
         r = db.collection("runs").document(rid).get()
         if r.exists and r.to_dict().get("state") == "en_route":
             ids.append(rid)
+    flagged = 0
     for rid in ids:
         q = (
             db.collection("runs")
@@ -625,6 +673,30 @@ def escalate(now, mine, others):
                 }
             )
             log(event="escalation", run_id=rid, junction_id=a["junction_id"], alert_n=int(d.id))
+            flagged += 1
+    return flagged
+
+
+@app.post("/housekeeping")
+def housekeeping(x_housekeeping_token: str = Header("")):
+    """Cloud Scheduler, once a minute: the stale and escalation sweeps without waiting for a tick. 404 while
+    HOUSEKEEPING_TOKEN is unset, 403 on a wrong token."""
+    token = os.environ.get("HOUSEKEEPING_TOKEN")
+    if not token:
+        return err(404, "not_found")
+    if not hmac.compare_digest(x_housekeeping_token.encode(), token.encode()):
+        return err(403, "forbidden")
+    now = datetime.now(UTC)
+    stale = mark_stale(now, None)
+    # ponytail: first 200 live runs; stale ones included, their alerts still wait for an ACK
+    live = [
+        d.id
+        for d in db.collection("runs")
+        .where(filter=FieldFilter("state", "in", sorted(LIVE)))
+        .limit(200)
+        .stream()
+    ]
+    return {"stale": stale, "escalated": escalate(now, live, []), "runs_checked": len(live)}
 
 
 @app.post("/location")
@@ -740,8 +812,7 @@ def location(loc: Loc, bg: BackgroundTasks):
         if state == "en_route"
         else []
     )
-    alerts = dict(run.get("alert_state") or {})
-    n = run.get("alert_count", 0)
+    alerts = run.get("alert_state") or {}
     upd["ahead"], upd["ahead_ids"] = {}, []
     contenders = set(
         run.get("contenders") or []
@@ -783,16 +854,11 @@ def location(loc: Loc, bg: BackgroundTasks):
         upd["ahead"][jid] = {"eta_s": eta_s, "approach": ap["id"]}
         upd["ahead_ids"].append(jid)
 
-        # alerts: PREPARE once, UPDATE if the queue grew > 100 m, STOP once
-        s = dict(alerts.get(jid) or {})
-        fire = None
-        if stage == "STOP" and not s.get("stop"):
-            fire = "STOP"
-        elif stage == "PREPARE" and not s.get("prepare") and jam_m >= PREPARE_MIN_JAM_M:
-            fire = "PREPARE"
-        elif stage == "PREPARE" and not s.get("stop") and jam_m > s.get("jam_m", 0) + 100:
-            fire = "UPDATE"
-        if fire:
+        fire = alert_to_fire(stage, alerts.get(jid), jam_m)
+        n = (
+            claim_alert(ref, jid, stage, fire, jam_m) if fire else None
+        )  # None: a concurrent tick already fired it
+        if n is not None:
             text = alert_text(run, fire, jam_m, ap["id"], move, eta_s)
             alert_ref = ref.collection("alerts").document(str(n))
             alert_ref.set(
@@ -819,10 +885,6 @@ def location(loc: Loc, bg: BackgroundTasks):
                 corridor["lang"],
                 f"alerts/{loc.run_id}/{jid}/{fire}-{n}.mp3",
             )
-            n += 1
-            s.update({"prepare": True, "stop": s.get("stop") or fire == "STOP", "jam_m": jam_m})
-            alerts[jid] = s
-            upd.update({"alert_state": alerts, "alert_count": n})
             out["alerts_fired"].append({"junction": jid, "stage": fire})
             log(
                 event="alert",

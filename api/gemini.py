@@ -146,11 +146,17 @@ def extract(
     )[0]
 
 
-def explain_sequence(seq: list, lang: str) -> str:
+def explain_sequence(facts: list, lang: str) -> str:
+    """facts: priority.rationale_facts. The model only narrates the reason codes, never the raw offsets."""
     client = _client()  # keep a reference: a temporary Client closes its HTTP session on garbage collection
     prompt = (
-        f"Vehicle order at a junction (decided by rules): {json.dumps(seq)}. "
-        f"In one short plain-text sentence in language code '{lang}', say who goes first and why."
+        f"Vehicles in the order a junction will serve them, decided by rules: {json.dumps(facts)}. "
+        "offset_s is a gap the rules assigned, not an arrival order. Each reason_code says why that vehicle sits where it does "
+        "against its neighbour: higher_tier = its priority tier beats the other's (tier beats ETA); earlier_eta_same_tier = equal "
+        "tiers, the earlier ETA goes first; platoon_shared_approach = same approach, they share one green. Explain the ORDER using "
+        "only these reason codes. Never claim that arrival order or timing caused the priority. Name the first vehicle's type. "
+        "Use no numbers other than those given. "
+        f"Answer in one short plain-text sentence in language code '{lang}'."
     )
     models = text_models()
     for model in models:

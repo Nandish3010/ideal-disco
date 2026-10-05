@@ -1,5 +1,7 @@
 """Deterministic junction sequencing. Rules decide; Gemini only explains."""
 
+import re
+
 # ponytail: config, lowest rank passes first. Tune from report cards.
 TIER_RANK = {
     "fire_with_trapped": 0,
@@ -48,6 +50,77 @@ def spread_s(seq: list[dict]) -> float:
     return max(last) - min(last)
 
 
+def rationale_facts(seq: list[dict]) -> list[dict]:
+    """The rule-ordered `sequence` as meaning-attached facts for the explanation. reason_code says why a slot sits where it
+    does against its neighbour (slot 0: why it beats the next vehicle; later slots: why they follow the one before):
+    platoon_shared_approach (same green slot), higher_tier (the tiers differ), else earlier_eta_same_tier."""
+    facts = []
+    for i, c in enumerate(seq):
+        o = seq[i - 1] if i else seq[i + 1] if len(seq) > 1 else c
+        if o is c:
+            code = "earlier_eta_same_tier"
+        elif o["offset_s"] == c["offset_s"]:
+            code = "platoon_shared_approach"
+        elif TIER_RANK.get(key(o), len(TIER_RANK)) != TIER_RANK.get(key(c), len(TIER_RANK)):
+            code = "higher_tier"
+        else:
+            code = "earlier_eta_same_tier"
+        facts.append(
+            {
+                "vehicle_type": c["vehicle_type"],
+                "tier": c["tier"],
+                "approach": c.get("approach"),
+                "eta_s": round(c["eta_s"]),
+                "offset_s": c["offset_s"],
+                "reason_code": code,
+                "offset_s_is_gap_assigned_by_rules": True,
+            }
+        )
+    return facts
+
+
+ARRIVAL_WORDS = re.compile(r"arriv|reach|earlier|sooner|first to get|ahead of time", re.I)
+
+
+def valid_rationale(text: str, facts: list[dict]) -> bool:
+    """A model explanation is kept only if it names the first vehicle's type, uses no number absent from the facts, and
+    does not give arrival timing as a reason unless a slot's reason is earlier_eta_same_tier (the offsets are gaps the
+    rules assigned, so 'arrives 12 s earlier' is wrong even though 12 is a given number)."""
+    given = {str(f[k]) for f in facts for k in ("eta_s", "offset_s")}
+    eta_reason = any(f["reason_code"] == "earlier_eta_same_tier" for f in facts)
+    return bool(
+        text.strip()
+        and facts[0]["vehicle_type"].lower() in text.lower()
+        and all(n in given for n in re.findall(r"\d+", text))
+        and (eta_reason or not ARRIVAL_WORDS.search(text))
+    )
+
+
+NAMES = {"ambulance": "Ambulance", "fire": "Fire engine", "police": "Police vehicle"}
+REASONS = {
+    "higher_tier": "higher priority tier",
+    "earlier_eta_same_tier": "same tier, earlier arrival",
+    "platoon_shared_approach": "same approach, shared green",
+}
+
+
+def template_rationale(facts: list[dict]) -> str:
+    """Deterministic fallback sentence: first vehicle and why, then each later vehicle's gap (or shared green)."""
+
+    def name(f: dict) -> str:
+        return NAMES[f["vehicle_type"]] + (
+            " with trapped persons" if f["tier"] == "fire_with_trapped" else ""
+        )
+
+    out = [f"{name(facts[0])} goes first: {REASONS[facts[0]['reason_code']]}."]
+    for f, prev in zip(facts[1:], facts, strict=False):
+        shared = f["offset_s"] == prev["offset_s"]
+        out.append(
+            f"{name(f)} shares the green." if shared else f"{name(f)} follows {f['offset_s']} s later."
+        )
+    return " ".join(out)
+
+
 if __name__ == "__main__":
     fire = {"run_id": "f", "vehicle_type": "fire", "tier": "fire_with_trapped", "eta_s": 90}
     amb = {"run_id": "a", "vehicle_type": "ambulance", "tier": "critical", "eta_s": 30}
@@ -71,4 +144,8 @@ if __name__ == "__main__":
         0,
         12,
     ]  # no approach known: never grouped
+    facts = rationale_facts(sequence([amb, fire]))
+    assert template_rationale(facts) == (
+        "Fire engine with trapped persons goes first: higher priority tier. Ambulance follows 12 s later."
+    )
     print("priority ok")

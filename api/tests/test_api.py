@@ -8,6 +8,7 @@ from google.api_core.exceptions import ServiceUnavailable
 from httpx import Response
 
 import main
+import priority
 from fakefs import FakeFirestore
 
 AMB = "KA01AB1234"
@@ -446,3 +447,114 @@ def test_duty_errors(client: TestClient) -> None:
     assert_envelope(
         client.post("/duty", json={**base, "corridor": "blr", "junction_id": "j99"}), 404, "unknown_junction"
     )
+
+
+# ---- grounded rationale, housekeeping, alert guard ------------------------------------------------------------------
+
+
+def run_with_alert(
+    db: FakeFirestore, rid: str, tick_age_s: int, alert_age_s: int, acked: bool = False
+) -> None:
+    now = datetime.now(UTC)
+    db.collection("runs").document(rid).set(
+        {"state": "en_route", "last_tick_at": now - timedelta(seconds=tick_age_s), "ahead_ids": ["blr_j3"]}
+    )
+    db.collection("runs").document(rid).collection("alerts").document("0").set(
+        {
+            "junction_id": "blr_j3",
+            "stage": "PREPARE",
+            "acked_at": now if acked else None,
+            "escalated": False,
+            "created_at": now - timedelta(seconds=alert_age_s),
+        }
+    )
+
+
+def test_rationale_keeps_a_grounded_sentence_and_replaces_an_invented_one(
+    seeded: FakeFirestore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seq = priority.sequence(
+        [
+            {
+                "run_id": "f",
+                "vehicle_type": "fire",
+                "tier": "fire_with_trapped",
+                "eta_s": 90,
+                "approach": "S",
+            },
+            {"run_id": "a", "vehicle_type": "ambulance", "tier": "critical", "eta_s": 30, "approach": "E"},
+        ]
+    )
+    monkeypatch.setattr(main, "offline", lambda: False)
+    monkeypatch.setattr(main, "translate", lambda text, lang: f"[{lang}] {text}")
+    seen: list = []
+    reply = {"text": "The fire engine goes first because its tier is higher."}
+
+    def explain(facts: list, lang: str) -> str:
+        seen.append(facts)
+        return reply["text"]
+
+    monkeypatch.setattr(main.gemini, "explain_sequence", explain)
+    junction = seeded.collection("junctions").document("blr_j3")
+    junction.update({"phase": {"approach": "S"}})
+    main.rationale("blr_j3", seq, "kn")
+    assert junction.get().to_dict()["phase"]["rationale"] == reply["text"]
+    assert (
+        seen[0][0]["reason_code"] == "higher_tier" and seen[0][0]["offset_s_is_gap_assigned_by_rules"] is True
+    )
+    reply["text"] = "The fire engine goes first because it arrives 12 seconds earlier."  # a false reason
+    main.rationale("blr_j3", seq, "kn")
+    phase = junction.get().to_dict()["phase"]
+    assert phase["rationale"] == (
+        "Fire engine with trapped persons goes first: higher priority tier. Ambulance follows 12 s later."
+    )
+    assert phase["rationale_local"] == "[kn] " + phase["rationale"]
+
+
+def test_housekeeping_is_off_without_a_token_and_checks_it_otherwise(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("HOUSEKEEPING_TOKEN", raising=False)
+    assert_envelope(client.post("/housekeeping", headers={"X-Housekeeping-Token": "x"}), 404, "not_found")
+    monkeypatch.setenv("HOUSEKEEPING_TOKEN", "s3cret")
+    assert_envelope(client.post("/housekeeping"), 403, "forbidden")
+    assert_envelope(client.post("/housekeeping", headers={"X-Housekeeping-Token": "nope"}), 403, "forbidden")
+    ok = client.post("/housekeeping", headers={"X-Housekeeping-Token": "s3cret"})
+    assert ok.status_code == 200 and ok.json() == {"stale": 0, "escalated": 0, "runs_checked": 0}
+
+
+def test_housekeeping_marks_stale_and_escalates_without_a_tick(
+    client: TestClient, db: FakeFirestore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOUSEKEEPING_TOKEN", "s3cret")
+    run_with_alert(db, "quiet", tick_age_s=60, alert_age_s=40)  # no tick for a minute, alert unanswered
+    run_with_alert(db, "fresh", tick_age_s=2, alert_age_s=5)  # ticking, alert young
+    run_with_alert(db, "acked", tick_age_s=2, alert_age_s=40, acked=True)
+    out = client.post("/housekeeping", headers={"X-Housekeeping-Token": "s3cret"}).json()
+    assert out == {"stale": 1, "escalated": 1, "runs_checked": 3}
+    assert run_doc(db, "quiet")["state"] == "stale" and run_doc(db, "fresh")["state"] == "en_route"
+    alert = db.collection("runs").document("quiet").collection("alerts").document("0").get().to_dict()
+    assert alert["escalated"] is True
+    assert [d.to_dict()["run_id"] for d in db.collection("audit").stream()] == ["quiet"]
+    again = client.post("/housekeeping", headers={"X-Housekeeping-Token": "s3cret"}).json()
+    assert again["stale"] == 0 and again["escalated"] == 0  # each fires once only
+
+
+def test_claim_alert_fires_each_stage_once(db: FakeFirestore) -> None:
+    ref = db.collection("runs").document("r1")
+    ref.set({"state": "en_route"})
+    assert main.claim_alert(ref, "blr_j3", "PREPARE", "PREPARE", 120) == 0
+    assert (
+        main.claim_alert(ref, "blr_j3", "PREPARE", "PREPARE", 120) is None
+    )  # a second tick with the same stale view
+    assert main.claim_alert(ref, "blr_j3", "PREPARE", "UPDATE", 150) is None  # grew only 30 m
+    assert main.claim_alert(ref, "blr_j3", "PREPARE", "UPDATE", 300) == 1
+    assert main.claim_alert(ref, "blr_j3", "STOP", "STOP", 300) == 2
+    assert main.claim_alert(ref, "blr_j3", "STOP", "STOP", 300) is None
+    assert main.claim_alert(ref, "blr_j4", "STOP", "STOP", 0) == 3  # another junction has its own state
+    doc = run_doc(db, "r1")
+    assert doc["alert_count"] == 4 and doc["alert_state"]["blr_j3"] == {
+        "prepare": True,
+        "stop": True,
+        "jam_m": 300,
+    }
