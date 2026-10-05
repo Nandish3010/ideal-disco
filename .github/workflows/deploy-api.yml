@@ -2,7 +2,7 @@ name: deploy-api
 on:
   push:
     branches: [main]
-    paths: ["api/**"]
+    paths: ["api/**", "data/**"]
 permissions:
   id-token: write
   contents: read
@@ -16,6 +16,8 @@ jobs:
           workload_identity_provider: projects/919512130399/locations/global/workloadIdentityPools/github/providers/gh-oidc
           service_account: corridor-ci@green-corridor-2026.iam.gserviceaccount.com
       - uses: google-github-actions/setup-gcloud@v2
+      - name: Bundle corridor data (the build context is api/)
+        run: mkdir -p api/data && cp -r data/corridors data/scenarios api/data/
       - name: Deploy to Cloud Run
         run: >
           gcloud run deploy corridor-api --source api --region asia-south1
@@ -23,6 +25,7 @@ jobs:
           --allow-unauthenticated
           --service-account corridor-api@green-corridor-2026.iam.gserviceaccount.com
           --set-env-vars GCP_PROJECT=green-corridor-2026,GEMINI_MODEL=gemini-3-flash-preview,GEMINI_FALLBACK_MODEL=gemini-3.1-flash-lite,GEMINI_LOCATION=global
+          --set-secrets MAPS_SERVER_KEY=corridor-maps-server-key:latest
           --memory 1Gi --max-instances 3 --quiet
       - name: Health check
         run: |
