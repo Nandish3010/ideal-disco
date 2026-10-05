@@ -288,7 +288,7 @@ function Live({ scn, setScn }) {
                 </label>
                 {!create && (
                   <label>
-                    Run ID (start one on /vehicle, or use the scenario's)
+                    Run ID (start one on /vehicle, or use the scenario&apos;s)
                     <input
                       value={runId}
                       disabled={running}
@@ -345,7 +345,7 @@ function Live({ scn, setScn }) {
                 onChange={(e) => setCreate(e.target.checked)}
               />
               Create runs: start each run (incident, run, ambulance tier confirm) right before that
-              vehicle's first tick
+              vehicle&apos;s first tick
             </label>
             {sc.vehicles
               .filter((x) => map[x.plate])

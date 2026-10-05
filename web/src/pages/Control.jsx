@@ -61,7 +61,7 @@ function useRunAlerts(runIds) {
       ),
     );
     return () => offs.forEach((f) => f());
-  }, [key, n]);
+  }, [key, n]); // eslint-disable-line react-hooks/exhaustive-deps -- key is runIds.join()
   return {
     rows: runIds.flatMap((id) => per[id] ?? []).sort((a, b) => ms(b.created_at) - ms(a.created_at)),
     loading: !error && runIds.some((id) => !per[id]),

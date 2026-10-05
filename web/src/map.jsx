@@ -168,7 +168,7 @@ function GMap({ onReady, onFail, ...props }) {
     return () => {
       dead = true;
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- load Maps once
 
   // junctions, approach lines, hospital: rebuilt only when their content changes
   useEffect(() => {
@@ -185,7 +185,7 @@ function GMap({ onReady, onFail, ...props }) {
         zIndex,
         icon: { url, scaledSize: new G.Size(size, size), anchor: new G.Point(size / 2, size / 2) },
       });
-    sc.lines.forEach((l, i) =>
+    sc.lines.forEach((l) =>
       over.push(
         new G.Polyline({
           map,
@@ -211,7 +211,7 @@ function GMap({ onReady, onFail, ...props }) {
           30,
         ),
       );
-  }, [ready, sig]);
+  }, [ready, sig]); // eslint-disable-line react-hooks/exhaustive-deps -- sig is the serialised scene
 
   // vehicles: markers keyed by id, moved in place
   useEffect(() => {
@@ -250,7 +250,7 @@ function GMap({ onReady, onFail, ...props }) {
         m.setMap(null);
         veh.delete(id);
       }
-  }, [ready, vsig]);
+  }, [ready, vsig]); // eslint-disable-line react-hooks/exhaustive-deps -- vsig is the serialised vehicles
 
   // fit to the corridor when it changes, not on every update
   useEffect(() => {
@@ -260,7 +260,7 @@ function GMap({ onReady, onFail, ...props }) {
     sc.dots.forEach((d) => b.extend({ lat: d.lat, lng: d.lng }));
     if (sc.hospital) b.extend(sc.hospital);
     if (!b.isEmpty()) g.current.map.fitBounds(b, 40);
-  }, [ready, props.corridor.id]);
+  }, [ready, props.corridor.id]); // eslint-disable-line react-hooks/exhaustive-deps -- refit on corridor change only
 
   return <div ref={el} className="cmap" />;
 }

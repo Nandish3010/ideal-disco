@@ -128,7 +128,7 @@ export function useAlerts(runIds) {
       ),
     );
     return () => offs.forEach((f) => f());
-  }, [cg.failed, key, n]);
+  }, [cg.failed, key, n]); // eslint-disable-line react-hooks/exhaustive-deps -- key is runIds.join()
 
   const retry = () => setN((x) => x + 1);
   return cg.failed

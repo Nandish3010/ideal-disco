@@ -443,9 +443,11 @@ function Triage({ runId, vehicleType, confirmed, setDone }) {
         </button>
       </form>
       {unread ? (
-        <p className="card bad">Couldn't read the screen, type it instead.</p>
+        <p className="card bad">Couldn&apos;t read the screen, type it instead.</p>
       ) : failed ? (
-        <p className="card bad">Couldn't understand, type it. Add more detail in the box above.</p>
+        <p className="card bad">
+          Couldn&apos;t understand, type it. Add more detail in the box above.
+        </p>
       ) : err?.status === 503 ? (
         <p className="card bad">Service busy, try again.</p>
       ) : (

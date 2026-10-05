@@ -8,7 +8,6 @@ import Control from "./pages/Control.jsx";
 import Vehicle from "./pages/Vehicle.jsx";
 
 // ponytail: path switch instead of react-router; the corridor is chosen by ?corridor=blr|hyd
-const stub = () => <p className="muted">placeholder</p>;
 const routes = {
   "/vehicle": ["Vehicle", Vehicle],
   "/cop": ["Cop", Cop],
