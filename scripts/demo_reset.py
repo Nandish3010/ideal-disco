@@ -6,7 +6,7 @@ Keeps vehicles, junctions and incidents docs, and the runs themselves (so ended 
 
 import os
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from google.cloud import firestore
 
@@ -30,7 +30,7 @@ plan(
 plan("alerts deleted", [a.reference for r in runs for a in r.reference.collection("alerts").stream()])
 for col in ("audit", "reports", "briefs", "duty"):
     plan(f"{col} deleted", [d.reference for d in db.collection(col).stream()])
-old = datetime.now(timezone.utc) - timedelta(hours=1)
+old = datetime.now(UTC) - timedelta(hours=1)
 plan(
     "old closed incidents deleted",
     [
