@@ -50,6 +50,10 @@ Pick a corridor with `?corridor=blr` or `?corridor=hyd`.
 `POST /vehicles/bind` · `POST /incidents` · `POST /runs` (start/end) · `POST /triage` · `POST /log` ·
 `POST /brief` · `POST /route` · `POST /location` · `POST /ack` · `POST /duty` · `GET /health`. Contracts are in [SCHEMA.md](SCHEMA.md).
 
+## Traffic data and forecast
+
+A scheduled Cloud Run Job logs Routes traffic spans per junction approach into BigQuery `corridor.traffic_spans`. [jobs/bqml](jobs/bqml) turns them into a feature view and a BigQuery ML boosted-tree model, `corridor.jam_forecast`, that predicts the next reading's jam length. It is a proof of the pipeline on one evening of data, not a forecast to deploy; see its README for the numbers and limits.
+
 ## Honest notes
 
 - **Signals are simulated behind `SignalAdapter`.** Cop alerts are deployable today; the signal API is phase 2.
