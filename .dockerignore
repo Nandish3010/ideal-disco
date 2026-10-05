@@ -1,0 +1,13 @@
+.git
+.github
+web
+deck
+scratch
+node_modules
+.venv
+venv
+__pycache__
+*.pyc
+**/tests
+jobs/bqml
+*.md

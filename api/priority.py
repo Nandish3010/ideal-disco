@@ -1,8 +1,14 @@
 """Deterministic junction sequencing. Rules decide; Gemini only explains."""
 
 # ponytail: config, lowest rank passes first. Tune from report cards.
-TIER_RANK = {"fire_with_trapped": 0, "ambulance_critical": 1, "fire": 2,
-             "ambulance_urgent": 3, "police_with_incident": 4, "ambulance_stable": 5}
+TIER_RANK = {
+    "fire_with_trapped": 0,
+    "ambulance_critical": 1,
+    "fire": 2,
+    "ambulance_urgent": 3,
+    "police_with_incident": 4,
+    "ambulance_stable": 5,
+}
 GAP_S = 12  # ponytail: fixed gap between vehicles, derive from queue length later
 PLATOON_S = 45  # vehicles on the same approach arriving this close together share one green slot
 
@@ -16,10 +22,19 @@ def sequence(contenders: list[dict]) -> list[dict]:
     """contenders: [{run_id, vehicle_type, tier, eta_s, approach}] -> same dicts sorted, each with offset_s. A vehicle on the
     same approach as a slot's leader, within PLATOON_S of the leader's eta, takes the leader's offset (no extra gap)."""
     ordered = sorted(contenders, key=lambda c: (TIER_RANK.get(key(c), len(TIER_RANK)), c["eta_s"]))
-    slots, out = [], []  # slots: (leader, offset_s)
+    slots: list[tuple[dict, int]] = []  # (leader, offset_s)
+    out: list[dict] = []
     for c in ordered:
-        slot = next((s for s in slots if c.get("approach") and s[0].get("approach") == c["approach"]
-                     and abs(c["eta_s"] - s[0]["eta_s"]) <= PLATOON_S), None)
+        slot = next(
+            (
+                s
+                for s in slots
+                if c.get("approach")
+                and s[0].get("approach") == c["approach"]
+                and abs(c["eta_s"] - s[0]["eta_s"]) <= PLATOON_S
+            ),
+            None,
+        )
         if slot is None:
             slot = (c, len(slots) * GAP_S)
             slots.append(slot)
@@ -52,5 +67,8 @@ if __name__ == "__main__":
     assert [(c["run_id"], c["offset_s"]) for c in out] == [("f", 0), ("a1", 12), ("a2", 12)]
     assert [c["offset_s"] for c in sequence([{**a1, "approach": "E"}, {**a2, "approach": "NE"}])] == [0, 12]
     assert [c["offset_s"] for c in sequence([a1, {**a2, "eta_s": 63}])] == [0, 12]
-    assert [c["offset_s"] for c in sequence([amb, {**amb, "run_id": "b"}])] == [0, 12]  # no approach known: never grouped
+    assert [c["offset_s"] for c in sequence([amb, {**amb, "run_id": "b"}])] == [
+        0,
+        12,
+    ]  # no approach known: never grouped
     print("priority ok")

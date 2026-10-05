@@ -1,0 +1,35 @@
+# pip install pre-commit && pre-commit install   (web hooks need `cd web && npm ci` once)
+default_install_hook_types: [pre-commit, commit-msg]
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.10
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier (web)
+        entry: npm --prefix web run format:check
+        language: system
+        files: ^web/src/
+        pass_filenames: false
+      - id: eslint
+        name: eslint (web)
+        entry: npm --prefix web run lint
+        language: system
+        files: ^web/src/
+        pass_filenames: false
+      # same pattern as the attribution gate in .github/workflows/checks.yml; the bracket keeps this file from matching itself
+      - id: no-attribution
+        name: no tool attribution in files
+        entry: "(?i)[c]laude|[a]nthropic|co-[a]uthored-by"
+        language: pygrep
+        types: [text]
+        exclude: ^web/package-lock\.json$
+      - id: no-attribution-in-message
+        name: no tool attribution in commit message
+        entry: "(?i)[c]laude|[a]nthropic|co-[a]uthored-by"
+        language: pygrep
+        stages: [commit-msg]

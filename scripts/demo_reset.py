@@ -3,6 +3,7 @@ Needs GOOGLE_APPLICATION_CREDENTIALS. Run from the repo root: python3 scripts/de
 Ends every run not already ended/arrived; deletes runs/*/alerts, audit/*, reports/*, briefs/*, duty/*;
 closes all incidents; clears junctions/*.phase; nulls vehicles/*.bound_device_id.
 Keeps vehicles, junctions and incidents docs, and the runs themselves (so ended runs stay readable)."""
+
 import os
 import sys
 
@@ -20,25 +21,54 @@ def plan(label, refs, change=None):
 
 
 runs = list(db.collection("runs").stream())
-plan("runs ended", [r.reference for r in runs if r.to_dict().get("state") not in ("ended", "arrived")], {"state": "ended"})
+plan(
+    "runs ended",
+    [r.reference for r in runs if r.to_dict().get("state") not in ("ended", "arrived")],
+    {"state": "ended"},
+)
 plan("alerts deleted", [a.reference for r in runs for a in r.reference.collection("alerts").stream()])
 for col in ("audit", "reports", "briefs", "duty"):
     plan(f"{col} deleted", [d.reference for d in db.collection(col).stream()])
-plan("incidents closed", [i.reference for i in db.collection("incidents").stream() if i.to_dict().get("state") != "closed"], {"state": "closed"})
-plan("junction phases cleared", [j.reference for j in db.collection("junctions").stream() if j.to_dict().get("phase") is not None], {"phase": None})
-plan("vehicles unbound", [v.reference for v in db.collection("vehicles").stream() if v.to_dict().get("bound_device_id") is not None], {"bound_device_id": None})
+plan(
+    "incidents closed",
+    [i.reference for i in db.collection("incidents").stream() if i.to_dict().get("state") != "closed"],
+    {"state": "closed"},
+)
+plan(
+    "junction phases cleared",
+    [j.reference for j in db.collection("junctions").stream() if j.to_dict().get("phase") is not None],
+    {"phase": None},
+)
+plan(
+    "vehicles unbound",
+    [
+        v.reference
+        for v in db.collection("vehicles").stream()
+        if v.to_dict().get("bound_device_id") is not None
+    ],
+    {"bound_device_id": None},
+)
 
 counts = {}
 for label, _, _ in ops:
     counts[label] = counts.get(label, 0) + 1
-for label in ("runs ended", "alerts deleted", "audit deleted", "reports deleted", "briefs deleted", "duty deleted",
-              "incidents closed", "junction phases cleared", "vehicles unbound"):
+for label in (
+    "runs ended",
+    "alerts deleted",
+    "audit deleted",
+    "reports deleted",
+    "briefs deleted",
+    "duty deleted",
+    "incidents closed",
+    "junction phases cleared",
+    "vehicles unbound",
+):
     print(f"{label}: {counts.get(label, 0)}")
 
 if APPLY:
     for i in range(0, len(ops), 400):
         batch = db.batch()
-        for _, ref, change in ops[i:i + 400]:
+        for _, ref, change in ops[i : i + 400]:
             batch.delete(ref) if change is None else batch.update(ref, change)
         batch.commit()
     print("applied")

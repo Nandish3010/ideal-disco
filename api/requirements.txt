@@ -1,12 +1,13 @@
-fastapi
-uvicorn
-google-genai
-google-cloud-firestore
-google-cloud-secret-manager
-google-cloud-texttospeech
-google-cloud-translate
-google-cloud-bigquery
-google-cloud-storage
-httpx
-pydantic
-google-adk
+# Direct dependencies pinned exactly (resolved on Python 3.12); transitive packages float within these.
+fastapi==0.142.2
+uvicorn==0.54.0
+google-genai==1.75.0
+google-cloud-firestore==2.34.0
+google-cloud-secret-manager==2.31.0
+google-cloud-texttospeech==2.38.0
+google-cloud-translate==3.28.0
+google-cloud-bigquery==3.46.1
+google-cloud-storage==2.19.0
+httpx==0.28.1
+pydantic==2.13.5
+google-adk==1.14.1

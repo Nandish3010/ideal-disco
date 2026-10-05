@@ -16,3 +16,10 @@ venv/
 *.pyc
 .DS_Store
 web/.firebase/
+
+# python tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/

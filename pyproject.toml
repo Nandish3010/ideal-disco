@@ -1,0 +1,40 @@
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+src = ["api", "api/tests", "jobs"]
+extend-exclude = ["web", "deck"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501"]  # ruff format owns code width; long prompt strings and comments stay readable
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "api"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+explicit_package_bases = true
+exclude = ["^api/data/"]
+
+[[tool.mypy.overrides]]
+module = ["tests.*", "logctx"]
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["api/tests", "jobs/tests"]
+pythonpath = ["api", "api/tests", "jobs"]
+addopts = "-q"
+
+[tool.coverage.run]
+source = ["api"]
+omit = ["api/tests/*", "api/gemini.py", "api/agent.py", "api/tts.py", "api/routes_api.py", "api/firestore_client.py", "api/offline_replay.py"]
+
+[tool.coverage.report]
+fail_under = 80
+exclude_also = ["if __name__ == \"__main__\":"]
+show_missing = true
+skip_covered = true
