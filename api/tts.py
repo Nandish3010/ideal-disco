@@ -189,12 +189,24 @@ def speak(text: str, lang: str, path: str, parts: dict | None = None) -> tuple:
     return _cache[key]
 
 
+def store_photo(data: bytes, mime: str, path: str):
+    """Upload a monitor photo to the media bucket (public read like alerts) -> URL, or None when the upload fails."""
+    try:
+        storage.Client(project=PROJECT).bucket(BUCKET).blob(path).upload_from_string(data, content_type=mime, timeout=TIMEOUT_S)
+    except GoogleAPIError as e:
+        _log(event="photo_upload_error", path=path, status=getattr(e, "code", type(e).__name__), detail=str(e)[:200])
+        return None
+    return f"https://storage.googleapis.com/{BUCKET}/{path}"
+
+
 if __name__ == "__main__":  # offline self-check: stub every client
     from types import SimpleNamespace as NS
     calls = []
     translate_v3.TranslationServiceClient = lambda: NS(translate_text=lambda **k: NS(translations=[NS(translated_text="K:" + k["contents"][0])]))
     texttospeech.TextToSpeechClient = lambda: NS(synthesize_speech=lambda **k: calls.append(k["voice"].name) or NS(audio_content=b"mp3"))
     storage.Client = lambda project: NS(bucket=lambda b: NS(blob=lambda p: NS(upload_from_string=lambda *a, **k: calls.append(p))))
+    assert store_photo(b"x", "image/png", "photos/r/0.jpg") == f"https://storage.googleapis.com/{BUCKET}/photos/r/0.jpg"
+    calls.clear()
     gem = []  # Gemini stub: a canned line, call count, or an exception
     def fake_client(**k):
         def gen(**kw):

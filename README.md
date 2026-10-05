@@ -17,10 +17,10 @@ the actual queue length and which way the vehicle turns, and sequencing several 
 - **Early cop alert.** Two stages (PREPARE, then STOP CROSS TRAFFIC) sized to the queue that is actually there, spoken in the junction's language.
 - **Signal preemption behind `SignalAdapter`.** Today a simulated digital twin of a real corridor; a real controller drops in later.
 - **Multi-vehicle sequencing.** Deterministic acuity tiers decide the order ("fire engine first, ambulance 12 s later"); Gemini only explains it.
-- **Voice triage.** The crew speaks in any Indian language; Gemini extracts fields, a lookup table sets the tier, the crew confirms with one tap.
+- **Voice and photo triage.** The crew speaks in any Indian language, or photographs the monitor; Gemini extracts fields, a lookup table sets the tier, the crew confirms with one tap.
 - **Hospital routing agent.** A Google ADK agent on Vertex AI picks the destination from a mock capability and bed roster plus traffic-aware ETAs, and shows its tool-call trace; it never changes acuity or signal priority.
 - **Hospital handover.** A live transit log and an English ATMIST brief with a prep checklist, ready before arrival.
-- **Control room and replay.** All runs, junction ACK states, escalations, and a with-vs-without replay that counts minutes saved.
+- **Control room and replay.** All runs, junction ACK states, escalations, and a with-vs-without replay that counts minutes saved. Every run ends with a report card (Firestore and BigQuery).
 
 ## Architecture
 
@@ -90,9 +90,9 @@ Traffic logger: Cloud Run Job `corridor-traffic-logger` (`jobs/traffic_logger.py
 
 | Env var | Value |
 |---|---|
-| `GEMINI_MODEL` | `gemini-3-flash-preview` |
-| `GEMINI_FALLBACK_MODEL` | `gemini-3.1-flash-lite` |
-| `GEMINI_AUDIO_MODEL` | `gemini-3.1-flash-lite` (default in code; audio input only) |
+| `GEMINI_MODEL` | `gemini-3.1-flash-lite` (field extraction from text, audio and photos) |
+| `GEMINI_FALLBACK_MODEL` | `gemini-3-flash-preview` (extraction fallback) |
+| `GEMINI_TEXT_MODEL` | `gemini-3-flash-preview` (default in code; hospital brief and sequence rationale, with `GEMINI_MODEL` as fallback) |
 | `GCP_PROJECT` | `green-corridor-2026` |
 | `GEMINI_LOCATION` | `global` |
 | `MAPS_SERVER_KEY` | from Secret Manager `corridor-maps-server-key` |
