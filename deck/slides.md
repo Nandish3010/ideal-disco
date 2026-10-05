@@ -52,7 +52,7 @@ Every Bengaluru commuter has seen this on Hosur Road. The missing piece is not a
 **With corridor:** cop warned early, queue cleared.
 Silk Board → Jayadeva Hospital, the same scripted scenario in both lanes: GPS ticks generated along the real corridor roads, with hand-authored traffic spans (a 500 m queue at junction 3, 100 m at junction 4). The 3 vehicles run as one scenario: a critical ambulance, an ambulance following it as a platoon, and a fire engine.
 
-<div class="stats two"><div class="stat"><b>≈ {MINUTES} min</b><span>saved across 3 vehicles</span></div> <!-- update from replay test --><div class="stat"><b>3</b><span>critical ambulance, platoon ambulance, fire engine</span></div></div>
+<div class="stats two"><div class="stat"><b>≈ 16.5 min</b><span>saved across 3 vehicles</span></div> <!-- update from replay test --><div class="stat"><b>3</b><span>critical ambulance, platoon ambulance, fire engine</span></div></div>
 
 </div>
 <div>
@@ -65,7 +65,7 @@ Silk Board → Jayadeva Hospital, the same scripted scenario in both lanes: GPS 
 <p class="cite">Simulated baseline on a scripted scenario, not a field measurement: per junction passed, cycle/4 + queue/2 m/s. Figure from the scenario replay (<code>blr-two-vehicles</code>). Live runs use live Routes traffic; scenario runs use the scripted spans.</p>
 
 <!--
-The /sim?corridor=blr screen replays the same trace twice. On the left the vehicle stops at each junction for the expected remaining red plus the queue drain, one method everywhere: per junction passed, cycle/4 + queue/2 m/s, the same formula in the replay and the report cards. On the right the corridor is cleared and only sequencing gaps remain. The replay on the current scenario saves about {MINUTES} minutes (update from the replay test), summed across the critical ambulance, the platoon ambulance behind it and the fire engine. That is the number the counter on screen reaches, computed in the browser from the scenario file and asserted by a unit test. The scenario is scripted: GPS ticks generated along the real roads, hand-authored spans. It is a simulated baseline, not a field measurement, and the slide says so. The first 20 seconds of the video show this replay at 50x.
+The /sim?corridor=blr screen replays the same trace twice. On the left the vehicle stops at each junction for the expected remaining red plus the queue drain, one method everywhere: per junction passed, cycle/4 + queue/2 m/s, the same formula in the replay and the report cards. On the right the corridor is cleared and only sequencing gaps remain. The replay on the current scenario saves about 16.5 minutes (update from the replay test), summed across the critical ambulance, the platoon ambulance behind it and the fire engine. That is the number the counter on screen reaches, computed in the browser from the scenario file and asserted by a unit test. The scenario is scripted: GPS ticks generated along the real roads, hand-authored spans. It is a simulated baseline, not a field measurement, and the slide says so. The first 20 seconds of the video show this replay at 50x.
 -->
 
 ---
