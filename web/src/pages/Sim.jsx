@@ -191,7 +191,7 @@ function Live({ scn, setScn }) {
             })}
             {seen.some((x) => progs[x.plate].status !== 200) && <p className="muted">501 is expected until /location is implemented; the feed keeps going.</p>}
             <h2>Runs for this scenario</h2>
-            <p className="muted">/location needs real runs. This issues one incident and one run per vehicle and remembers the ids in this browser.</p>
+            <p className="muted">/location needs real runs. This issues one incident and one run per vehicle (confirming the ambulance tiers) and remembers the ids in this browser.</p>
             <button disabled={running || creating} onClick={createRuns}>{creating ? "Creating…" : "Create runs for this scenario"}</button>
             {createErr && <p className="card bad">Could not create runs — {createErr}</p>}
             {sc.vehicles.filter((x) => map[x.plate]).map((x) => <p key={x.plate} className="muted">{x.plate} → {map[x.plate]}</p>)}
