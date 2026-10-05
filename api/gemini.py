@@ -1,16 +1,19 @@
 """Gemini on Vertex. Extracts fields only; never scores severity. No tools."""
 import json
 import os
-from typing import Optional
+from typing import Literal, Optional
 
+import httpx
 from google import genai
 from google.genai import errors, types
 from pydantic import BaseModel, ValidationError
 
-TIMEOUT_MS = 8000
+TIMEOUT_MS, LONG_TIMEOUT_MS = 8000, 15000  # audio and the brief are slower to process, so they get a longer attempt
 SYSTEM = ("You transcribe emergency crew reports into fields. Extract only what was said; never infer "
           "severity or fill in values that were not stated (use null). Translate the transcript to English. "
           "Reply as JSON matching the schema.")
+LOG_SYSTEM = (" List each drug, procedure or observation the crew says was done or given in interventions, with dose, "
+              "route and time exactly as spoken; leave a part null if it was not said. Never infer an intervention.")
 
 
 class ExtractionFailed(Exception):
@@ -26,7 +29,17 @@ class Vitals(BaseModel):
     temp: Optional[float] = None
 
 
+class Intervention(BaseModel):
+    kind: Literal["drug", "procedure", "observation"]
+    name: str
+    dose: Optional[str] = None
+    route: Optional[str] = None
+    time_note: Optional[str] = None
+
+
 class Extraction(BaseModel):
+    age: Optional[int] = None
+    sex: Optional[str] = None
     complaint: Optional[str] = None
     conscious: Optional[bool] = None
     breathing: Optional[bool] = None
@@ -36,37 +49,50 @@ class Extraction(BaseModel):
     transcript_en: str
 
 
+class LogExtraction(Extraction):
+    interventions: list[Intervention] = []
+
+
 def log(**kw):
     print(json.dumps(kw), flush=True)
 
 
-def _client():
+def _client(timeout_ms=TIMEOUT_MS):
     return genai.Client(vertexai=True, project=os.environ.get("GCP_PROJECT", "green-corridor-2026"),
                         location=os.environ.get("GEMINI_LOCATION", "global"),
-                        http_options=types.HttpOptions(timeout=TIMEOUT_MS))
+                        http_options=types.HttpOptions(timeout=timeout_ms))
 
 
-def extract(audio_bytes, mime, text, vehicle_type, lang_hint, run_id=None) -> dict:
+def generate_json(models, contents, cfg, schema, run_id=None, timeout_ms=TIMEOUT_MS, what="extract"):
+    """Try each model in order; returns (reply, model) for the first reply that validates against `schema`. ponytail: no backoff."""
+    client = _client(timeout_ms)
+    for model in models:
+        try:
+            resp = client.models.generate_content(model=model, contents=contents, config=cfg)
+            out = schema.model_validate_json(resp.text or "").model_dump()
+            log(event=f"{what}_ok", run_id=run_id, model=model)
+            return out, model
+        except (ValidationError, errors.APIError, httpx.TimeoutException) as e:  # bad JSON/schema, refusal, timeout, quota
+            log(event=f"{what}_retry", run_id=run_id, model=model, error=type(e).__name__, detail=str(e)[:200])
+    raise ExtractionFailed(run_id)
+
+
+def extract(audio_bytes, mime, text, vehicle_type, lang_hint, run_id=None, interventions=False) -> dict:
     parts = []
     if audio_bytes:
         parts.append(types.Part.from_bytes(data=audio_bytes, mime_type=mime or "audio/webm"))
     if text:
         parts.append(text)
     ctx = f" Reporting vehicle: {vehicle_type}." + (f" Likely language: {lang_hint}." if lang_hint else "")
-    cfg = types.GenerateContentConfig(system_instruction=SYSTEM + ctx, response_mime_type="application/json",
-                                      response_schema=Extraction)
-    # ponytail: primary twice, then fallback once; no backoff
-    attempts = [os.environ["GEMINI_MODEL"]] * 2 + [os.environ["GEMINI_FALLBACK_MODEL"]]
-    client = _client()
-    for model in attempts:
-        try:
-            resp = client.models.generate_content(model=model, contents=parts, config=cfg)
-            out = Extraction.model_validate_json(resp.text or "").model_dump()
-            log(event="extract_ok", run_id=run_id, model=model)
-            return out
-        except (ValidationError, errors.APIError) as e:  # bad JSON/schema, refusal, timeout, quota
-            log(event="extract_retry", run_id=run_id, model=model, error=type(e).__name__, detail=str(e)[:200])
-    raise ExtractionFailed(run_id)
+    schema = LogExtraction if interventions else Extraction
+    cfg = types.GenerateContentConfig(system_instruction=SYSTEM + (LOG_SYSTEM if interventions else "") + ctx,
+                                      response_mime_type="application/json", response_schema=schema)
+    primary = os.environ["GEMINI_MODEL"]
+    first = os.environ.get("GEMINI_AUDIO_MODEL", "gemini-3.1-flash-lite") if audio_bytes else primary
+    # ponytail: first model twice, then fallback once (the primary when audio runs on the lighter model)
+    fallback = primary if first != primary else os.environ["GEMINI_FALLBACK_MODEL"]
+    return generate_json([first, first, fallback], parts, cfg, schema, run_id,
+                         LONG_TIMEOUT_MS if audio_bytes else TIMEOUT_MS)[0]
 
 
 def explain_sequence(seq: list, lang: str) -> str:

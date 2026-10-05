@@ -91,6 +91,7 @@ Traffic logger: Cloud Run Job `corridor-traffic-logger` (`jobs/traffic_logger.py
 |---|---|
 | `GEMINI_MODEL` | `gemini-3-flash-preview` |
 | `GEMINI_FALLBACK_MODEL` | `gemini-3.1-flash-lite` |
+| `GEMINI_AUDIO_MODEL` | `gemini-3.1-flash-lite` (default in code; audio input only) |
 | `GCP_PROJECT` | `green-corridor-2026` |
 | `GEMINI_LOCATION` | `global` |
 | `MAPS_SERVER_KEY` | from Secret Manager `corridor-maps-server-key` |
