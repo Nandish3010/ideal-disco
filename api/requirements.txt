@@ -9,3 +9,4 @@ google-cloud-bigquery
 google-cloud-storage
 httpx
 pydantic
+google-adk

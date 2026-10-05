@@ -18,6 +18,7 @@ the actual queue length and which way the vehicle turns, and sequencing several 
 - **Signal preemption behind `SignalAdapter`.** Today a simulated digital twin of a real corridor; a real controller drops in later.
 - **Multi-vehicle sequencing.** Deterministic acuity tiers decide the order ("fire engine first, ambulance 12 s later"); Gemini only explains it.
 - **Voice triage.** The crew speaks in any Indian language; Gemini extracts fields, a lookup table sets the tier, the crew confirms with one tap.
+- **Hospital routing agent.** A Google ADK agent on Vertex AI picks the destination from a mock capability and bed roster plus traffic-aware ETAs, and shows its tool-call trace; it never changes acuity or signal priority.
 - **Hospital handover.** A live transit log and an English ATMIST brief with a prep checklist, ready before arrival.
 - **Control room and replay.** All runs, junction ACK states, escalations, and a with-vs-without replay that counts minutes saved.
 
@@ -47,7 +48,7 @@ Pick a corridor with `?corridor=blr` or `?corridor=hyd`.
 ## API (FastAPI, Cloud Run)
 
 `POST /vehicles/bind` · `POST /incidents` · `POST /runs` (start/end) · `POST /triage` · `POST /log` ·
-`POST /brief` · `POST /location` · `POST /ack` · `POST /duty` · `GET /health`. Contracts are in [SCHEMA.md](SCHEMA.md).
+`POST /brief` · `POST /route` · `POST /location` · `POST /ack` · `POST /duty` · `GET /health`. Contracts are in [SCHEMA.md](SCHEMA.md).
 
 ## Honest notes
 
@@ -100,7 +101,7 @@ Traffic logger: Cloud Run Job `corridor-traffic-logger` (`jobs/traffic_logger.py
 ## Layout
 
 ```
-api/        FastAPI, acuity.py, priority.py, leadtime.py, signal_adapter.py
+api/        FastAPI, acuity.py, priority.py, leadtime.py, signal_adapter.py, agent.py + hospitals.py (routing agent, mock roster)
 web/        Vite React PWA, 6 routes
 jobs/       traffic_logger.py (Cloud Run Job -> BigQuery)
 data/       corridors/{blr,hyd}.json, scenarios/*.json

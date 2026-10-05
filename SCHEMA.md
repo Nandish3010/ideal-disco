@@ -27,6 +27,7 @@ Clients read; only the Cloud Run service account writes. Every server log line c
   "brief_fired": false, "corridor": "blr"
 }
 ```
+`routing` (written by the hospital routing agent, below) is optional until the tier is confirmed.
 `state`: `en_route | arrived | ended | stale | off_route`. `source`: `gps | sim`. `acuity_tier` is the lookup result written by `/triage`, `confirmed_tier` the crew's tap written by `/runs/{id}/confirm` (which also sets `patient_on_board: true`); only `confirmed_tier` enters priority.
 
 Written by `/location` on every tick:
@@ -42,6 +43,21 @@ Written by `/location` on every tick:
 }
 ```
 `ticks` keeps the last 12 (at most one per 5 s, so they span about a minute; `t` is the client's tick time). `last_tick_at` is server time and drives the stale check. `ahead` / `ahead_ids` list every junction still ahead (nearest first in `next_*`); other runs read them to find contenders. `last_eval.traffic`: `live | stale | scenario`; `stale` means Routes failed and no spans under 60 s old were left, so the queue was treated as NORMAL (control room shows "traffic data stale"). `brief_due` is set once `eta_hospital_s <= 300`, `brief_fired` is false and the run has at least one log entry (a run that is already inside 300 s on its first tick qualifies; with no log yet the check repeats on later ticks). The same tick then generates the brief inline (about 5-10 s) exactly once, writes `briefs/{run_id}`, sets `brief_fired: true` and clears `brief_due`. If Gemini fails the tick logs `brief_error` and leaves `brief_due: true` with `brief_fired: false`, so the hospital's Regenerate button (`POST /brief`) is the retry; nothing else retries. Optional `scenario: "<name>"` (set by the scenario runner, not by `/runs`) makes `/location` read `recorded_spans` from `data/scenarios/<name>.json` instead of calling Routes, and follow the corridor config instead of the Routes polyline (no off-route check).
+
+`routing` (written by `/runs/{id}/confirm` and `/route`; ambulance runs only):
+```json
+{
+  "destination": "Jayadeva Institute of Cardiovascular Sciences", "hospital_id": "blr_jayadeva", "eta_s": 438,
+  "reasons": ["The hospital provides the required cath_lab capability and has 4 beds available.", "It is the closest eligible facility with an ETA of 438 seconds."],
+  "trace": [
+    {"tool": "required_capabilities", "args": {"confirmed_tier": "critical", "fields": {"complaint": "chest pain"}}, "result": "cath_lab", "text": "called required_capabilities(critical) -> cath_lab"},
+    {"tool": "list_hospitals", "args": {"corridor": "blr"}, "result": "3 hospitals: blr_jayadeva, blr_apollo_bg, blr_fortis_bg", "text": "called list_hospitals(blr) -> 3 hospitals: ..."},
+    {"tool": "eta_to", "args": {"lat": 12.9172, "lng": 77.6229, "dest_lat": 12.9185, "dest_lng": 77.599}, "result": "438 s", "text": "called eta_to(Jayadeva Institute of Cardiovascular Sciences) -> 438 s"}
+  ],
+  "decided_at": "2026-10-05T09:02:40Z"
+}
+```
+The routing agent (`api/agent.py`, Google ADK `LlmAgent` `hospital_router` on Vertex AI, tools `list_hospitals`, `eta_to`, `required_capabilities`) picks the hospital that has every required capability and a free bed with the lowest traffic-aware ETA, from the mock roster in `api/hospitals.py`. `trace` is built from the ADK event stream, one entry per tool call (`text` is ready to show in the UI). It never changes `acuity_tier` / `confirmed_tier` and never touches signal priority. The agent's choice is checked server-side (known hospital, every required capability, beds > 0, and `eta_s` taken from the `eta_to` result); on any failure, invalid choice or a 20 s timeout the nearest eligible hospital is used and `trace` is `[{"fallback": "<error type>"}]`. `destination` is set from it when it was empty (or was itself set by an earlier routing); `/location` uses the routed hospital for `eta_hospital_s`.
 
 ### `runs/{id}/log/{n}`
 ```json
@@ -174,7 +190,14 @@ The crew's one tap.
 ```json
 { "tier": "critical" }
 ```
-200 `{ "run_id": "run-amb-1", "confirmed_tier": "critical", "patient_on_board": true }`. 400 `{ "error": "bad_tier" }`, 404 `{ "error": "unknown_run" }`.
+200 `{ "run_id": "run-amb-1", "confirmed_tier": "critical", "patient_on_board": true, "routing": { "...": "runs.routing" } }` (`routing` is `null` for fire and police runs; the call takes about 8 s because the routing agent runs inside it, 20 s at most). 400 `{ "error": "bad_tier" }`, 404 `{ "error": "unknown_run" }`.
+
+### `POST /route`
+Re-runs the hospital routing agent for a confirmed ambulance run (for example after the patient's condition or position changed).
+```json
+{ "run_id": "run-amb-1" }
+```
+200 the `runs.routing` object, also written to the run. 404 `{ "error": "unknown_run" }`, 409 `{ "error": "not_routable" }` (not an ambulance run, no confirmed tier, or corridor without a roster).
 
 ### `POST /log`
 Same request and 422 as `/triage` (optional `kind`: `voice | photo | form`); appends a log entry only, no tier change.
