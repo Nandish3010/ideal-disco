@@ -4,11 +4,26 @@ import { api } from "./api.js";
 // name so /location reads its recorded spans), and for non-fire vehicles the crew's one tap (confirmed_tier is what
 // priority reads; fire vehicles carry their tier on the run). Returns {runId, warn}; a failed confirm only warns.
 export async function startRun({ vehicle: x, scenarioName, corridor, destination }) {
-  const { incident_id } = await api("/incidents", { type: x.type === "fire" ? "fire" : "medical", severity_note: `Scenario ${scenarioName} (synthetic)` });
-  const { run_id } = await api("/runs", { action: "start", plate: x.plate, incident_id, corridor, destination, scenario: scenarioName, source: "sim" });
+  const { incident_id } = await api("/incidents", {
+    type: x.type === "fire" ? "fire" : "medical",
+    severity_note: `Scenario ${scenarioName} (synthetic)`,
+  });
+  const { run_id } = await api("/runs", {
+    action: "start",
+    plate: x.plate,
+    incident_id,
+    corridor,
+    destination,
+    scenario: scenarioName,
+    source: "sim",
+  });
   let warn;
   if (x.type !== "fire" && x.tier) {
-    try { await api(`/runs/${run_id}/confirm`, { tier: x.tier }); } catch (e) { warn = `confirm failed: ${e.message}`; }
+    try {
+      await api(`/runs/${run_id}/confirm`, { tier: x.tier });
+    } catch (e) {
+      warn = `confirm failed: ${e.message}`;
+    }
   }
   return { runId: run_id, warn };
 }
@@ -30,8 +45,12 @@ export function startFeed({ vehicle, runId, begin, speed, onTick, onDone, onRun 
     let status;
     try {
       await api("/location", {
-        run_id: runId, lat: k.lat, lng: k.lng, speed_mps: k.speed_mps,
-        t: new Date().toISOString(), source: "sim",
+        run_id: runId,
+        lat: k.lat,
+        lng: k.lng,
+        speed_mps: k.speed_mps,
+        t: new Date().toISOString(),
+        source: "sim",
       });
       status = 200;
     } catch (e) {
@@ -52,31 +71,58 @@ export function startFeed({ vehicle, runId, begin, speed, onTick, onDone, onRun 
         runId = r.runId;
         onRun?.(runId, r.warn);
       } catch (e) {
-        if (!stopped) { onTick({ i: 0, n, t: 0, status: `start failed: ${e.message}${e.status ? ` (HTTP ${e.status})` : ""}` }); onDone(); }
+        if (!stopped) {
+          onTick({
+            i: 0,
+            n,
+            t: 0,
+            status: `start failed: ${e.message}${e.status ? ` (HTTP ${e.status})` : ""}`,
+          });
+          onDone();
+        }
         return;
       }
     }
     t0 = Date.now();
     step(0);
   })();
-  return () => { stopped = true; clearTimeout(timer); };
+  return () => {
+    stopped = true;
+    clearTimeout(timer);
+  };
 }
 
 // Runs every vehicle of a scenario together: each starts after its start_offset_s (divided by speed).
 // runIds is {plate: run_id}, falling back to the scenario's own run_id. onTick gets {plate, i, n, t, status};
 // begin / onRun(plate, runId, warn) as in startFeed.
 export function startFeedAll({ scenario, runIds, begin, speed, onTick, onDone, onRun }) {
-  const stops = [], timers = [];
+  const stops = [],
+    timers = [];
   let left = scenario.vehicles.length;
   for (const v of scenario.vehicles) {
-    timers.push(setTimeout(() => {
-      stops.push(startFeed({
-        vehicle: v, runId: runIds?.[v.plate] ?? v.run_id, begin, speed,
-        onTick: (p) => onTick({ ...p, plate: v.plate }),
-        onDone: () => { if (--left === 0) onDone(); },
-        onRun: (id, w) => onRun?.(v.plate, id, w),
-      }));
-    }, ((v.start_offset_s ?? 0) * 1000) / speed));
+    timers.push(
+      setTimeout(
+        () => {
+          stops.push(
+            startFeed({
+              vehicle: v,
+              runId: runIds?.[v.plate] ?? v.run_id,
+              begin,
+              speed,
+              onTick: (p) => onTick({ ...p, plate: v.plate }),
+              onDone: () => {
+                if (--left === 0) onDone();
+              },
+              onRun: (id, w) => onRun?.(v.plate, id, w),
+            }),
+          );
+        },
+        ((v.start_offset_s ?? 0) * 1000) / speed,
+      ),
+    );
   }
-  return () => { timers.forEach(clearTimeout); stops.forEach((f) => f()); };
+  return () => {
+    timers.forEach(clearTimeout);
+    stops.forEach((f) => f());
+  };
 }

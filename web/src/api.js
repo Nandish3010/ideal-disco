@@ -1,5 +1,7 @@
 // Tiny JSON POST wrapper. Throws Error(server `error` code) with .status and .body attached.
-const BASE = (import.meta.env.VITE_API_BASE || "https://corridor-api-919512130399.asia-south1.run.app").replace(/\/$/, "");
+const BASE = (
+  import.meta.env.VITE_API_BASE || "https://corridor-api-919512130399.asia-south1.run.app"
+).replace(/\/$/, "");
 
 export async function api(path, body) {
   let res;
@@ -9,7 +11,7 @@ export async function api(path, body) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body ?? {}),
     });
-  } catch (e) {
+  } catch {
     throw Object.assign(new Error("network_error"), { status: 0, body: null });
   }
   const data = await res.json().catch(() => null);

@@ -1,51 +1,254 @@
 /* /sim layout: map top 55% on phones, side by side on desktop */
-main:has(.sim) { max-width: none; padding: 8px; }
-.sim .alerts { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
-.sim .alert { display: flex; gap: 8px; align-items: baseline; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; font-size: 16px; }
-.sim .stage { font-size: 14px; padding: 1px 8px; border-radius: 99px; background: #2a313b; color: var(--fg); flex: none; }
-.sim .stage.s-PREPARE { background: var(--warn); color: #000; }
-.sim .stage.s-STOP { background: var(--bad); color: #000; }
-.sim .stage.s-UPDATE { background: #3b82f6; color: #fff; }
-.simgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
-.simmap { height: 55dvh; min-height: 280px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: #1d2430; }
-.cmap { display: block; width: 100%; height: 100%; }
-.simpanel .card { margin: 0 0 8px; }
-.simpanel h2 { margin: 4px 0 8px; font-size: 20px; }
-.sim .run { border-top: 1px solid var(--line); padding: 8px 0; font-size: 17px; }
-.sim .run dl { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 2px 10px; margin: 4px 0 0; }
-.sim .run dt { color: var(--muted); } .sim .run dd { margin: 0; font-weight: 700; }
-.sim .tp { margin-left: 8px; font-size: 14px; padding: 1px 10px; border-radius: 99px; background: #2a313b; color: var(--muted); }
-.sim .tp.t-critical { background: var(--bad); color: #000; }
-.sim .tp.t-urgent { background: var(--warn); color: #000; }
-.sim .tp.t-stable { background: var(--accent); color: #000; }
-/* replay: two maps (stacked on phones), counter, junction strips */
-.sim .modebar { max-width: 360px; margin-bottom: 8px; }
-.replay .card { margin: 0 0 8px; }
-.replay .bignum { font-size: 64px; font-weight: 800; line-height: 1.1; color: var(--accent); font-variant-numeric: tabular-nums; }
-.replay .bignum small { font-size: 24px; color: var(--muted); }
-.replay .controls input[type=range] { padding: 0; min-height: 44px; border: 0; background: none; }
-.rgrid { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 8px; }
-.rpane h2 { margin: 4px 0 6px; font-size: 20px; }
-.rpane h2 .muted { font-size: 16px; font-weight: 400; }
-.sim .simmap.rmap { height: 40dvh; min-height: 260px; }
-.jstrip { display: flex; gap: 4px; margin-top: 6px; }
-.jchip { flex: 1; min-width: 0; text-align: center; font-size: 15px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 2px 2px 4px; }
-.jchip svg { display: block; width: 44px; height: 44px; margin: 0 auto; }
-.jchip .jdot { fill: #8a94a3; }
-.jchip.good { border-color: var(--accent); } .jchip.good .jdot { fill: var(--accent); }
-.jchip.bad { border-color: var(--bad); }
-.jchip .jring { fill: none; stroke: var(--bad); stroke-width: 3; }
-.jchip span { display: block; color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.jchip.good span { color: var(--accent); font-weight: 700; } .jchip.bad span { color: var(--bad); font-weight: 700; }
-.seq { margin: 6px 0 0; padding: 6px 10px; border-radius: 8px; background: #0f2a1a; border: 1px solid var(--accent); font-size: 18px; }
-@media (min-width: 900px) {
-  .rgrid { grid-template-columns: 1fr 1fr; }
-  .sim .simmap.rmap { height: calc(100dvh - 520px); min-height: 300px; }
-  .simgrid { grid-template-columns: 1fr 400px; align-items: start; }
-  .simmap { height: calc(100dvh - 190px); }
-  .simpanel { max-height: calc(100dvh - 190px); overflow-y: auto; }
+main:has(.sim) {
+  max-width: none;
+  padding: 8px;
 }
-.sim .legend { font-size: 14px; margin: 0 0 8px; }
-.sim .legend .cb { font-size: 12px; padding: 0 8px; }
-.sim .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 3px 0 2px; vertical-align: baseline; }
-.sim .sw.jam { background: #ff4d4d; } .sim .sw.slow { background: var(--warn); } .sim .sw.go { background: var(--accent); }
+.sim .alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.sim .alert {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 16px;
+}
+.sim .stage {
+  font-size: 14px;
+  padding: 1px 8px;
+  border-radius: 99px;
+  background: #2a313b;
+  color: var(--fg);
+  flex: none;
+}
+.sim .stage.s-PREPARE {
+  background: var(--warn);
+  color: #000;
+}
+.sim .stage.s-STOP {
+  background: var(--bad);
+  color: #000;
+}
+.sim .stage.s-UPDATE {
+  background: #3b82f6;
+  color: #fff;
+}
+.simgrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+.simmap {
+  height: 55dvh;
+  min-height: 280px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: #1d2430;
+}
+.cmap {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.simpanel .card {
+  margin: 0 0 8px;
+}
+.simpanel h2 {
+  margin: 4px 0 8px;
+  font-size: 20px;
+}
+.sim .run {
+  border-top: 1px solid var(--line);
+  padding: 8px 0;
+  font-size: 17px;
+}
+.sim .run dl {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  gap: 2px 10px;
+  margin: 4px 0 0;
+}
+.sim .run dt {
+  color: var(--muted);
+}
+.sim .run dd {
+  margin: 0;
+  font-weight: 700;
+}
+.sim .tp {
+  margin-left: 8px;
+  font-size: 14px;
+  padding: 1px 10px;
+  border-radius: 99px;
+  background: #2a313b;
+  color: var(--muted);
+}
+.sim .tp.t-critical {
+  background: var(--bad);
+  color: #000;
+}
+.sim .tp.t-urgent {
+  background: var(--warn);
+  color: #000;
+}
+.sim .tp.t-stable {
+  background: var(--accent);
+  color: #000;
+}
+/* replay: two maps (stacked on phones), counter, junction strips */
+.sim .modebar {
+  max-width: 360px;
+  margin-bottom: 8px;
+}
+.replay .card {
+  margin: 0 0 8px;
+}
+.replay .bignum {
+  font-size: 64px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.replay .bignum small {
+  font-size: 24px;
+  color: var(--muted);
+}
+.replay .controls input[type="range"] {
+  padding: 0;
+  min-height: 44px;
+  border: 0;
+  background: none;
+}
+.rgrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.rpane h2 {
+  margin: 4px 0 6px;
+  font-size: 20px;
+}
+.rpane h2 .muted {
+  font-size: 16px;
+  font-weight: 400;
+}
+.sim .simmap.rmap {
+  height: 40dvh;
+  min-height: 260px;
+}
+.jstrip {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+.jchip {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-size: 15px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 2px 2px 4px;
+}
+.jchip svg {
+  display: block;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto;
+}
+.jchip .jdot {
+  fill: #8a94a3;
+}
+.jchip.good {
+  border-color: var(--accent);
+}
+.jchip.good .jdot {
+  fill: var(--accent);
+}
+.jchip.bad {
+  border-color: var(--bad);
+}
+.jchip .jring {
+  fill: none;
+  stroke: var(--bad);
+  stroke-width: 3;
+}
+.jchip span {
+  display: block;
+  color: var(--muted);
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.jchip.good span {
+  color: var(--accent);
+  font-weight: 700;
+}
+.jchip.bad span {
+  color: var(--bad);
+  font-weight: 700;
+}
+.seq {
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #0f2a1a;
+  border: 1px solid var(--accent);
+  font-size: 18px;
+}
+@media (min-width: 900px) {
+  .rgrid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .sim .simmap.rmap {
+    height: calc(100dvh - 520px);
+    min-height: 300px;
+  }
+  .simgrid {
+    grid-template-columns: 1fr 400px;
+    align-items: start;
+  }
+  .simmap {
+    height: calc(100dvh - 190px);
+  }
+  .simpanel {
+    max-height: calc(100dvh - 190px);
+    overflow-y: auto;
+  }
+}
+.sim .legend {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+.sim .legend .cb {
+  font-size: 12px;
+  padding: 0 8px;
+}
+.sim .sw {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin: 0 3px 0 2px;
+  vertical-align: baseline;
+}
+.sim .sw.jam {
+  background: #ff4d4d;
+}
+.sim .sw.slow {
+  background: var(--warn);
+}
+.sim .sw.go {
+  background: var(--accent);
+}

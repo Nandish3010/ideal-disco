@@ -11,13 +11,18 @@ function Bind({ bound, setBound }) {
   async function submit(e) {
     e.preventDefault();
     const p = plate.trim().toUpperCase();
-    setBusy(true); setErr(null); setBound(null);
+    setBusy(true);
+    setErr(null);
+    setBound(null);
     store.set("plate", p);
     try {
       const r = await api("/vehicles/bind", { plate: p, device_id: deviceId() });
       store.set("bound", JSON.stringify(r));
       setBound(r);
-    } catch (x) { store.set("bound", null); setErr(x); }
+    } catch (x) {
+      store.set("bound", null);
+      setErr(x);
+    }
     setBusy(false);
   }
 
@@ -25,19 +30,36 @@ function Bind({ bound, setBound }) {
     <section>
       <h2>1. Bind this device</h2>
       <form className="card" onSubmit={submit}>
-        <label>Vehicle plate
-          <input value={plate} onChange={(e) => setPlate(e.target.value)} placeholder="KA01AB1234" autoCapitalize="characters" required />
+        <label>
+          Vehicle plate
+          <input
+            value={plate}
+            onChange={(e) => setPlate(e.target.value)}
+            placeholder="KA01AB1234"
+            autoCapitalize="characters"
+            required
+          />
         </label>
-        <button className="primary" disabled={busy}>{busy ? "Binding…" : "Bind"}</button>
+        <button className="primary" disabled={busy}>
+          {busy ? "Binding…" : "Bind"}
+        </button>
       </form>
       {err?.status === 404 ? (
-        <div className="card reject"><div className="big">Unregistered vehicle</div>
-          <p>{plate.trim().toUpperCase()} is not in the registry, or is inactive. No run can start.</p></div>
-      ) : <Err e={err} />}
+        <div className="card reject">
+          <div className="big">Unregistered vehicle</div>
+          <p>
+            {plate.trim().toUpperCase()} is not in the registry, or is inactive. No run can start.
+          </p>
+        </div>
+      ) : (
+        <Err e={err} />
+      )}
       {bound && (
         <div className="card good">
           <div className="big">{bound.plate} bound</div>
-          <p>Type: <b>{bound.type}</b> · Agency: <b>{bound.agency}</b></p>
+          <p>
+            Type: <b>{bound.type}</b> · Agency: <b>{bound.agency}</b>
+          </p>
         </div>
       )}
     </section>
@@ -50,7 +72,10 @@ function useGps(runId, active) {
   const last = useRef(0);
   useEffect(() => {
     if (!active || !runId) return;
-    if (!navigator.geolocation) { setNote("GPS not available on this device."); return; }
+    if (!navigator.geolocation) {
+      setNote("GPS not available on this device.");
+      return;
+    }
     setNote("Waiting for GPS…");
     const id = navigator.geolocation.watchPosition(
       async (p) => {
@@ -59,13 +84,21 @@ function useGps(runId, active) {
         const c = p.coords;
         try {
           await api("/location", {
-            run_id: runId, lat: c.latitude, lng: c.longitude, speed_mps: c.speed ?? 0,
-            heading: c.heading, t: new Date(p.timestamp).toISOString(), source: "gps",
+            run_id: runId,
+            lat: c.latitude,
+            lng: c.longitude,
+            speed_mps: c.speed ?? 0,
+            heading: c.heading,
+            t: new Date(p.timestamp).toISOString(),
+            source: "gps",
           });
           setNote("GPS sent " + new Date().toLocaleTimeString());
         } catch (e) {
           if (e.status === 501) console.log("/location not implemented yet (501)");
-          else { console.log("/location failed", e); setNote("GPS send failed: " + e.message); }
+          else {
+            console.log("/location failed", e);
+            setNote("GPS send failed: " + e.message);
+          }
         }
       },
       (e) => setNote("GPS error: " + e.message),
@@ -77,17 +110,25 @@ function useGps(runId, active) {
 }
 
 const MAX_S = 20;
-const b64 = (blob) => new Promise((ok, no) => {
-  const f = new FileReader();
-  f.onload = () => ok(f.result.split(",")[1]);
-  f.onerror = no;
-  f.readAsDataURL(blob);
-});
-const flat = (o, p = "") => Object.entries(o ?? {}).flatMap(([k, v]) =>
-  k === "transcript_en" || v == null ? [] : typeof v === "object" ? flat(v, k + ".") : [[p + k, v]]);
+const b64 = (blob) =>
+  new Promise((ok, no) => {
+    const f = new FileReader();
+    f.onload = () => ok(f.result.split(",")[1]);
+    f.onerror = no;
+    f.readAsDataURL(blob);
+  });
+const flat = (o, p = "") =>
+  Object.entries(o ?? {}).flatMap(([k, v]) =>
+    k === "transcript_en" || v == null
+      ? []
+      : typeof v === "object"
+        ? flat(v, k + ".")
+        : [[p + k, v]],
+  );
 const show = (v) => (v === true ? "yes" : v === false ? "no" : String(v));
 const clock = (s) => `0:${String(Math.floor(s)).padStart(2, "0")}`;
-const heard = (t, v) => new RegExp("\\b" + show(v).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(t ?? "");
+const heard = (t, v) =>
+  new RegExp("\\b" + show(v).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(t ?? "");
 
 // Press-and-hold recorder. onClip(blob) on release, onClip(null) when the hold was too short.
 function useHold(onClip) {
@@ -99,20 +140,28 @@ function useHold(onClip) {
   async function start() {
     const c = x.current;
     if (c.rec || c.starting) return;
-    c.held = true; c.starting = true;
+    c.held = true;
+    c.starting = true;
     let stream;
     try {
-      if (!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia) throw new Error("unsupported");
+      if (!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia)
+        throw new Error("unsupported");
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (e) {
-      c.starting = false; c.held = false;
+      c.starting = false;
+      c.held = false;
       setMic(e.name === "NotAllowedError" || e.name === "SecurityError" ? "denied" : "unavailable");
       return;
     }
     c.starting = false;
     setMic(null);
-    if (!c.held) { stream.getTracks().forEach((t) => t.stop()); return; } // released before the mic opened
-    const type = ["audio/webm;codecs=opus", "audio/mp4"].find((t) => MediaRecorder.isTypeSupported(t));
+    if (!c.held) {
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    } // released before the mic opened
+    const type = ["audio/webm;codecs=opus", "audio/mp4"].find((t) =>
+      MediaRecorder.isTypeSupported(t),
+    );
     const rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
     const chunks = [];
     const t0 = Date.now();
@@ -138,18 +187,27 @@ function useHold(onClip) {
     c.held = false;
     if (c.rec?.state === "recording") c.rec.stop();
   }
-  useEffect(() => () => { stop(); clearInterval(x.current.tick); }, []);
+  useEffect(
+    () => () => {
+      stop();
+      clearInterval(x.current.tick);
+    },
+    [],
+  );
   return { ...st, mic, start, stop };
 }
 
 // Downscale a photo to <= 1280 px, JPEG q0.8; shrink again while the base64 is over 2 MB. -> {b64, url}
-const MAX_PX = 1280, MAX_B64 = 2 * 1024 * 1024;
+const MAX_PX = 1280,
+  MAX_B64 = 2 * 1024 * 1024;
 async function shrink(file) {
   const img = await createImageBitmap(file, { imageOrientation: "from-image" });
-  let scale = Math.min(1, MAX_PX / Math.max(img.width, img.height)), url;
+  let scale = Math.min(1, MAX_PX / Math.max(img.width, img.height)),
+    url;
   const cv = document.createElement("canvas");
   for (let i = 0; i < 6; i++) {
-    cv.width = Math.round(img.width * scale); cv.height = Math.round(img.height * scale);
+    cv.width = Math.round(img.width * scale);
+    cv.height = Math.round(img.height * scale);
     cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
     url = cv.toDataURL("image/jpeg", 0.8 - i * 0.05);
     if (url.length - 23 <= MAX_B64) break;
@@ -162,18 +220,26 @@ async function shrink(file) {
 const ICON = { drug: "💊", procedure: "🩺", observation: "👁" };
 const label = (i) => [i.name, i.dose].filter(Boolean).join(" ");
 // Intervention chips + tap-to-open photo thumbnail, shared with the hospital page.
-export const Chips = ({ items }) => items?.length ? (
-  <div className="chips">
-    {items.map((i, k) => (
-      <span key={k} className={"chip " + (i.kind ?? "")} title={[i.route, i.time_note].filter(Boolean).join(" · ") || undefined}>
-        {ICON[i.kind] ?? "•"} {label(i)}
-      </span>
-    ))}
-  </div>
-) : null;
-export const Thumb = ({ url }) => typeof url === "string" && url.startsWith("https://") ? (
-  <a href={url} target="_blank" rel="noopener noreferrer"><img className="thumb" src={url} alt="Monitor photo" loading="lazy" /></a>
-) : null;
+export const Chips = ({ items }) =>
+  items?.length ? (
+    <div className="chips">
+      {items.map((i, k) => (
+        <span
+          key={k}
+          className={"chip " + (i.kind ?? "")}
+          title={[i.route, i.time_note].filter(Boolean).join(" · ") || undefined}
+        >
+          {ICON[i.kind] ?? "•"} {label(i)}
+        </span>
+      ))}
+    </div>
+  ) : null;
+export const Thumb = ({ url }) =>
+  typeof url === "string" && url.startsWith("https://") ? (
+    <a href={url} target="_blank" rel="noopener noreferrer">
+      <img className="thumb" src={url} alt="Monitor photo" loading="lazy" />
+    </a>
+  ) : null;
 
 function Fields({ fields, transcript, photo }) {
   const rows = flat(fields);
@@ -185,7 +251,12 @@ function Fields({ fields, transcript, photo }) {
         return (
           <div key={k}>
             <dt>{k}</dt>
-            <dd>{show(v)}<small className={ok ? "src" : "inf"}>{photo ? "from photo" : ok ? "in transcript" : "inferred"}</small></dd>
+            <dd>
+              {show(v)}
+              <small className={ok ? "src" : "inf"}>
+                {photo ? "from photo" : ok ? "in transcript" : "inferred"}
+              </small>
+            </dd>
           </div>
         );
       })}
@@ -208,27 +279,55 @@ function Triage({ runId, vehicleType, confirmed, setDone }) {
 
   async function send(extra, kind, url = null) {
     const log = mode === "log";
-    setBusy(true); setErr(null); setRes(null); setNote(""); setShot(url);
+    setBusy(true);
+    setErr(null);
+    setRes(null);
+    setNote("");
+    setShot(url);
     try {
-      setRes({ ...(await api(log ? "/log" : "/triage", { run_id: runId, vehicle_type: vehicleType, ...(log && { kind }), ...extra })), log });
+      setRes({
+        ...(await api(log ? "/log" : "/triage", {
+          run_id: runId,
+          vehicle_type: vehicleType,
+          ...(log && { kind }),
+          ...extra,
+        })),
+        log,
+      });
       if (kind === "form") setText("");
-    } catch (x) { setErr(x); }
+    } catch (x) {
+      setErr(x);
+    }
     setBusy(false);
   }
   async function confirm() {
-    setConfirming(true); setCerr(null);
-    try { setDone((await api(`/runs/${runId}/confirm`, { tier: res.suggested_tier })).confirmed_tier); setPick(null); }
-    catch (x) { setCerr(x); }
+    setConfirming(true);
+    setCerr(null);
+    try {
+      setDone((await api(`/runs/${runId}/confirm`, { tier: res.suggested_tier })).confirmed_tier);
+      setPick(null);
+    } catch (x) {
+      setCerr(x);
+    }
     setConfirming(false);
   }
   async function photo(e) {
     const f = e.target.files?.[0];
     e.target.value = "";
     if (!f) return;
-    setBusy(true); setErr(null); setRes(null); setNote(""); setShot("pending");
+    setBusy(true);
+    setErr(null);
+    setRes(null);
+    setNote("");
+    setShot("pending");
     let r;
-    try { r = await shrink(f); }
-    catch { setBusy(false); setShot(null); return setNote("Couldn't open that photo, type it instead."); }
+    try {
+      r = await shrink(f);
+    } catch {
+      setBusy(false);
+      setShot(null);
+      return setNote("Couldn't open that photo, type it instead.");
+    }
     send({ image_b64: r.b64, mime: "image/jpeg" }, "photo", r.url);
   }
   const hold = useHold(async (blob) => {
@@ -239,7 +338,9 @@ function Triage({ runId, vehicleType, confirmed, setDone }) {
   const failed = err?.body?.error === "extraction_failed";
   // 422 = unreadable; 400/501 = backend without image support yet
   const unread = shot && [400, 422, 501].includes(err?.status);
-  useEffect(() => { if (failed || unread || hold.mic) area.current?.focus(); }, [failed, unread, hold.mic]);
+  useEffect(() => {
+    if (failed || unread || hold.mic) area.current?.focus();
+  }, [failed, unread, hold.mic]);
 
   const tier = res?.suggested_tier;
   const up = String(tier).toUpperCase();
@@ -247,51 +348,120 @@ function Triage({ runId, vehicleType, confirmed, setDone }) {
     <section>
       <h2>3. Patient</h2>
       <div className="row" role="group" aria-label="Note type">
-        {[["triage", "Triage"], ["log", "Log note"]].map(([m, l]) => (
-          <button key={m} type="button" className={mode === m ? "on" : ""} aria-pressed={mode === m} onClick={() => setPick(m)}>{l}</button>
+        {[
+          ["triage", "Triage"],
+          ["log", "Log note"],
+        ].map(([m, l]) => (
+          <button
+            key={m}
+            type="button"
+            className={mode === m ? "on" : ""}
+            aria-pressed={mode === m}
+            onClick={() => setPick(m)}
+          >
+            {l}
+          </button>
         ))}
       </div>
       <button
-        className={"giant" + (hold.on ? " live" : "")} disabled={busy}
-        onPointerDown={(e) => { e.currentTarget.setPointerCapture?.(e.pointerId); hold.start(); }}
-        onPointerUp={hold.stop} onPointerCancel={hold.stop} onBlur={hold.stop}
-        onKeyDown={(e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); hold.start(); } }}
-        onKeyUp={(e) => { if (e.key === " " || e.key === "Enter") hold.stop(); }}
+        className={"giant" + (hold.on ? " live" : "")}
+        disabled={busy}
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture?.(e.pointerId);
+          hold.start();
+        }}
+        onPointerUp={hold.stop}
+        onPointerCancel={hold.stop}
+        onBlur={hold.stop}
+        onKeyDown={(e) => {
+          if ((e.key === " " || e.key === "Enter") && !e.repeat) {
+            e.preventDefault();
+            hold.start();
+          }
+        }}
+        onKeyUp={(e) => {
+          if (e.key === " " || e.key === "Enter") hold.stop();
+        }}
         onContextMenu={(e) => e.preventDefault()}
       >
-        {busy ? (shot ? "Reading the monitor…" : "Thinking…") : hold.on ? `Listening ${clock(hold.s)}` : "Hold to speak"}
+        {busy
+          ? shot
+            ? "Reading the monitor…"
+            : "Thinking…"
+          : hold.on
+            ? `Listening ${clock(hold.s)}`
+            : "Hold to speak"}
         {hold.on && (
-          <small>{Math.max(0, Math.ceil(MAX_S - hold.s))} s left
-            <span className="meter"><i style={{ width: Math.min(100, hold.s / MAX_S * 100) + "%" }} /></span>
+          <small>
+            {Math.max(0, Math.ceil(MAX_S - hold.s))} s left
+            <span className="meter">
+              <i style={{ width: Math.min(100, (hold.s / MAX_S) * 100) + "%" }} />
+            </span>
           </small>
         )}
       </button>
       <label className={"btn photo" + (busy ? " off" : "")}>
         {busy && shot ? "Reading the monitor…" : "📷 Monitor photo"}
-        <input type="file" accept="image/*" capture="environment" disabled={busy} onChange={photo} hidden />
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          disabled={busy}
+          onChange={photo}
+          hidden
+        />
       </label>
       {note && <p className="muted">{note}</p>}
       {hold.mic && (
         <p className="card bad">
-          {hold.mic === "denied" ? "Microphone is blocked for this site." : "Voice recording is not available on this device."} Type it below instead.
+          {hold.mic === "denied"
+            ? "Microphone is blocked for this site."
+            : "Voice recording is not available on this device."}{" "}
+          Type it below instead.
         </p>
       )}
-      <form className="card" onSubmit={(e) => { e.preventDefault(); send({ text }, "form"); }}>
-        <label>Type instead
-          <textarea ref={area} rows="3" value={text} onChange={(e) => setText(e.target.value)} placeholder="chest pain, BP 85 over 50" required />
+      <form
+        className="card"
+        onSubmit={(e) => {
+          e.preventDefault();
+          send({ text }, "form");
+        }}
+      >
+        <label>
+          Type instead
+          <textarea
+            ref={area}
+            rows="3"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="chest pain, BP 85 over 50"
+            required
+          />
         </label>
-        <button className="primary" disabled={busy}>{busy ? "Thinking…" : mode === "log" ? "Add note" : "Send"}</button>
+        <button className="primary" disabled={busy}>
+          {busy ? "Thinking…" : mode === "log" ? "Add note" : "Send"}
+        </button>
       </form>
-      {unread ? <p className="card bad">Couldn't read the screen, type it instead.</p>
-        : failed ? <p className="card bad">Couldn't understand, type it. Add more detail in the box above.</p>
-        : err?.status === 503 ? <p className="card bad">Service busy, try again.</p>
-        : <Err e={err} />}
+      {unread ? (
+        <p className="card bad">Couldn&apos;t read the screen, type it instead.</p>
+      ) : failed ? (
+        <p className="card bad">
+          Couldn&apos;t understand, type it. Add more detail in the box above.
+        </p>
+      ) : err?.status === 503 ? (
+        <p className="card bad">Service busy, try again.</p>
+      ) : (
+        <Err e={err} />
+      )}
       {res && (
         <div className="card">
           {shot ? (
             <div className="photo-res">
               <img className="thumb" src={shot} alt="Monitor photo" />
-              <div><div className="muted">Read from the monitor</div><Fields fields={res.fields} photo /></div>
+              <div>
+                <div className="muted">Read from the monitor</div>
+                <Fields fields={res.fields} photo />
+              </div>
             </div>
           ) : (
             <>
@@ -302,13 +472,23 @@ function Triage({ runId, vehicleType, confirmed, setDone }) {
             </>
           )}
           <Chips items={res.interventions} />
-          {res.log ? <p className="muted">Added to the transit log.</p> : (
+          {res.log ? (
+            <p className="muted">Added to the transit log.</p>
+          ) : (
             <>
               <div className="muted">Suggested tier</div>
               <div className={"big tier-" + tier}>{up}</div>
               <div className="muted">Crew confirms</div>
-              <button className={"primary t-" + tier} disabled={confirming || confirmed === tier} onClick={confirm}>
-                {confirming ? "Confirming…" : confirmed === tier ? `Confirmed ${up}` : `Confirm ${up}`}
+              <button
+                className={"primary t-" + tier}
+                disabled={confirming || confirmed === tier}
+                onClick={confirm}
+              >
+                {confirming
+                  ? "Confirming…"
+                  : confirmed === tier
+                    ? `Confirmed ${up}`
+                    : `Confirm ${up}`}
               </button>
               <Err e={cerr} />
             </>
@@ -324,23 +504,30 @@ function Log({ runId }) {
   return (
     <section>
       <h2>4. Transit log</h2>
-      {error ? <p className="card bad">Could not load log: {error}</p>
-        : !rows ? <p className="muted">Loading…</p>
-        : !rows.length ? <p className="muted">No notes yet</p>
-        : (
-          <ul className="list">
-            {rows.map((e) => (
-              <li key={e.id}>
-                <span className="muted">{when(e.t)}</span>
-                <span className="pill">{e.kind === "form" ? "text" : e.kind}</span>
-                <Thumb url={e.photo_url} />
-                <div>{e.transcript_en ?? "—"}</div>
-                <Chips items={e.interventions} />
-                <div className="muted">{flat(e.fields).map(([k, v]) => `${k} ${show(v)}`).join(" · ")}</div>
-              </li>
-            ))}
-          </ul>
-        )}
+      {error ? (
+        <p className="card bad">Could not load log: {error}</p>
+      ) : !rows ? (
+        <p className="muted">Loading…</p>
+      ) : !rows.length ? (
+        <p className="muted">No notes yet</p>
+      ) : (
+        <ul className="list">
+          {rows.map((e) => (
+            <li key={e.id}>
+              <span className="muted">{when(e.t)}</span>
+              <span className="pill">{e.kind === "form" ? "text" : e.kind}</span>
+              <Thumb url={e.photo_url} />
+              <div>{e.transcript_en ?? "—"}</div>
+              <Chips items={e.interventions} />
+              <div className="muted">
+                {flat(e.fields)
+                  .map(([k, v]) => `${k} ${show(v)}`)
+                  .join(" · ")}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
@@ -360,24 +547,40 @@ function Run({ bound }) {
 
   async function start(e) {
     e.preventDefault();
-    setBusy(true); setErr(null); setEnded(null); setDone(null);
+    setBusy(true);
+    setErr(null);
+    setEnded(null);
+    setDone(null);
     const id = incident.trim().toUpperCase();
-    store.set("incident_id", id); store.set("corridor", corridor);
+    store.set("incident_id", id);
+    store.set("corridor", corridor);
     try {
       const r = await api("/runs", {
-        action: "start", plate: bound.plate, incident_id: id, corridor,
-        destination: { name: hospital.name, lat: hospital.lat, lng: hospital.lng }, source: "gps",
+        action: "start",
+        plate: bound.plate,
+        incident_id: id,
+        corridor,
+        destination: { name: hospital.name, lat: hospital.lat, lng: hospital.lng },
+        source: "gps",
       });
-      store.set("run_id", r.run_id); setRunId(r.run_id);
-    } catch (x) { setErr(x); }
+      store.set("run_id", r.run_id);
+      setRunId(r.run_id);
+    } catch (x) {
+      setErr(x);
+    }
     setBusy(false);
   }
   async function end() {
-    setBusy(true); setErr(null);
+    setBusy(true);
+    setErr(null);
     try {
       await api("/runs", { action: "end", run_id: runId });
-      setEnded(runId); store.set("run_id", null); setRunId(null);
-    } catch (x) { setErr(x); }
+      setEnded(runId);
+      store.set("run_id", null);
+      setRunId(null);
+    } catch (x) {
+      setErr(x);
+    }
     setBusy(false);
   }
 
@@ -387,9 +590,13 @@ function Run({ bound }) {
     <>
       <section>
         <h2>2. Start run</h2>
-        {!bound ? <p className="muted">Bind a registered vehicle first.</p> : runId ? (
+        {!bound ? (
+          <p className="muted">Bind a registered vehicle first.</p>
+        ) : runId ? (
           <div className="card">
-            <div className={"tierpill " + (confirmed ? "t-" + confirmed : "")}>{confirmed ? confirmed.toUpperCase() : "Tier not confirmed"}</div>
+            <div className={"tierpill " + (confirmed ? "t-" + confirmed : "")}>
+              {confirmed ? confirmed.toUpperCase() : "Tier not confirmed"}
+            </div>
             <div className="muted">Run {runId}</div>
             {run.loading && <p>Loading run…</p>}
             {run.error && <p className="bad">Could not load run: {run.error}</p>}
@@ -397,42 +604,79 @@ function Run({ bound }) {
             {r && (
               <>
                 <div className="big">{r.state}</div>
-                <p>{r.vehicle_plate} · incident {r.incident_id} · to {r.destination?.name ?? "—"}</p>
-                {r.eta_hospital_s != null && <p>Hospital ETA: {Math.round(r.eta_hospital_s / 60)} min</p>}
+                <p>
+                  {r.vehicle_plate} · incident {r.incident_id} · to {r.destination?.name ?? "—"}
+                </p>
+                {r.eta_hospital_s != null && (
+                  <p>Hospital ETA: {Math.round(r.eta_hospital_s / 60)} min</p>
+                )}
               </>
             )}
             <p className="muted">{gps}</p>
-            <button className="danger" disabled={busy} onClick={end}>{busy ? "Ending…" : "End run"}</button>
+            <button className="danger" disabled={busy} onClick={end}>
+              {busy ? "Ending…" : "End run"}
+            </button>
           </div>
         ) : (
           <form className="card" onSubmit={start}>
-            <label>Incident ID
-              <input value={incident} onChange={(e) => setIncident(e.target.value)} placeholder="INC-4BC6E7" required />
+            <label>
+              Incident ID
+              <input
+                value={incident}
+                onChange={(e) => setIncident(e.target.value)}
+                placeholder="INC-4BC6E7"
+                required
+              />
             </label>
-            <label>Corridor
+            <label>
+              Corridor
               <select value={corridor} onChange={(e) => setCorridor(e.target.value)}>
-                {Object.values(corridors).map((c) => <option key={c.id} value={c.id}>{c.id} · {c.name}</option>)}
+                {Object.values(corridors).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.id} · {c.name}
+                  </option>
+                ))}
               </select>
             </label>
             <p className="muted">Destination: {hospital.name}</p>
-            <button className="primary" disabled={busy}>{busy ? "Starting…" : "Start run"}</button>
+            <button className="primary" disabled={busy}>
+              {busy ? "Starting…" : "Start run"}
+            </button>
           </form>
         )}
         {ended && <p className="card good">Run {ended} ended.</p>}
         {err?.status === 403 ? (
-          <p className="card reject">{err.message === "no_active_incident"
-            ? "No active incident: that incident ID is unknown or not open."
-            : "Unregistered vehicle: run refused."}</p>
-        ) : <Err e={err} />}
+          <p className="card reject">
+            {err.message === "no_active_incident"
+              ? "No active incident: that incident ID is unknown or not open."
+              : "Unregistered vehicle: run refused."}
+          </p>
+        ) : (
+          <Err e={err} />
+        )}
       </section>
-      {runId && <Triage key={runId} runId={runId} vehicleType={bound?.type} confirmed={confirmed} setDone={setDone} />}
+      {runId && (
+        <Triage
+          key={runId}
+          runId={runId}
+          vehicleType={bound?.type}
+          confirmed={confirmed}
+          setDone={setDone}
+        />
+      )}
       {runId && <Log runId={runId} />}
     </>
   );
 }
 
 export default function Vehicle() {
-  const [bound, setBound] = useState(() => { try { return JSON.parse(store.get("bound")); } catch { return null; } });
+  const [bound, setBound] = useState(() => {
+    try {
+      return JSON.parse(store.get("bound"));
+    } catch {
+      return null;
+    }
+  });
   return (
     <>
       <Bind bound={bound} setBound={setBound} />

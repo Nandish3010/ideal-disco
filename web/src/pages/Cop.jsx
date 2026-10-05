@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { collection, collectionGroup, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
+import {
+  collection,
+  collectionGroup,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  where,
+} from "firebase/firestore";
 import { db } from "../firebase.js";
 import { api } from "../api.js";
 import { corridors } from "../data.js";
@@ -31,22 +39,61 @@ const audio = typeof Audio !== "undefined" ? new Audio() : null;
 function unlock() {
   try {
     const Ctx = window.AudioContext || window.webkitAudioContext;
-    const c = new Ctx(); const src = c.createBufferSource();
-    src.buffer = c.createBuffer(1, 1, 22050); src.connect(c.destination); src.start(0); c.resume?.();
-  } catch { /* ignore */ }
-  try { audio.src = SILENT; audio.play().catch(() => {}); } catch { /* ignore */ }
-  try { speechSynthesis.speak(Object.assign(new SpeechSynthesisUtterance(" "), { volume: 0 })); } catch { /* ignore */ }
+    const c = new Ctx();
+    const src = c.createBufferSource();
+    src.buffer = c.createBuffer(1, 1, 22050);
+    src.connect(c.destination);
+    src.start(0);
+    c.resume?.();
+  } catch {
+    /* ignore */
+  }
+  try {
+    audio.src = SILENT;
+    audio.play().catch(() => {});
+  } catch {
+    /* ignore */
+  }
+  try {
+    speechSynthesis.speak(Object.assign(new SpeechSynthesisUtterance(" "), { volume: 0 }));
+  } catch {
+    /* ignore */
+  }
 }
 let lock;
-async function wake() { try { lock = await navigator.wakeLock.request("screen"); } catch { /* unsupported or denied */ } }
+async function wake() {
+  try {
+    lock = await navigator.wakeLock.request("screen");
+  } catch {
+    /* unsupported or denied */
+  }
+}
 
 // Silence everything: the shared element and any queued speech.
-function stopSound() { try { speechSynthesis.cancel(); } catch { /* ignore */ } try { audio.pause(); } catch { /* ignore */ } }
+function stopSound() {
+  try {
+    speechSynthesis.cancel();
+  } catch {
+    /* ignore */
+  }
+  try {
+    audio.pause();
+  } catch {
+    /* ignore */
+  }
+}
 
 // One sound at a time. audio_url wins; speech is used only when there is no audio_url.
 function speak(a, onBlocked) {
   stopSound();
-  if (!a.audio_url) { try { speechSynthesis.speak(new SpeechSynthesisUtterance(a.text)); } catch { /* ignore */ } return; }
+  if (!a.audio_url) {
+    try {
+      speechSynthesis.speak(new SpeechSynthesisUtterance(a.text));
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
   // gs:// is not fetchable by a browser; the media bucket is served over https
   audio.src = a.audio_url.replace(/^gs:\/\//, "https://storage.googleapis.com/");
   audio.play().catch((e) => e.name === "NotAllowedError" && onBlocked());
@@ -60,23 +107,65 @@ function useAlerts(jid) {
   useEffect(() => {
     setS({ alerts: [], mode: "collectionGroup", loading: true });
     let subs = [];
-    const row = (d) => { const run_id = d.ref.parent.parent.id; return { ...d.data(), run_id, n: d.id, key: `${run_id}/${d.id}` }; };
-    const fallback = (reason) => {
-      const byRun = {}, inner = {};
-      const push = (loading = false) => setS({ mode: "active runs (collectionGroup failed: " + reason + ")", alerts: Object.values(byRun).flat(), loading });
-      push(true);
-      subs.push(onSnapshot(query(collection(db, "runs"), where("state", "==", "en_route")), (q) => {
-        const ids = new Set(q.docs.map((d) => d.id));
-        for (const id of ids) if (!inner[id]) {
-          inner[id] = onSnapshot(collection(db, "runs", id, "alerts"),
-            (a) => { byRun[id] = a.docs.map(row).filter((x) => x.junction_id === jid); push(); }, () => {});
-        }
-        for (const id of Object.keys(inner)) if (!ids.has(id)) { inner[id](); delete inner[id]; delete byRun[id]; push(); }
-      }, (e) => setS({ alerts: [], mode: "active runs", error: e.message })), () => Object.values(inner).forEach((f) => f()));
+    const row = (d) => {
+      const run_id = d.ref.parent.parent.id;
+      return { ...d.data(), run_id, n: d.id, key: `${run_id}/${d.id}` };
     };
-    subs.push(onSnapshot(query(collectionGroup(db, "alerts"), where("junction_id", "==", jid), orderBy("created_at", "desc"), limit(20)),
-      (q) => setS({ mode: "collectionGroup", alerts: q.docs.map(row) }),
-      (e) => { subs.forEach((f) => f()); subs = []; fallback(e.code || "error"); }));
+    const fallback = (reason) => {
+      const byRun = {},
+        inner = {};
+      const push = (loading = false) =>
+        setS({
+          mode: "active runs (collectionGroup failed: " + reason + ")",
+          alerts: Object.values(byRun).flat(),
+          loading,
+        });
+      push(true);
+      subs.push(
+        onSnapshot(
+          query(collection(db, "runs"), where("state", "==", "en_route")),
+          (q) => {
+            const ids = new Set(q.docs.map((d) => d.id));
+            for (const id of ids)
+              if (!inner[id]) {
+                inner[id] = onSnapshot(
+                  collection(db, "runs", id, "alerts"),
+                  (a) => {
+                    byRun[id] = a.docs.map(row).filter((x) => x.junction_id === jid);
+                    push();
+                  },
+                  () => {},
+                );
+              }
+            for (const id of Object.keys(inner))
+              if (!ids.has(id)) {
+                inner[id]();
+                delete inner[id];
+                delete byRun[id];
+                push();
+              }
+          },
+          (e) => setS({ alerts: [], mode: "active runs", error: e.message }),
+        ),
+        () => Object.values(inner).forEach((f) => f()),
+      );
+    };
+    subs.push(
+      onSnapshot(
+        query(
+          collectionGroup(db, "alerts"),
+          where("junction_id", "==", jid),
+          orderBy("created_at", "desc"),
+          limit(20),
+        ),
+        (q) => setS({ mode: "collectionGroup", alerts: q.docs.map(row) }),
+        (e) => {
+          subs.forEach((f) => f());
+          subs = [];
+          fallback(e.code || "error");
+        },
+      ),
+    );
     return () => subs.forEach((f) => f());
   }, [jid, n]);
   return { ...s, retry: () => setN((x) => x + 1) };
@@ -87,10 +176,12 @@ const duty_ = (corridor, junction_id, on) =>
   api("/duty", { corridor, junction_id, device_id: deviceId(), on }).catch(() => {});
 
 const ARROW = { left: "←", straight: "↑", right: "→" };
-const left = (s) => (s >= 60 ? `in ${Math.ceil(s / 60)} min` : s > 0 ? `in ${Math.ceil(s)} s` : "now");
+const left = (s) =>
+  s >= 60 ? `in ${Math.ceil(s / 60)} min` : s > 0 ? `in ${Math.ceil(s)} s` : "now";
 const STALE_MS = 10 * 60 * 1000; // an unacked alert older than this is history, not a live call
 const SOUND_MS = 2 * 60 * 1000; // audio only for alerts younger than this
-const PLAYS = 3, GAP_MS = 20000; // at most 3 plays per alert, 20 s apart
+const PLAYS = 3,
+  GAP_MS = 20000; // at most 3 plays per alert, 20 s apart
 
 function Current({ a, t0, now, onAck }) {
   const run = useDoc(`runs/${a.run_id}`).data;
@@ -103,11 +194,28 @@ function Current({ a, t0, now, onAck }) {
         {now - t0 > 20000 || a.escalated ? <span className="pill escalated">ESCALATED</span> : null}
         <p className="alert-text">{a.text_local || a.text}</p>
         {a.text_local && <p className="alert-en">{a.text}</p>}
-        <p className="muted">{run?.vehicle_type ?? "vehicle"}{tier ? ` · ${tier}` : ""}{run && run.state !== "en_route" ? <> · <StateBadge run={run} now={now} /></> : null}{a.approach ? ` · ${a.approach} approach` : ""}{a.jam_m ? ` · ${a.jam_m} m queue` : ""}</p>
+        <p className="muted">
+          {run?.vehicle_type ?? "vehicle"}
+          {tier ? ` · ${tier}` : ""}
+          {run && run.state !== "en_route" ? (
+            <>
+              {" "}
+              · <StateBadge run={run} now={now} />
+            </>
+          ) : null}
+          {a.approach ? ` · ${a.approach} approach` : ""}
+          {a.jam_m ? ` · ${a.jam_m} m queue` : ""}
+        </p>
         <p className="eta">arrives {left(rem)}</p>
-        {a.exit_move && <p className="move">{ARROW[a.exit_move]} turning {a.exit_move.toUpperCase()}</p>}
+        {a.exit_move && (
+          <p className="move">
+            {ARROW[a.exit_move]} turning {a.exit_move.toUpperCase()}
+          </p>
+        )}
       </div>
-      <button className="ack" onClick={() => onAck(a)}>ACK</button>
+      <button className="ack" onClick={() => onAck(a)}>
+        ACK
+      </button>
     </section>
   );
 }
@@ -127,9 +235,16 @@ function Duty({ corridor, junction, onOff }) {
 
   useEffect(() => {
     wake();
-    const vis = () => { setVisible(document.visibilityState === "visible"); document.visibilityState === "visible" && wake(); };
+    const vis = () => {
+      setVisible(document.visibilityState === "visible");
+      document.visibilityState === "visible" && wake();
+    };
     document.addEventListener("visibilitychange", vis);
-    return () => { document.removeEventListener("visibilitychange", vis); lock?.release().catch(() => {}); stopSound(); };
+    return () => {
+      document.removeEventListener("visibilitychange", vis);
+      lock?.release().catch(() => {});
+      stopSound();
+    };
   }, []);
 
   const t0 = (a) => ms(a.created_at) ?? (seen[a.key] ??= Date.now());
@@ -141,62 +256,131 @@ function Duty({ corridor, junction, onOff }) {
   // created_at missing means old. Any change of playKey (ack, stale, newer alert, mute, hidden) stops the sound.
   const top = sorted[0];
   const created = top && ms(top.created_at);
-  const fresh = top && !acked(top) && created != null && created > onDutyAt && now - created < SOUND_MS;
+  const fresh =
+    top && !acked(top) && created != null && created > onDutyAt && now - created < SOUND_MS;
   const playKey = fresh && !muted && visible && !quiet.current[top.key] ? top.key : null;
 
-  useEffect(() => { // mute or hide silences the current alert for good; only a new alert plays again
+  useEffect(() => {
+    // mute or hide silences the current alert for good; only a new alert plays again
     if ((muted || !visible) && fresh) quiet.current[top.key] = true;
   }, [muted, visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!playKey) return;
     let n = 0;
-    const say = () => { speak(top, () => setBlocked(true)); if (++n >= PLAYS) clearInterval(id); };
+    const say = () => {
+      speak(top, () => setBlocked(true));
+      if (++n >= PLAYS) clearInterval(id);
+    };
     const id = setInterval(say, GAP_MS);
     say();
-    return () => { clearInterval(id); stopSound(); };
+    return () => {
+      clearInterval(id);
+      stopSound();
+    };
   }, [playKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const toggleMute = () => { const m = !muted; setMuted(m); store.set("cop_muted", m ? "1" : "0"); if (m) stopSound(); };
+  const toggleMute = () => {
+    const m = !muted;
+    setMuted(m);
+    store.set("cop_muted", m ? "1" : "0");
+    if (m) stopSound();
+  };
 
   async function ack(a) {
     setLocal((l) => ({ ...l, [a.key]: { s: "sent" } })); // optimistic: the cop sees it done at once
     try {
-      const r = await api("/ack", { run_id: a.run_id, alert_n: Number(a.n), junction_id: jid, device_id: deviceId() });
+      const r = await api("/ack", {
+        run_id: a.run_id,
+        alert_n: Number(a.n),
+        junction_id: jid,
+        device_id: deviceId(),
+      });
       setLocal((l) => ({ ...l, [a.key]: { s: "ok", latency: r.ack_latency_s } }));
-    } catch { /* 501 or offline: stays "sent"; server-side ack lands later */ }
+    } catch {
+      /* 501 or offline: stays "sent"; server-side ack lands later */
+    }
   }
-  const state = (a) => a.acked_at ? `ACKED ${when(a.acked_at)}` : local[a.key]?.s === "ok" ? `ACK${local[a.key].latency != null ? ` · ${local[a.key].latency} s` : ""}`
-    : local[a.key] ? "sent" : now - t0(a) < STALE_MS ? "waiting" : "no ACK";
+  const state = (a) =>
+    a.acked_at
+      ? `ACKED ${when(a.acked_at)}`
+      : local[a.key]?.s === "ok"
+        ? `ACK${local[a.key].latency != null ? ` · ${local[a.key].latency} s` : ""}`
+        : local[a.key]
+          ? "sent"
+          : now - t0(a) < STALE_MS
+            ? "waiting"
+            : "no ACK";
   const since = useDoc(`duty/${jid}`).data;
   const n = runs.filter((r) => (r.corridor ?? corridor) === corridor).length;
 
   return (
     <>
       <Offline />
-      <button className="mute" onClick={toggleMute} aria-pressed={muted}>{muted ? "🔇 Sound off" : "🔊 Sound on"}</button>
+      <button className="mute" onClick={toggleMute} aria-pressed={muted}>
+        {muted ? "🔇 Sound off" : "🔊 Sound on"}
+      </button>
       {muted && cur && <p className="banner pulse">SOUND OFF · ALERT ON SCREEN</p>}
-      {blocked && <button className="primary" onClick={() => { unlock(); setBlocked(false); }}>Sound is blocked. Tap to enable.</button>}
-      {cur ? <Current a={cur} t0={t0(cur)} now={now} onAck={ack} /> : (
+      {blocked && (
+        <button
+          className="primary"
+          onClick={() => {
+            unlock();
+            setBlocked(false);
+          }}
+        >
+          Sound is blocked. Tap to enable.
+        </button>
+      )}
+      {cur ? (
+        <Current a={cur} t0={t0(cur)} now={now} onAck={ack} />
+      ) : (
         <section className="card idle">
           <p className="big">On duty at {junction.name} · no vehicles approaching</p>
-          <p className="eta">{runsLoading ? "Loading…" : `${n} en route on ${corridors[corridor].name}`}</p>
+          <p className="eta">
+            {runsLoading ? "Loading…" : `${n} en route on ${corridors[corridor].name}`}
+          </p>
         </section>
       )}
       <ErrCard what="alerts" error={error} retry={retry} />
       <h2>Last alerts here</h2>
       {loading && <p className="muted">Loading…</p>}
-      {!loading && !error && sorted.length === 0 && <p className="muted">No alerts yet for {junction.name}</p>}
+      {!loading && !error && sorted.length === 0 && (
+        <p className="muted">No alerts yet for {junction.name}</p>
+      )}
       <ul className="list">
         {sorted.slice(0, 10).map((a) => (
-          <li key={a.key}><span className={`pill stage-${a.stage}`}>{a.stage}</span> {a.approach} {a.exit_move && ARROW[a.exit_move]}
-            <b style={{ float: "right" }}>{state(a)}</b><div className="muted">{when(a.created_at)} · {a.run_id}
-              <button className="replay" onClick={() => speak(a, () => setBlocked(true))}>▶ Replay</button></div></li>
+          <li key={a.key}>
+            <span className={`pill stage-${a.stage}`}>{a.stage}</span> {a.approach}{" "}
+            {a.exit_move && ARROW[a.exit_move]}
+            <b style={{ float: "right" }}>{state(a)}</b>
+            <div className="muted">
+              {when(a.created_at)} · {a.run_id}
+              <button className="replay" onClick={() => speak(a, () => setBlocked(true))}>
+                ▶ Replay
+              </button>
+            </div>
+          </li>
         ))}
       </ul>
-      {since && since.on !== false && <p className="muted">On duty since {when(since.since ?? since.updated_at ?? since.created_at)}</p>}
-      <details className="muted"><summary>debug</summary>Feed: {mode}</details>
-      <a className="duty-off" href="#" onClick={(e) => { e.preventDefault(); onOff(); }}>Off duty</a>
+      {since && since.on !== false && (
+        <p className="muted">
+          On duty since {when(since.since ?? since.updated_at ?? since.created_at)}
+        </p>
+      )}
+      <details className="muted">
+        <summary>debug</summary>Feed: {mode}
+      </details>
+      <a
+        className="duty-off"
+        href="#"
+        onClick={(e) => {
+          e.preventDefault();
+          onOff();
+        }}
+      >
+        Off duty
+      </a>
     </>
   );
 }
@@ -204,23 +388,38 @@ function Duty({ corridor, junction, onOff }) {
 export default function Cop() {
   const q = new URLSearchParams(location.search).get("corridor");
   let saved = null;
-  try { saved = JSON.parse(store.get("cop_duty")); } catch { /* ignore */ }
+  try {
+    saved = JSON.parse(store.get("cop_duty"));
+  } catch {
+    /* ignore */
+  }
   const find = (c, j) => corridors[c]?.junctions.find((x) => x.id === j);
-  const [duty, setDuty] = useState(saved && find(saved.corridor, saved.junction) && (!q || q === saved.corridor) ? saved : null);
-  const [corridor, setCorridor] = useState(corridors[q] ? q : corridors[saved?.corridor] ? saved.corridor : "blr");
+  const [duty, setDuty] = useState(
+    saved && find(saved.corridor, saved.junction) && (!q || q === saved.corridor) ? saved : null,
+  );
+  const [corridor, setCorridor] = useState(
+    corridors[q] ? q : corridors[saved?.corridor] ? saved.corridor : "blr",
+  );
   const [jn, setJn] = useState(saved?.junction);
   const js = corridors[corridor].junctions;
   const j = js.find((x) => x.id === jn) ?? js[0];
 
   if (duty) {
-    return <Duty corridor={duty.corridor} junction={find(duty.corridor, duty.junction)}
-      onOff={() => {
-        duty_(duty.corridor, duty.junction, false);
-        store.set("cop_duty", null); setDuty(null);
-      }} />;
+    return (
+      <Duty
+        corridor={duty.corridor}
+        junction={find(duty.corridor, duty.junction)}
+        onOff={() => {
+          duty_(duty.corridor, duty.junction, false);
+          store.set("cop_duty", null);
+          setDuty(null);
+        }}
+      />
+    );
   }
   const go = () => {
-    unlock(); wake(); // inside the tap: audio unlock and wake lock need the gesture
+    unlock();
+    wake(); // inside the tap: audio unlock and wake lock need the gesture
     const d = { corridor, junction: j.id };
     duty_(corridor, j.id, true);
     store.set("cop_duty", JSON.stringify(d));
@@ -229,17 +428,30 @@ export default function Cop() {
   return (
     <>
       <Offline />
-      <label>Corridor
+      <label>
+        Corridor
         <select value={corridor} onChange={(e) => setCorridor(e.target.value)}>
-          {Object.entries(corridors).map(([k, c]) => <option key={k} value={k}>{c.name}</option>)}
+          {Object.entries(corridors).map(([k, c]) => (
+            <option key={k} value={k}>
+              {c.name}
+            </option>
+          ))}
         </select>
       </label>
-      <label>Junction
+      <label>
+        Junction
         <select value={j.id} onChange={(e) => setJn(e.target.value)}>
-          {js.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+          {js.map((x) => (
+            <option key={x.id} value={x.id}>
+              {x.name}
+            </option>
+          ))}
         </select>
       </label>
-      <button className="primary giant" onClick={go}>GO ON DUTY at {j.name}<small>Turns on sound and keeps the screen awake</small></button>
+      <button className="primary giant" onClick={go}>
+        GO ON DUTY at {j.name}
+        <small>Turns on sound and keeps the screen awake</small>
+      </button>
     </>
   );
 }

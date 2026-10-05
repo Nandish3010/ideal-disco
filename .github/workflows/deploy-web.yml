@@ -20,7 +20,7 @@ jobs:
         with:
           node-version: 22
       - name: Build
-        run: cd web && npm install && npm run build
+        run: cd web && npm ci && npm run build
         env:
           VITE_FIREBASE_CONFIG: ${{ vars.VITE_FIREBASE_CONFIG }}
           VITE_MAPS_BROWSER_KEY: ${{ vars.VITE_MAPS_BROWSER_KEY }}
