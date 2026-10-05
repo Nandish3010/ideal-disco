@@ -8,6 +8,8 @@
 .alert-full.STOP { border-color: var(--bad); } .alert-full.STOP .stage { color: var(--bad); }
 .alert-full.UPDATE { border-color: var(--info); } .alert-full.UPDATE .stage { color: var(--info); }
 .alert-text { font-size: 26px; font-weight: 700; margin: 8px 0; }
+.alert-en { font-size: 16px; color: var(--muted); margin: 0 0 8px; }
+.pill.escalated { background: var(--bad); color: #000; font-weight: 800; }
 .eta { font-size: 40px; font-weight: 800; margin: 4px 0; }
 .move { font-size: 36px; font-weight: 800; margin: 4px 0; }
 button.ack { display: block; width: 100%; min-height: 180px; font-size: 56px; font-weight: 900; border-radius: 24px;
