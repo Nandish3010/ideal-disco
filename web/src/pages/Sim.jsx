@@ -6,16 +6,13 @@ import { useActiveRuns, useAlerts, useJunctions } from "../live.js";
 import CorridorMap, { HAS_MAPS_KEY } from "../map.jsx";
 import { Rationale } from "../trace.jsx";
 import { ErrCard, Offline, StateBadge, useNow } from "../ui.jsx";
+import { mmss, vehicleLabel } from "../format.js";
 import { at, savedAt, simulate, spansAt, stage } from "../replay.js";
 import "../sim.css";
 
 const scenarios = { example: scenario, "blr-two-vehicles": blrTwoVehicles };
 const dash = (v, f = (x) => x) => (v == null || v === "" ? "—" : f(v));
 const tierOf = (r) => r.confirmed_tier ?? r.acuity_tier;
-const mmss = (s) => {
-  s = Math.round(s);
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-};
 
 // scenario vehicle -> run id, kept per scenario in localStorage (the feeder writes it when it starts a run)
 const storeKey = (scn) => `sim.runs.${scn}`;
@@ -414,7 +411,7 @@ function Replay({ scn, setScn }) {
   const sim = useMemo(() => simulate(sc, corridor), [sc, corridor]);
   const [T, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState(5);
+  const [speed, setSpeed] = useState(20);
   const end = Math.ceil(sim.end_s);
   useEffect(() => {
     setT(0);
@@ -498,48 +495,50 @@ function Replay({ scn, setScn }) {
 
   return (
     <div className="replay">
-      <section className="card saved">
-        <div className="muted">Minutes saved</div>
-        <div className="bignum" role="status" aria-live={playing ? "off" : "polite"}>
-          {(saved / 60).toFixed(1)}
-          <small> min</small>
-        </div>
-        <div className="muted">
-          of {(sim.saved_s / 60).toFixed(1)} min over {sim.vehicles.length} vehicles · simulated
-          estimate on recorded traffic
-        </div>
-      </section>
-      <section className="card controls">
-        <div className="row">
-          <button
-            className="primary"
-            onClick={() => {
-              if (T >= end) setT(0);
-              setPlaying(!playing);
-            }}
-          >
-            {playing ? "Pause" : T >= end ? "Replay" : "Play"}
-          </button>
-          {[1, 5, 20].map((s) => (
-            <button key={s} className={speed === s ? "on" : ""} onClick={() => setSpeed(s)}>
-              {s}x
+      <div className="rtop">
+        <section className="card saved">
+          <div className="muted">Minutes saved</div>
+          <div className="bignum" role="status" aria-live={playing ? "off" : "polite"}>
+            {(saved / 60).toFixed(1)}
+            <small> min</small>
+          </div>
+          <div className="muted">
+            of {(sim.saved_s / 60).toFixed(1)} min over {sim.vehicles.length} vehicles · simulated
+            estimate on recorded traffic
+          </div>
+        </section>
+        <section className="card controls">
+          <div className="row">
+            <button
+              className="primary"
+              onClick={() => {
+                if (T >= end) setT(0);
+                setPlaying(!playing);
+              }}
+            >
+              {playing ? "Pause" : T >= end ? "Replay" : "Play"}
             </button>
-          ))}
-        </div>
-        <input
-          type="range"
-          min="0"
-          max={end}
-          step="1"
-          value={Math.round(T)}
-          onChange={(e) => setT(+e.target.value)}
-          aria-label="Replay time"
-        />
-        <div className="muted">
-          t = {mmss(T)} / {mmss(end)}
-        </div>
-        <ScenarioSelect value={scn} onChange={setScn} />
-      </section>
+            {[5, 20, 50].map((s) => (
+              <button key={s} className={speed === s ? "on" : ""} onClick={() => setSpeed(s)}>
+                {s}x
+              </button>
+            ))}
+            <ScenarioSelect value={scn} onChange={setScn} />
+          </div>
+          <input
+            type="range"
+            min="0"
+            max={end}
+            step="1"
+            value={Math.round(T)}
+            onChange={(e) => setT(+e.target.value)}
+            aria-label="Replay time"
+          />
+          <div className="muted">
+            t = {mmss(T)} / {mmss(end)}
+          </div>
+        </section>
+      </div>
       <div className="rgrid">
         <section className="rpane">
           <h2>
@@ -580,8 +579,7 @@ function Replay({ scn, setScn }) {
         {sim.vehicles.map((x) => (
           <div key={x.id} className="run">
             <div>
-              <b>{x.plate}</b> <span className="muted">{x.type}</span>
-              <span className={`tp t-${x.tier}`}>{dash(x.tier)}</span>
+              <b>{x.plate}</b> <span className="muted">{vehicleLabel(x.type, x.tier)}</span>
             </div>
             <dl>
               <dt>Today</dt>
@@ -610,35 +608,37 @@ function Replay({ scn, setScn }) {
 
 export default function Sim() {
   const q = new URLSearchParams(location.search);
-  const [mode, setMode] = useState(q.get("mode") === "replay" ? "replay" : "live");
+  const [mode, setMode] = useState(q.get("mode") === "live" ? "live" : "replay");
   const [scn, setScn] = useState(
     scenarios[q.get("scenario")] ? q.get("scenario") : "blr-two-vehicles",
   );
   return (
     <div className="sim">
       <Offline />
-      <div className="row modebar">
-        {["live", "replay"].map((m) => (
-          <button key={m} className={mode === m ? "on" : ""} onClick={() => setMode(m)}>
-            {m === "live" ? "Live" : "Replay"}
-          </button>
-        ))}
+      <div className="simtop">
+        <div className="row modebar">
+          {["replay", "live"].map((m) => (
+            <button key={m} className={mode === m ? "on" : ""} onClick={() => setMode(m)}>
+              {m === "live" ? "Live" : "Replay"}
+            </button>
+          ))}
+        </div>
+        <p className="muted legend">
+          Track <i className="sw jam" />
+          jam <i className="sw slow" />
+          slow · junction <i className="sw go" />
+          green = corridor open · A ambulance, F fire, P police ·{" "}
+          <span className="cb st-stale">STALE</span>{" "}
+          <span className="cb st-off_route">OFF ROUTE</span>{" "}
+          <span className="cb st-arrived">ARRIVED</span>
+          {!HAS_MAPS_KEY && (
+            <>
+              <br />
+              Map preview (SVG fallback)
+            </>
+          )}
+        </p>
       </div>
-      <p className="muted legend">
-        Track <i className="sw jam" />
-        jam <i className="sw slow" />
-        slow · junction <i className="sw go" />
-        green = corridor open · A ambulance, F fire, P police ·{" "}
-        <span className="cb st-stale">STALE</span>{" "}
-        <span className="cb st-off_route">OFF ROUTE</span>{" "}
-        <span className="cb st-arrived">ARRIVED</span>
-        {!HAS_MAPS_KEY && (
-          <>
-            <br />
-            Map preview (SVG fallback)
-          </>
-        )}
-      </p>
       {mode === "live" ? <Live scn={scn} setScn={setScn} /> : <Replay scn={scn} setScn={setScn} />}
     </div>
   );

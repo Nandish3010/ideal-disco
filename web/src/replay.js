@@ -70,16 +70,6 @@ function passes(v, corridor) {
   return out.sort((a, b) => a.t - b.t);
 }
 
-// deterministic uniform [0,1) from (seed, key): FNV-1a then one mulberry32 step
-function rand(seed, key) {
-  let h = (2166136261 ^ seed) >>> 0;
-  for (const c of key) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
-  h = (h + 0x6d2b79f5) >>> 0;
-  let t = Math.imul(h ^ (h >>> 15), 1 | h);
-  t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-}
-
 const base = (v, corridor) => ({
   plate: v.plate,
   start_s: v.start_offset_s ?? 0,
@@ -87,29 +77,17 @@ const base = (v, corridor) => ({
   passes: passes(v, corridor),
 });
 
-// "Today": stop at every junction for the remaining red of a fixed cycle (seeded random arrival phase)
-// plus the queue ahead draining at 2.0 m/s.
+// "Today": the same baseline as api/report.py. At every junction the vehicle passes it stops for the remaining red
+// (arrival at mid-red = cycle_s / 4) plus the recorded queue ahead draining at 2.0 m/s (jam_m / 2.0). Deterministic.
 export function simulateWithout(sc, corridor) {
-  const red = sc.baseline_cycle?.red_fraction ?? 0.5;
   return sc.vehicles.map((v) => {
     const b = base(v, corridor);
-    const stops = [];
-    for (const p of b.passes) {
+    const stops = b.passes.map((p) => {
       const jam_m = jamAt(sc, p.junction, p.approach, b.start_s + p.t);
-      const red_len = red * p.cycle_s,
-        phase = rand(sc.seed ?? 0, v.plate + p.junction) * p.cycle_s;
-      const red_s = phase < red_len ? red_len - phase : 0,
+      const red_s = p.cycle_s / 4,
         drain_s = jam_m / DRAIN_MPS;
-      if (red_s + drain_s > 0)
-        stops.push({
-          junction: p.junction,
-          t: p.t,
-          wait_s: red_s + drain_s,
-          red_s,
-          drain_s,
-          jam_m,
-        });
-    }
+      return { junction: p.junction, t: p.t, wait_s: red_s + drain_s, red_s, drain_s, jam_m };
+    });
     return { ...b, stops, without_s: b.duration_s + stops.reduce((s, x) => s + x.wait_s, 0) };
   });
 }
