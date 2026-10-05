@@ -10,3 +10,14 @@ npx -y @marp-team/marp-cli deck/slides.md --theme deck/theme.css --html --allow-
 ```
 
 Live preview: `npx -y @marp-team/marp-cli -s deck/ --theme deck/theme.css`. Speaker notes are HTML comments and are not rendered in the PDF.
+
+
+## Before export
+
+Fill or confirm each of these, then export and re-read the PDF:
+
+- [ ] `{MINUTES}`: the minutes-saved figure on slide 3 and in `README.md`, copied from the replay test (`web/src/__tests__/replay.test.js`); remove the `<!-- update from replay test -->` notes. Also write it in the shot 1 caption in `VIDEO.md`.
+- [ ] `N` rows (`[fill at freeze]`): the BigQuery `traffic_spans` row count at freeze, on slide 10, the architecture slide's footnote and `README.md` "Real data". Retrain the BigQuery ML model first.
+- [ ] `[link, 3 minutes]`: the unlisted video URL on the last slide.
+- [ ] Screenshots in `img/` captured from the deployed app (they are placeholders until then).
+- [ ] The agent-trace slide still matches the live trace in `/vehicle`.
