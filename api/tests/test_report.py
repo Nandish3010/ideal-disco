@@ -14,6 +14,7 @@ RUN = {
     "confirmed_tier": "critical",
     "started_at": T0,
     "distance_m": 5200,
+    "passed_junctions": ["blr_j1", "blr_j2", "blr_j3", "blr_j4"],
 }
 CYCLE = {j["id"]: j["cycle_s"] for j in CORRIDORS["blr"]["junctions"]}
 ALERTS = [
@@ -39,6 +40,24 @@ def test_baseline_maths() -> None:
     assert r["minutes_saved"] == round(saved / 60, 1)
     assert (r["junctions_cleared"], r["alerts"], r["escalations"]) == (2, 3, 1)
     assert r["ack_latency_s"] == [4.0, 8.0] and r["avg_ack_latency_s"] == 6.0
+
+
+def test_only_junctions_actually_passed_are_credited() -> None:
+    """A fire run that ended after 45 s had preemption requested at all five junctions (every junction ahead is evaluated)
+    but passed two."""
+    ids = [f"blr_j{i}" for i in range(1, 6)]
+    audits = [{"action": "preempt_requested", "junction_id": j} for j in ids]
+    alerts = [{"junction_id": j, "stage": "PREPARE", "jam_m": 200} for j in ids]
+    r = report.compute("r", {**RUN, "passed_junctions": ids[:2]}, alerts, audits, T1)
+    saved = sum(CYCLE[j.removeprefix("blr_")] / 4 + 200 / 2 for j in ids[:2])
+    assert r["junctions_cleared"] == 2 and r["baseline_s"] == r["actual_s"] + round(saved)
+    assert report.compute("r", {**RUN, "passed_junctions": []}, alerts, audits, T1)["junctions_cleared"] == 0
+    assert report.compute("r", {**RUN, "passed_junctions": ids}, alerts, audits, T1)["junctions_cleared"] == 5
+
+
+def test_a_passed_junction_without_preemption_earns_nothing() -> None:
+    r = report.compute("r", RUN, [], [{"action": "preempt_requested", "junction_id": "blr_j2"}], T1)
+    assert r["junctions_cleared"] == 1  # j1, j3, j4 were passed but never preempted
 
 
 def test_no_preemption_means_no_saving() -> None:
