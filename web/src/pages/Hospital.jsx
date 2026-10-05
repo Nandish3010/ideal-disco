@@ -96,7 +96,7 @@ function Brief({ runId }) {
     setBusy(true);
     setNote("");
     try {
-      setFresh(await api("/brief", { run_id: runId }));
+      setFresh(await api("/brief", { run_id: runId, regenerate: true }));
     } catch (e) {
       setNote(`Could not generate: ${e.message}`);
     }

@@ -34,5 +34,5 @@ reset:
 
 # starts a local OFFLINE_AI=1 API, replays data/scenarios/blr-two-vehicles.json against it, stops it
 replay-offline:
-	(cd api && OFFLINE_AI=1 GEMINI_MODEL=offline exec uvicorn main:app --port 8080) & pid=$$!; \
-	sleep 4; (cd api && python offline_replay.py); rc=$$?; kill $$pid; exit $$rc
+	(cd api && OFFLINE_AI=1 RATE_LIMIT_DISABLED=1 GEMINI_MODEL=offline exec uvicorn main:app --port 8080) & pid=$$!; \
+	sleep 4; (cd api && RATE_LIMIT_DISABLED=1 python offline_replay.py); rc=$$?; kill $$pid; exit $$rc
