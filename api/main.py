@@ -68,6 +68,7 @@ class RunReq(BaseModel):
     destination: Optional[dict] = None
     source: str = "gps"
     run_id: Optional[str] = None
+    scenario: Optional[str] = None  # a data/scenarios/<name>.json replay: recorded spans, no Routes calls
 
 
 class Triage(BaseModel):
@@ -130,7 +131,8 @@ def runs(r: RunReq):
     db.collection("runs").document(run_id).set({
         "vehicle_plate": r.plate, "vehicle_type": v.to_dict()["type"], "incident_id": r.incident_id,
         "corridor": r.corridor, "destination": r.destination, "source": r.source, "state": "en_route",
-        "patient_on_board": False, "brief_fired": False, "started_at": datetime.now(timezone.utc)})
+        "patient_on_board": False, "brief_fired": False, "started_at": datetime.now(timezone.utc),
+        **({"scenario": r.scenario} if r.scenario else {})})
     log(event="run_started", run_id=run_id, plate=r.plate)
     return {"run_id": run_id}
 
