@@ -379,7 +379,7 @@ function Duty({ corridor, junction, onOff }) {
         </p>
       )}
       <details className="muted">
-        <summary>debug</summary>Feed: {mode}
+        <summary>Feed diagnostics</summary>Feed: {mode}
       </details>
       <a
         className="duty-off"

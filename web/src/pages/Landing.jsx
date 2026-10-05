@@ -1,4 +1,19 @@
 import { BASE } from "../api.js";
+import { corridors } from "../data.js";
+import { simulate } from "../replay.js";
+import scenario from "../../../data/scenarios/blr-two-vehicles.json";
+
+// The hero figure comes from the same replay maths as /sim, computed once from the scenario, so the two always agree.
+const SAVED_MIN = (simulate(scenario, corridors[scenario.corridor]).saved_s / 60).toFixed(1);
+
+const GEMINI = [
+  "Voice and photo extraction: the crew's spoken or photographed triage note becomes a fixed-schema record.",
+  "ATMIST brief: the structured handover the hospital reads before the patient arrives.",
+  "Alert phrasing: the short spoken line each junction cop hears.",
+  "Order rationale: why one vehicle goes first when two reach a junction together.",
+  "After-action report: a plain summary of each finished run.",
+  "Hospital routing agent: built on Agent Development Kit, with a code guard that checks its choice before it is applied.",
+];
 
 const SCREENS = [
   [
@@ -6,11 +21,15 @@ const SCREENS = [
     "Vehicle",
     "Crew binds a plate, starts a run, speaks a triage note and confirms the tier.",
   ],
-  ["/cop", "Cop", "Junction police go on duty, hear the alert in their own language and ACK."],
+  [
+    "/cop",
+    "Cop",
+    "Junction police go on duty, hear the alert (spoken in plain English; Kannada and Telugu switchable) and ACK.",
+  ],
   [
     "/hospital",
     "Hospital",
-    "Countdown to arrival, live vitals, and an AI handover brief the team can tick off.",
+    "Countdown to arrival, live vitals, and a handover brief the team can tick off.",
   ],
   [
     "/control",
@@ -28,13 +47,28 @@ const SCREENS = [
 export default function Landing() {
   return (
     <div className="landing">
+      <section className="hero" aria-labelledby="hero-h">
+        <h2 id="hero-h">Clear the road before the siren arrives.</h2>
+        <p className="lede">
+          Junction police get a spoken heads-up for every ambulance, fire engine and police car on
+          its way, and the hospital gets the brief before arrival.
+        </p>
+        <p className="herofig">
+          <b>{SAVED_MIN} min</b> saved on the Bengaluru two-vehicle replay{" "}
+          <span className="muted">(simulated estimate on recorded traffic)</span>
+        </p>
+        <a className="cta" href="/sim">
+          Watch the replay
+        </a>
+      </section>
+
       <p className="lede">
         <b>The problem:</b> ambulances, fire engines and police cars lose minutes at red lights and
         queues, and junction police only find out when the siren is already there.
       </p>
       <p className="lede">
         <b>The fix:</b> a green corridor. The moment a vehicle is on its way, each junction on its
-        route gets a spoken heads-up, the signal is held green, and the hospital gets the patient
+        route gets a spoken heads-up so police can open the way, and the hospital gets the patient
         brief before arrival.
       </p>
 
@@ -45,7 +79,7 @@ export default function Landing() {
           <a className="inline" href="/sim?mode=replay">
             /sim
           </a>
-          , choose Replay and press Play at 20x. Watch the minutes-saved counter climb.
+          , press Play (Replay opens at 20x). Watch the minutes-saved counter climb.
         </li>
         <li>
           Open{" "}
@@ -59,7 +93,7 @@ export default function Landing() {
           <a className="inline" href="/hospital">
             /hospital
           </a>{" "}
-          and read the Last handover panel (Sample handover).
+          and open Last handover (appears after a live run).
         </li>
       </ol>
 
@@ -73,9 +107,18 @@ export default function Landing() {
         ))}
       </nav>
 
+      <h2>Where Gemini is used</h2>
+      <ul className="gem">
+        {GEMINI.map((g) => (
+          <li key={g}>{g}</li>
+        ))}
+      </ul>
+
+      <h2>Honest limits</h2>
       <p className="banner">
-        Honest line: traffic and GPS signals are simulated, every patient is synthetic, and sign-in
-        is demo-only. Minutes saved is a simulated estimate, not a measurement.
+        Traffic signals are simulated behind an adapter; the demo scenario uses hand-authored
+        traffic spans; patients are synthetic; no authentication in the demo. Minutes saved is a
+        simulated estimate, not a measurement.
       </p>
       <p className="muted">
         <a className="inline" href="https://github.com/Nandish3010/ideal-disco">

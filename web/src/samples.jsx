@@ -9,6 +9,7 @@ import {
   query,
 } from "firebase/firestore";
 import { db } from "./firebase.js";
+import { vehicleLabel } from "./format.js";
 import { ErrCard, useDoc, useListen, useLog, when } from "./ui.jsx";
 import { TraceCard } from "./trace.jsx";
 import { firstWithAudio, lastBrief, lastRouted } from "./pick.js";
@@ -156,13 +157,14 @@ export function LastRouting() {
 }
 
 // Report-card heading: the vehicle plate and tier of a run instead of its raw id (run id while the run doc loads).
-export function RunLabel({ id, tier }) {
+export function RunLabel({ id, tier, type }) {
   const r = useDoc(`runs/${id}`).data;
   const t = tier ?? r?.confirmed_tier ?? r?.acuity_tier;
+  const ty = type ?? r?.vehicle_type;
   return (
     <b>
       {r?.vehicle_plate ?? id}
-      {t ? ` · ${t}` : ""}
+      {ty || t ? ` · ${vehicleLabel(ty, t)}` : ""}
     </b>
   );
 }

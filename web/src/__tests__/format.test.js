@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mmss, seqLine, traceLine } from "../format.js";
+import { mmss, seqLine, traceLine, vehicleLabel } from "../format.js";
 
 describe("traceLine", () => {
   it("prefers text and uses an arrow", () => {
@@ -46,3 +46,12 @@ describe("seqLine", () => {
 });
 
 it("mmss", () => expect(mmss(394)).toBe("6:34"));
+
+describe("vehicleLabel", () => {
+  it("turns type and tier enums into labels", () => {
+    expect(vehicleLabel("fire", "fire_with_trapped")).toBe("Fire engine · trapped persons");
+    expect(vehicleLabel("ambulance", "critical")).toBe("Ambulance · critical");
+    expect(vehicleLabel("fire", "fire")).toBe("Fire engine");
+    expect(vehicleLabel("police", "police_with_incident")).toBe("Police · incident");
+  });
+});

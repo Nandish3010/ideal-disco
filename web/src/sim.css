@@ -252,3 +252,61 @@ main:has(.sim) {
 .sim .sw.go {
   background: var(--accent);
 }
+
+/* compact top: mode toggle and legend on one line, minutes saved beside the controls */
+.sim .simtop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  margin-bottom: 8px;
+}
+.sim .simtop .modebar,
+.sim .simtop .legend {
+  margin: 0;
+}
+.sim .simtop .modebar button {
+  min-height: 44px;
+}
+.rtop {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr);
+}
+.replay .controls .row {
+  align-items: flex-end;
+  margin-bottom: 8px;
+}
+.replay .controls .row label {
+  flex: 2;
+  margin: 0;
+}
+.replay .controls select {
+  min-height: 44px;
+  margin-top: 0;
+}
+.replay .controls .row button {
+  min-height: 44px;
+}
+@media (min-width: 900px) {
+  .rtop {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  }
+  .rtop .card {
+    margin: 0;
+    padding: 8px 14px;
+  }
+  .replay .bignum {
+    font-size: 44px;
+  }
+  .replay .controls .muted {
+    font-size: 16px;
+  }
+  .sim .simmap.rmap {
+    height: calc(100dvh - 430px);
+    min-height: 300px;
+  }
+  .rpane h2 {
+    margin: 0 0 4px;
+  }
+}

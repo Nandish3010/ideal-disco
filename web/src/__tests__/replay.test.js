@@ -38,10 +38,11 @@ describe("lead time maths", () => {
 });
 
 describe("simulate()", () => {
-  it("is deterministic and saves the recorded total on blr-two-vehicles", () => {
+  // Baseline is api/report.py's: per passed junction, stop = cycle_s / 4 + jam_m / 2.0, jam from the recorded spans.
+  it("is deterministic and saves 988 s (16.5 min) on blr-two-vehicles", () => {
     const a = simulate(scenario, blr);
     expect(simulate(scenario, blr).saved_s).toBe(a.saved_s);
-    expect(a.saved_s).toBeGreaterThan(600);
-    expect(a.saved_s).toBeCloseTo(738.8453710749745, 6);
+    expect(a.saved_s).toBeCloseTo(988, 6);
+    expect(a.vehicles.map((v) => Math.round(v.saved_s))).toEqual([473, 30, 485]);
   });
 });

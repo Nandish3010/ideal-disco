@@ -8,6 +8,7 @@ import { Rationale, TraceCard } from "../trace.jsx";
 import { AfterAction } from "./Hospital.jsx";
 import { RunLabel } from "../samples.jsx";
 import { withMethod } from "../pick.js";
+import { mmss } from "../format.js";
 import { ErrCard, Offline, StateBadge, useListen, useNow } from "../ui.jsx";
 import "../control.css";
 
@@ -326,10 +327,10 @@ export default function Control() {
             ) : (
               reports.map((r) => (
                 <div key={r.id} className="rep">
-                  <RunLabel id={r.id} tier={r.confirmed_tier} />
+                  <RunLabel id={r.id} tier={r.confirmed_tier} type={r.vehicle_type} />
                   <span>{dash(r.minutes_saved, (m) => `${m} min saved`)}</span>
                   <span className="muted">
-                    {dash(r.baseline_s)} s baseline → {dash(r.actual_s)} s actual ·{" "}
+                    {dash(r.baseline_s, mmss)} baseline → {dash(r.actual_s, mmss)} actual ·{" "}
                     {dash(r.junctions_cleared)} junctions
                     {r.ack_latency_s?.length ? ` · ACK ${r.ack_latency_s.join(", ")} s` : ""}
                   </span>
