@@ -6,7 +6,7 @@ main:has(.sim) { max-width: none; padding: 8px; }
 .sim .stage.s-PREPARE { background: var(--warn); color: #000; }
 .sim .stage.s-STOP { background: var(--bad); color: #000; }
 .sim .stage.s-UPDATE { background: #3b82f6; color: #fff; }
-.simgrid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.simgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .simmap { height: 55dvh; min-height: 280px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: #1d2430; }
 .cmap { display: block; width: 100%; height: 100%; }
 .simpanel .card { margin: 0 0 8px; }
@@ -45,3 +45,7 @@ main:has(.sim) { max-width: none; padding: 8px; }
   .simmap { height: calc(100dvh - 190px); }
   .simpanel { max-height: calc(100dvh - 190px); overflow-y: auto; }
 }
+.sim .legend { font-size: 14px; margin: 0 0 8px; }
+.sim .legend .cb { font-size: 12px; padding: 0 8px; }
+.sim .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 3px 0 2px; vertical-align: baseline; }
+.sim .sw.jam { background: #ff4d4d; } .sim .sw.slow { background: var(--warn); } .sim .sw.go { background: var(--accent); }

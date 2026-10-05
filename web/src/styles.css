@@ -62,3 +62,14 @@ pre { white-space: pre-wrap; word-break: break-word; font-size: 16px; background
 .chip { font-size: 16px; background: #2a313b; border: 1px solid var(--line); border-radius: 99px; padding: 2px 10px; }
 .summary { margin: 0 0 12px; }
 .card .kv { display: block; font-size: inherit; } /* cop.css also defines a grid .kv for the hospital timeline */
+/* shared UI states: offline banner, run state badges */
+.offline { position: fixed; top: 0; left: 0; right: 0; z-index: 5; height: 24px; line-height: 24px; text-align: center;
+  background: var(--warn); color: #000; font-size: 14px; font-weight: 700; }
+body:has(.offline) { padding-top: 24px; }
+body:has(.offline) .bar { top: 24px; }
+.card.bad { overflow-wrap: anywhere; }
+.card.bad button { min-height: 44px; margin-left: 8px; }
+.cb { font-size: 13px; font-weight: 700; padding: 1px 10px; border-radius: 99px; background: #2a313b; color: var(--fg); white-space: nowrap; }
+.cb.st-en_route, .cb.st-arrived { background: var(--accent); color: #000; }
+.cb.st-off_route { background: var(--warn); color: #000; }
+.cb.st-stale { background: #59616d; color: #fff; }

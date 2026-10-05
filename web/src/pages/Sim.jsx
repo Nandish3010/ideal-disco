@@ -4,7 +4,8 @@ import blrTwoVehicles from "../../../data/scenarios/blr-two-vehicles.json";
 import { api } from "../api.js";
 import { startFeed, startFeedAll } from "../feeder.js";
 import { useActiveRuns, useAlerts, useJunctions } from "../live.js";
-import CorridorMap from "../map.jsx";
+import CorridorMap, { HAS_MAPS_KEY } from "../map.jsx";
+import { ErrCard, Offline, StateBadge, useNow } from "../ui.jsx";
 import { at, savedAt, simulate, spansAt, stage } from "../replay.js";
 import "../sim.css";
 
@@ -18,10 +19,12 @@ const storeKey = (scn) => `sim.runs.${scn}`;
 const loadRuns = (scn) => { try { return JSON.parse(localStorage.getItem(storeKey(scn))) ?? {}; } catch { return {}; } };
 const saveRuns = (scn, m) => { try { localStorage.setItem(storeKey(scn), JSON.stringify(m)); } catch { /* private mode */ } };
 
-function Alerts({ rows, mode }) {
+function Alerts({ rows, mode, loading, error, retry }) {
   return (
     <div className="alerts" title={mode === "per-run" ? "per-run reads (collectionGroup index missing)" : undefined}>
-      {rows.length === 0 && <span className="muted">No alerts yet.</span>}
+      <ErrCard what="alerts" error={error} retry={retry} />
+      {loading && <span className="muted">Loading…</span>}
+      {!loading && !error && rows.length === 0 && <span className="muted">No alerts yet.</span>}
       {rows.map((a) => (
         <div key={`${a.run_id}/${a.id}`} className="alert">
           <b className={`stage s-${a.stage}`}>{dash(a.stage)}</b>
@@ -46,8 +49,9 @@ function ScenarioSelect({ value, onChange, disabled }) {
 function Live({ scn, setScn }) {
   const [cid, setCid] = useState(() => { const c = new URLSearchParams(location.search).get("corridor"); return corridors[c] ? c : "blr"; });
   const corridor = corridors[cid];
-  const junctions = useJunctions(cid);
-  const runs = useActiveRuns(cid);
+  const now = useNow();
+  const jq = useJunctions(cid), junctions = jq.data;
+  const rq = useActiveRuns(cid), runs = rq.data;
   const alerts = useAlerts(runs.map((r) => r.id).sort());
   const pickCorridor = (c) => {
     setCid(c);
@@ -114,7 +118,7 @@ function Live({ scn, setScn }) {
   // vehicles at their last tick; the feeder's own position fills in until the backend writes ticks[]
   const vehicles = runs.map((r) => {
     const k = r.ticks?.at(-1);
-    return { id: r.id, type: r.vehicle_type, lat: k?.lat ?? r.lat, lng: k?.lng ?? r.lng };
+    return { id: r.id, type: r.vehicle_type, lat: k?.lat ?? r.lat, lng: k?.lng ?? r.lng, stale: r.state === "stale" };
   }).filter((x) => Number.isFinite(x.lat));
   for (const x of sc.vehicles) {
     const p = progs[x.plate];
@@ -131,6 +135,8 @@ function Live({ scn, setScn }) {
 
   return (
     <>
+      <ErrCard what="active runs" error={rq.error} retry={rq.retry} />
+      <ErrCard what="junction state" error={jq.error} retry={jq.retry} />
       <Alerts {...alerts} />
       <div className="simgrid">
         <div className="simmap"><CorridorMap corridor={corridor} junctions={junctions} vehicles={vehicles} spans={spans} /></div>
@@ -142,7 +148,8 @@ function Live({ scn, setScn }) {
               </select>
             </label>
             <h2>Active runs ({runs.length})</h2>
-            {runs.length === 0 && <p className="muted">None. Start a run on /vehicle or feed one below.</p>}
+            {rq.loading && <p className="muted">Loading…</p>}
+            {!rq.loading && !rq.error && runs.length === 0 && <p className="muted">No vehicles on the corridor right now</p>}
             {runs.map((r) => (
               <div key={r.id} className="run">
                 <div><b>{r.vehicle_plate ?? r.id}</b> <span className="muted">{dash(r.vehicle_type)}</span>
@@ -151,7 +158,7 @@ function Live({ scn, setScn }) {
                   <dt>Next</dt><dd>{dash(r.next_junction_id)}</dd>
                   <dt>ETA</dt><dd>{dash(r.eta_s, (s) => `${s} s`)}</dd>
                   <dt>Stage</dt><dd>{dash(stageOf(r))}</dd>
-                  <dt>State</dt><dd>{dash(r.state)}</dd>
+                  <dt>State</dt><dd><StateBadge run={r} now={now} /></dd>
                 </dl>
               </div>
             ))}
@@ -332,11 +339,17 @@ export default function Sim() {
   const [scn, setScn] = useState(scenarios[q.get("scenario")] ? q.get("scenario") : "blr-two-vehicles");
   return (
     <div className="sim">
+      <Offline />
       <div className="row modebar">
         {["live", "replay"].map((m) => (
           <button key={m} className={mode === m ? "on" : ""} onClick={() => setMode(m)}>{m === "live" ? "Live" : "Replay"}</button>
         ))}
       </div>
+      <p className="muted legend">
+        Track <i className="sw jam" />jam <i className="sw slow" />slow · junction <i className="sw go" />green = corridor open · A ambulance, F fire, P police ·{" "}
+        <span className="cb st-stale">STALE</span> <span className="cb st-off_route">OFF ROUTE</span> <span className="cb st-arrived">ARRIVED</span>
+        {!HAS_MAPS_KEY && <><br />Map preview (SVG fallback)</>}
+      </p>
       {mode === "live" ? <Live scn={scn} setScn={setScn} /> : <Replay scn={scn} setScn={setScn} />}
     </div>
   );

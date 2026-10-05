@@ -3,26 +3,26 @@ import { collection, collectionGroup, limit, onSnapshot, orderBy, query, where }
 import { db } from "../firebase.js";
 import { api } from "../api.js";
 import { corridors } from "../data.js";
-import { deviceId, store, useDoc, when } from "../ui.jsx";
+import { ErrCard, Offline, StateBadge, deviceId, store, useDoc, useNow, when } from "../ui.jsx";
 import "../cop.css";
 
 export const ms = (v) => v?.toMillis?.() ?? (v ? Date.parse(v) : null);
 
-export function useNow(step = 1000) {
-  const [n, setN] = useState(Date.now());
-  useEffect(() => { const id = setInterval(() => setN(Date.now()), step); return () => clearInterval(id); }, [step]);
-  return n;
-}
+export { useNow }; // moved to ui.jsx; Hospital imports it from here
 
 // Live en_route runs (shared with the hospital page). Single-field filter, no index needed.
 export function useEnRoute() {
-  const [s, setS] = useState({ runs: [] });
-  useEffect(() => onSnapshot(
-    query(collection(db, "runs"), where("state", "==", "en_route")),
-    (q) => setS({ runs: q.docs.map((d) => ({ id: d.id, ...d.data() })) }),
-    (e) => setS({ runs: [], error: e.message }),
-  ), []);
-  return s;
+  const [s, setS] = useState({ runs: [], loading: true });
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    setS({ runs: [], loading: true });
+    return onSnapshot(
+      query(collection(db, "runs"), where("state", "==", "en_route")),
+      (q) => setS({ runs: q.docs.map((d) => ({ id: d.id, ...d.data() })) }),
+      (e) => setS({ runs: [], error: e.message }),
+    );
+  }, [n]);
+  return { ...s, retry: () => setN((x) => x + 1) };
 }
 
 // ---- audio: unlocked in the on-duty tap (iOS needs a gesture), one shared element reused for every alert
@@ -55,14 +55,16 @@ function speak(a, onBlocked) {
 // ---- alerts for one junction. collectionGroup(alerts) on (junction_id, created_at desc), which has an index.
 // If the query throws (index missing), fall back to en_route runs + each run's alerts.
 function useAlerts(jid) {
-  const [s, setS] = useState({ alerts: [], mode: "collectionGroup" });
+  const [s, setS] = useState({ alerts: [], mode: "collectionGroup", loading: true });
+  const [n, setN] = useState(0);
   useEffect(() => {
+    setS({ alerts: [], mode: "collectionGroup", loading: true });
     let subs = [];
     const row = (d) => { const run_id = d.ref.parent.parent.id; return { ...d.data(), run_id, n: d.id, key: `${run_id}/${d.id}` }; };
     const fallback = (reason) => {
       const byRun = {}, inner = {};
-      const push = () => setS({ mode: "active runs (collectionGroup failed: " + reason + ")", alerts: Object.values(byRun).flat() });
-      push();
+      const push = (loading = false) => setS({ mode: "active runs (collectionGroup failed: " + reason + ")", alerts: Object.values(byRun).flat(), loading });
+      push(true);
       subs.push(onSnapshot(query(collection(db, "runs"), where("state", "==", "en_route")), (q) => {
         const ids = new Set(q.docs.map((d) => d.id));
         for (const id of ids) if (!inner[id]) {
@@ -76,8 +78,8 @@ function useAlerts(jid) {
       (q) => setS({ mode: "collectionGroup", alerts: q.docs.map(row) }),
       (e) => { subs.forEach((f) => f()); subs = []; fallback(e.code || "error"); }));
     return () => subs.forEach((f) => f());
-  }, [jid]);
-  return s;
+  }, [jid, n]);
+  return { ...s, retry: () => setN((x) => x + 1) };
 }
 
 // Fire and forget: until the endpoint exists (501) or offline, duty stays a local-only state.
@@ -101,7 +103,7 @@ function Current({ a, t0, now, onAck }) {
         {now - t0 > 20000 || a.escalated ? <span className="pill escalated">ESCALATED</span> : null}
         <p className="alert-text">{a.text_local || a.text}</p>
         {a.text_local && <p className="alert-en">{a.text}</p>}
-        <p className="muted">{run?.vehicle_type ?? "vehicle"}{tier ? ` · ${tier}` : ""}{a.approach ? ` · ${a.approach} approach` : ""}{a.jam_m ? ` · ${a.jam_m} m queue` : ""}</p>
+        <p className="muted">{run?.vehicle_type ?? "vehicle"}{tier ? ` · ${tier}` : ""}{run && run.state !== "en_route" ? <> · <StateBadge run={run} now={now} /></> : null}{a.approach ? ` · ${a.approach} approach` : ""}{a.jam_m ? ` · ${a.jam_m} m queue` : ""}</p>
         <p className="eta">arrives {left(rem)}</p>
         {a.exit_move && <p className="move">{ARROW[a.exit_move]} turning {a.exit_move.toUpperCase()}</p>}
       </div>
@@ -112,8 +114,8 @@ function Current({ a, t0, now, onAck }) {
 
 function Duty({ corridor, junction, onOff }) {
   const jid = `${corridor}_${junction.id}`;
-  const { alerts, mode, error } = useAlerts(jid);
-  const { runs } = useEnRoute();
+  const { alerts, mode, error, loading, retry } = useAlerts(jid);
+  const { runs, loading: runsLoading } = useEnRoute();
   const now = useNow();
   const [local, setLocal] = useState({});
   const [blocked, setBlocked] = useState(false);
@@ -171,18 +173,20 @@ function Duty({ corridor, junction, onOff }) {
 
   return (
     <>
+      <Offline />
       <button className="mute" onClick={toggleMute} aria-pressed={muted}>{muted ? "🔇 Sound off" : "🔊 Sound on"}</button>
       {muted && cur && <p className="banner pulse">SOUND OFF · ALERT ON SCREEN</p>}
       {blocked && <button className="primary" onClick={() => { unlock(); setBlocked(false); }}>Sound is blocked. Tap to enable.</button>}
       {cur ? <Current a={cur} t0={t0(cur)} now={now} onAck={ack} /> : (
         <section className="card idle">
           <p className="big">On duty at {junction.name} · no vehicles approaching</p>
-          <p className="eta">{n} en route on {corridors[corridor].name}</p>
+          <p className="eta">{runsLoading ? "Loading…" : `${n} en route on ${corridors[corridor].name}`}</p>
         </section>
       )}
-      {error && <p className="card bad">Feed error: {error}</p>}
+      <ErrCard what="alerts" error={error} retry={retry} />
       <h2>Last alerts here</h2>
-      {sorted.length === 0 && <p className="muted">None yet.</p>}
+      {loading && <p className="muted">Loading…</p>}
+      {!loading && !error && sorted.length === 0 && <p className="muted">No alerts yet for {junction.name}</p>}
       <ul className="list">
         {sorted.slice(0, 10).map((a) => (
           <li key={a.key}><span className={`pill stage-${a.stage}`}>{a.stage}</span> {a.approach} {a.exit_move && ARROW[a.exit_move]}
@@ -224,6 +228,7 @@ export default function Cop() {
   };
   return (
     <>
+      <Offline />
       <label>Corridor
         <select value={corridor} onChange={(e) => setCorridor(e.target.value)}>
           {Object.entries(corridors).map(([k, c]) => <option key={k} value={k}>{c.name}</option>)}
