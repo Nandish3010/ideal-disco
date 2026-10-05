@@ -16,3 +16,5 @@ steps:
 images:
   - asia-south1-docker.pkg.dev/green-corridor-2026/corridor/traffic-logger:$_TAG
   - asia-south1-docker.pkg.dev/green-corridor-2026/corridor/traffic-logger:latest
+options:
+  logging: CLOUD_LOGGING_ONLY
