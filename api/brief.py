@@ -1,11 +1,10 @@
 """Hospital handover brief: ATMIST + prep checklist from the transit log. Transcription support; Gemini only restates the log."""
 import json
-import os
 
 from google.genai import types
 from pydantic import BaseModel, Field
 
-from gemini import LONG_TIMEOUT_MS, generate_json
+from gemini import LONG_TIMEOUT_MS, generate_json, text_models
 
 DISCLAIMER = "Synthetic patient. Clinician confirms."
 SYSTEM = ("You help clinicians by turning an ambulance crew's transit log into a handover brief; this is transcription "
@@ -40,8 +39,8 @@ def generate(run, log_entries, lang="en", run_id=None):
     ctx = {"run": {k: run.get(k) for k in keep}, "log": log_entries}
     cfg = types.GenerateContentConfig(system_instruction=SYSTEM + f" Write in language code '{lang}'.",
                                       response_mime_type="application/json", response_schema=Brief)
-    # ponytail: one try per model, 15 s each, since this runs inline in /location (the primary preview model often takes > 8 s)
-    return generate_json([os.environ["GEMINI_MODEL"], os.environ["GEMINI_FALLBACK_MODEL"]], json.dumps(ctx, default=str),
+    # ponytail: one try per model, 15 s each, since this runs inline in /location (the preview text model often takes > 8 s)
+    return generate_json(text_models(), json.dumps(ctx, default=str),
                          cfg, Brief, run_id, LONG_TIMEOUT_MS, what="brief")
 
 

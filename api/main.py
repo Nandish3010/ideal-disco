@@ -19,18 +19,20 @@ import brief
 import gemini
 import leadtime
 import priority
+import report
 import routes_api
 from corridor import CORRIDORS, SCENARIOS, bearing, distance_m, junctions_ahead, locate
 from firestore_client import db
 from gemini import ExtractionFailed, extract, log
 from hospitals import by_id
 from signal_adapter import SimAdapter
-from tts import speak, translate
+from tts import speak, store_photo, translate
 
 app = FastAPI(title="corridor-api")
 # ponytail: demo, no auth, any origin
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+IMAGE_MIMES = {"image/jpeg", "image/png", "image/webp"}
 TIERS = {"critical", "urgent", "stable", "fire", "fire_with_trapped", "police", "police_with_incident"}
 
 
@@ -73,6 +75,7 @@ class Triage(BaseModel):
     vehicle_type: Optional[str] = None
     text: Optional[str] = None
     audio_b64: Optional[str] = None
+    image_b64: Optional[str] = None  # photo of a monitor or ECG strip; mime is then image/jpeg|png|webp
     mime: Optional[str] = None
     lang_hint: Optional[str] = None
     kind: Optional[str] = None  # /log only
@@ -114,7 +117,7 @@ def runs(r: RunReq):
             return err(404, "unknown_run")
         ref.update({"state": "ended", "ahead_ids": []})
         log(event="run_ended", run_id=r.run_id)
-        return {"run_id": r.run_id, "state": "ended"}
+        return {"run_id": r.run_id, "state": "ended", "report": report.write(r.run_id, ref)}
     if r.action != "start" or not (r.plate and r.incident_id and r.corridor):
         return err(400, "bad_request", detail="start needs plate, incident_id, corridor")
     v = db.collection("vehicles").document(r.plate).get()
@@ -140,21 +143,26 @@ def _extract_and_log(t: Triage, interventions=False):
         return err(404, "unknown_run")
     run = run.to_dict()
     audio = base64.b64decode(t.audio_b64) if t.audio_b64 else None
-    if not (audio or t.text):
-        return err(400, "bad_request", detail="audio_b64 or text required")
+    image = base64.b64decode(t.image_b64) if t.image_b64 else None
+    if not (audio or image or t.text):
+        return err(400, "bad_request", detail="audio_b64, image_b64 or text required")
+    if image and (audio or t.mime not in IMAGE_MIMES):
+        return err(400, "bad_request", detail=f"image_b64 takes mime {sorted(IMAGE_MIMES)} and no audio_b64")
     try:
         fields = extract(audio, t.mime, t.text, t.vehicle_type or run["vehicle_type"], t.lang_hint, run_id=t.run_id,
-                        interventions=interventions)
+                        interventions=interventions, image_bytes=image)
     except ExtractionFailed:
         log(event="extraction_failed", run_id=t.run_id)
         return err(422, "extraction_failed", fallback="form")
     given = fields.pop("interventions", [])  # kept on the entry, not inside fields
     coll = run_ref.collection("log")
     n = len(list(coll.stream()))  # ponytail: count-based index, racy under concurrent writers
+    photo_url = store_photo(image, t.mime, f"photos/{t.run_id}/{n}.jpg") if image else None  # None: upload failed, entry still saved
     coll.document(str(n)).set({
-        "t": datetime.now(timezone.utc), "kind": t.kind or ("voice" if audio else "form"),
-        "transcript_en": fields["transcript_en"], "fields": fields, "interventions": given, "confirmed": False})
-    return run, fields, run_ref, n, given
+        "t": datetime.now(timezone.utc), "kind": t.kind or ("photo" if image else "voice" if audio else "form"),
+        "transcript_en": fields["transcript_en"], "fields": fields, "interventions": given, "confirmed": False,
+        **({"photo_url": photo_url} if image else {})})
+    return run, fields, run_ref, n, given, photo_url
 
 
 @app.post("/triage")
@@ -162,12 +170,13 @@ def triage(t: Triage):
     out = _extract_and_log(t)
     if isinstance(out, JSONResponse):
         return out
-    run, fields, run_ref, _, _ = out
+    run, fields, run_ref, _, _, photo_url = out
     vtype = t.vehicle_type or run["vehicle_type"]
     tier = acuity.tier({**fields, "incident_id": run.get("incident_id")}, vtype)
     run_ref.update({"acuity_tier": tier})
     log(event="triage", run_id=t.run_id, suggested_tier=tier)
-    return {"fields": fields, "transcript_en": fields["transcript_en"], "suggested_tier": tier}
+    return {"fields": fields, "transcript_en": fields["transcript_en"], "suggested_tier": tier,
+            **({"photo_url": photo_url} if t.image_b64 else {})}
 
 
 @app.post("/log")
@@ -175,8 +184,9 @@ def log_entry(t: Triage):
     out = _extract_and_log(t, interventions=True)
     if isinstance(out, JSONResponse):
         return out
-    _, fields, _, n, given = out
-    return {"n": n, "transcript_en": fields["transcript_en"], "fields": fields, "interventions": given, "confirmed": False}
+    _, fields, _, n, given, photo_url = out
+    return {"n": n, "transcript_en": fields["transcript_en"], "fields": fields, "interventions": given, "confirmed": False,
+            **({"photo_url": photo_url} if t.image_b64 else {})}
 
 
 @app.post("/runs/{run_id}/confirm")
@@ -249,7 +259,7 @@ class Loc(BaseModel):
 
 
 LIVE = {"en_route", "off_route", "stale"}  # ticks revive stale and off_route runs; ended/arrived get 403
-OFF_ROUTE_M, STALE_S, BRIEF_ETA_S, MIN_TICK_GAP_S = 80, 30, 300, 5
+OFF_ROUTE_M, STALE_S, BRIEF_ETA_S, MIN_TICK_GAP_S, ARRIVE_M = 80, 30, 300, 5, 100
 LABEL = {"ambulance": "AMBULANCE", "fire": "FIRE ENGINE", "police": "POLICE"}
 COMPASS = {"N": "north", "NE": "north-east", "E": "east", "SE": "south-east", "S": "south", "SW": "south-west",
            "W": "west", "NW": "north-west"}
@@ -471,6 +481,11 @@ def location(l: Loc):
         entries = log_entries(ref)
         upd["brief_due"] = out["brief_due"] = bool(entries)
     upd["contenders"] = sorted(contenders - {l.run_id})
+    upd["distance_m"] = round(run.get("distance_m", 0) + (distance_m((last["lat"], last["lng"]), me) if last else 0))
+    arrived = distance_m(me, (dest["lat"], dest["lng"])) <= ARRIVE_M
+    if arrived:
+        upd.update({"state": "arrived", "ahead_ids": [], "ahead": {}})
+        out["state"] = "arrived"
     ref.update(upd)
     if entries:
         try:
@@ -480,6 +495,8 @@ def location(l: Loc):
             log(event="brief_error", run_id=l.run_id, via="location")
     mark_stale(now, l.run_id)
     escalate(now, [l.run_id], upd["contenders"])
+    if arrived:
+        report.write(l.run_id, ref)
     return out
 
 

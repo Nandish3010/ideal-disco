@@ -28,7 +28,7 @@ Clients read; only the Cloud Run service account writes. Every server log line c
 }
 ```
 `routing` (written by the hospital routing agent, below) is optional until the tier is confirmed.
-`state`: `en_route | arrived | ended | stale | off_route`. `source`: `gps | sim`. `acuity_tier` is the lookup result written by `/triage`, `confirmed_tier` the crew's tap written by `/runs/{id}/confirm` (which also sets `patient_on_board: true`); only `confirmed_tier` enters priority.
+`state`: `en_route | arrived | ended | stale | off_route`. `/location` sets `arrived` (and writes the report card) when a tick is within 100 m of the destination; `/runs` end sets `ended`. `source`: `gps | sim`. `acuity_tier` is the lookup result written by `/triage`, `confirmed_tier` the crew's tap written by `/runs/{id}/confirm` (which also sets `patient_on_board: true`); only `confirmed_tier` enters priority.
 
 Written by `/location` on every tick:
 ```json
@@ -39,10 +39,10 @@ Written by `/location` on every tick:
   "next_junction_id": "blr_j3", "next_approach": "NE", "next_eta_s": 143,
   "ahead_ids": ["blr_j3", "blr_j4"], "ahead": {"blr_j3": {"eta_s": 143, "approach": "NE"}, "blr_j4": {"eta_s": 215, "approach": "E"}},
   "last_eval": {"next_junction": "blr_j3", "approach": "NE", "jam_m": 520, "eta_s": 143, "stage": "PREPARE", "exit_move": "left", "traffic": "live"},
-  "alert_state": {"blr_j3": {"prepare": true, "stop": false, "jam_m": 520}}, "alert_count": 1
+  "alert_state": {"blr_j3": {"prepare": true, "stop": false, "jam_m": 520}}, "alert_count": 1, "distance_m": 2310
 }
 ```
-`ticks` keeps the last 12 (at most one per 5 s, so they span about a minute; `t` is the client's tick time). `last_tick_at` is server time and drives the stale check. `ahead` / `ahead_ids` list every junction still ahead (nearest first in `next_*`); other runs read them to find contenders. `last_eval.traffic`: `live | stale | scenario`; `stale` means Routes failed and no spans under 60 s old were left, so the queue was treated as NORMAL (control room shows "traffic data stale"). `brief_due` is set once `eta_hospital_s <= 300`, `brief_fired` is false and the run has at least one log entry (a run that is already inside 300 s on its first tick qualifies; with no log yet the check repeats on later ticks). The same tick then generates the brief inline (about 5-10 s) exactly once, writes `briefs/{run_id}`, sets `brief_fired: true` and clears `brief_due`. If Gemini fails the tick logs `brief_error` and leaves `brief_due: true` with `brief_fired: false`, so the hospital's Regenerate button (`POST /brief`) is the retry; nothing else retries. Optional `scenario: "<name>"` (set by the scenario runner, not by `/runs`) makes `/location` read `recorded_spans` from `data/scenarios/<name>.json` instead of calling Routes, and follow the corridor config instead of the Routes polyline (no off-route check).
+`distance_m` is the running sum of distance between ticks. `ticks` keeps the last 12 (at most one per 5 s, so they span about a minute; `t` is the client's tick time). `last_tick_at` is server time and drives the stale check. `ahead` / `ahead_ids` list every junction still ahead (nearest first in `next_*`); other runs read them to find contenders. `last_eval.traffic`: `live | stale | scenario`; `stale` means Routes failed and no spans under 60 s old were left, so the queue was treated as NORMAL (control room shows "traffic data stale"). `brief_due` is set once `eta_hospital_s <= 300`, `brief_fired` is false and the run has at least one log entry (a run that is already inside 300 s on its first tick qualifies; with no log yet the check repeats on later ticks). The same tick then generates the brief inline (about 5-10 s) exactly once, writes `briefs/{run_id}`, sets `brief_fired: true` and clears `brief_due`. If Gemini fails the tick logs `brief_error` and leaves `brief_due: true` with `brief_fired: false`, so the hospital's Regenerate button (`POST /brief`) is the retry; nothing else retries. Optional `scenario: "<name>"` (set by the scenario runner, not by `/runs`) makes `/location` read `recorded_spans` from `data/scenarios/<name>.json` instead of calling Routes, and follow the corridor config instead of the Routes polyline (no off-route check).
 
 `routing` (written by `/runs/{id}/confirm` and `/route`; ambulance runs only):
 ```json
@@ -68,7 +68,7 @@ The routing agent (`api/agent.py`, Google ADK `LlmAgent` `hospital_router` on Ve
   "confirmed": true
 }
 ```
-`kind`: `voice | photo | form`. `interventions` is written by `/log` only (always present, `[]` when none): each is `{kind: drug | procedure | observation, name, dose, route, time_note}` exactly as the crew said it, `null` for any part not said. `/triage` entries carry `interventions: []`.
+A photo entry also carries `"photo_url": "https://storage.googleapis.com/green-corridor-2026-media/photos/run-1a2b3c4d/0.jpg"` (public, `photos/{run_id}/{n}.jpg` in the media bucket, whatever the image type; `null` if the upload failed, the entry is still saved) and its `transcript_en` describes the monitor, e.g. `"Monitor: HR 112, SpO2 89%, NIBP 86/54"`. `kind`: `voice | photo | form`. `interventions` is written by `/log` only (always present, `[]` when none): each is `{kind: drug | procedure | observation, name, dose, route, time_note}` exactly as the crew said it, `null` for any part not said. `/triage` entries carry `interventions: []`.
 
 ### `runs/{id}/alerts/{n}`
 ```json
@@ -118,15 +118,24 @@ Escalations: `{ "run_id": "run-amb-1", "junction_id": "blr_j3", "action": "escal
 
 ### `reports/{run_id}`
 ```json
-{ "baseline_s": 840, "actual_s": 540, "minutes_saved": 5.0, "junctions_cleared": 5, "ack_latency_s": [6.2, 4.8, 9.1] }
+{
+  "corridor": "blr", "run_id": "run-amb-1", "vehicle_type": "ambulance", "confirmed_tier": "critical",
+  "started_at": "2026-10-05T09:00:00Z", "ended_at": "2026-10-05T09:09:00Z",
+  "actual_s": 540, "baseline_s": 840, "minutes_saved": 5.0, "junctions_cleared": 5,
+  "alerts": 7, "ack_latency_s": [6.2, 4.8, 9.1], "avg_ack_latency_s": 6.7, "escalations": 1,
+  "distance_m": 5200, "method": "simulated-baseline"
+}
 ```
+Written once per run when it ends (`POST /runs` end) or arrives (`/location` within 100 m of the destination, which first sets `state: arrived`); a later end returns the stored report. `ended_at` is the last GPS tick, else the time of the call; `actual_s = ended_at - started_at`. `junctions_cleared` counts the distinct junctions with a `preempt_requested` audit entry for this run (so a run that never qualified for preemption has 0). `alerts` counts the run's alert docs, `ack_latency_s` lists the acked ones (`avg_ack_latency_s` is `null` when none), `escalations` counts the run's `escalation` audit entries.
+The baseline is a simulation, not a measurement (`method: "simulated-baseline"`): at each cleared junction a vehicle without preemption would stop for the remaining red, assumed to be `cycle_s / 4` (arrival at mid-red), plus the queue drain time `jam_m / 2.0` with `jam_m` from that junction's PREPARE alert (STOP-only alert: that alert's; none: 0). `baseline_s = actual_s + sum(stops)`, `minutes_saved = sum(stops) / 60`.
+The same row is inserted into BigQuery `corridor.run_reports` (created on first use; `ack_latency_s` is REPEATED FLOAT, timestamps are TIMESTAMP). A BigQuery failure logs `report_bq_error` and never fails the request.
 
 ## API
 
 All bodies JSON. Errors: `{"error": "<code>", "detail": "..."}` with 4xx/5xx. Unwritten endpoints currently return 501 `{"todo": "<name>"}`. Request bodies that fail validation return FastAPI's 422 `{"detail": [...]}`. Firestore failures return 503 `{"error": "store_unavailable"}`.
 
 ### `GET /health`
-Response `{"ok": true, "model": "gemini-3-flash-preview"}`
+Response `{"ok": true, "model": "gemini-3.1-flash-lite"}`
 
 ### `POST /vehicles/bind` (mock registry)
 ```json
@@ -151,20 +160,24 @@ End:
 ```json
 { "action": "end", "run_id": "run-amb-1" }
 ```
-200 `{ "run_id": "run-amb-1", "state": "ended" }` (the `report` field comes with the report card later). 404 `{ "error": "unknown_run" }`.
+200 `{ "run_id": "run-amb-1", "state": "ended", "report": { "...": "the `reports/{run_id}` doc, timestamps as ISO strings" } }` (`report` is `null` for a run whose corridor is unknown). 404 `{ "error": "unknown_run" }`.
 
 ### `POST /triage`
-Request (audio or text; image later). Audio is base64 in JSON; multipart is not supported. `lang_hint` is optional.
+Request (audio, image or text). Audio and images are base64 in JSON; multipart is not supported. `lang_hint` is optional. An image is a photo of a patient monitor or ECG strip: `image_b64` with `mime` `image/jpeg | image/png | image/webp` (no `audio_b64` alongside, else 400 `bad_request`).
 ```json
 { "run_id": "run-amb-1", "vehicle_type": "ambulance", "audio_b64": "...", "mime": "audio/webm" }
 ```
 ```json
 { "run_id": "run-amb-1", "vehicle_type": "ambulance", "text": "chest pain, BP 85 over 50" }
 ```
+```json
+{ "run_id": "run-amb-1", "vehicle_type": "ambulance", "image_b64": "...", "mime": "image/png" }
+```
 200 (`suggested_tier` is the deterministic lookup, stored as `runs/{id}.acuity_tier`; the crew must confirm):
 ```json
-{ "fields": { "...": "Gemini response schema below" }, "transcript_en": "...", "suggested_tier": "critical" }
+{ "fields": { "...": "Gemini response schema below" }, "transcript_en": "...", "suggested_tier": "critical", "photo_url": "https://storage.googleapis.com/green-corridor-2026-media/photos/run-amb-1/0.jpg" }
 ```
+`photo_url` is present for image input only, so the UI can show the extracted values beside the photo.
 Each call appends `runs/{id}/log/{n}` with `confirmed: false`.
 422 `{ "error": "extraction_failed", "fallback": "form" }` (after one retry on the first model, then one try on the other; the UI shows the form).
 
@@ -183,7 +196,8 @@ Gemini response schema:
 }
 ```
 Unknown values are `null` (`age` is an integer, `sex` free text as said). Gemini never returns a score.
-Models: text input uses `GEMINI_MODEL`; audio input uses `GEMINI_AUDIO_MODEL` (default `gemini-3.1-flash-lite`, about 3x faster on the same clip with the same fields). Attempts per call: the first model twice, then once on the other (`GEMINI_FALLBACK_MODEL`, or `GEMINI_MODEL` when audio already runs on the fallback model). Per-attempt timeout is 15 s for audio, 8 s for text.
+For an image Gemini reads only values visible on the screen, returns `null` for anything not legible, never infers a diagnosis, and sets `transcript_en` to a one-line description of the monitor (`"Monitor: HR 112, SpO2 89%, NIBP 86/54"`); the vitals feed the same acuity lookup (SpO2 < 90 or SBP < 90 is `critical`).
+Models: all extraction (text, audio, image) uses `GEMINI_MODEL` (`gemini-3.1-flash-lite`, about 3x faster than `gemini-3-flash-preview` on the same clip with the same fields). Attempts per call: `GEMINI_MODEL` twice, then `GEMINI_FALLBACK_MODEL` (`gemini-3-flash-preview`) once. Per-attempt timeout is 15 s for audio and images, 8 s for text.
 
 ### `POST /runs/{run_id}/confirm`
 The crew's one tap.
@@ -200,18 +214,18 @@ Re-runs the hospital routing agent for a confirmed ambulance run (for example af
 200 the `runs.routing` object, also written to the run. 404 `{ "error": "unknown_run" }`, 409 `{ "error": "not_routable" }` (not an ambulance run, no confirmed tier, or corridor without a roster).
 
 ### `POST /log`
-Same request and 422 as `/triage` (optional `kind`: `voice | photo | form`); appends a log entry only, no tier change.
+Same request and 422 as `/triage` (optional `kind`: `voice | photo | form`; defaults to `photo` for an image); appends a log entry only, no tier change.
 ```json
 { "run_id": "run-amb-1", "kind": "voice", "audio_b64": "...", "mime": "audio/webm" }
 ```
 200 `{ "n": 3, "transcript_en": "Oxygen 4 litres started", "fields": {"...": "same schema as /triage"}, "interventions": [{"kind": "drug", "name": "oxygen", "dose": "4 litres", "route": null, "time_note": null}], "confirmed": false }`
-The `/log` response schema is the `/triage` one plus `interventions: [{kind: "drug" | "procedure" | "observation", name, dose, route, time_note}]`. Gemini lists only what was said, never infers. `interventions` is returned and stored beside `fields`, not inside it.
+The `/log` response schema is the `/triage` one (including `photo_url` for an image) plus `interventions: [{kind: "drug" | "procedure" | "observation", name, dose, route, time_note}]`. Gemini lists only what was said, never infers. `interventions` is returned and stored beside `fields`, not inside it.
 
 ### `POST /brief`
 ```json
 { "run_id": "run-amb-1" }
 ```
-Generates from the run's log entries (Gemini on `GEMINI_MODEL`, then the fallback; 15 s per attempt), writes `briefs/{run_id}` and sets `runs/{id}.brief_fired: true` (`brief_due: false`). Also what the hospital's Regenerate button calls.
+Generates from the run's log entries (Gemini on `GEMINI_TEXT_MODEL`, default `gemini-3-flash-preview`, then `GEMINI_MODEL`; 15 s per attempt), writes `briefs/{run_id}` and sets `runs/{id}.brief_fired: true` (`brief_due: false`). Also what the hospital's Regenerate button calls.
 200 the stored doc: `{ "atmist": { "...": "..." }, "checklist": ["..."], "summary": "...", "disclaimer": "Synthetic patient. Clinician confirms.", "generated_at": "2026-10-05T09:03:00Z", "model": "gemini-3-flash-preview" }`. 404 `{ "error": "unknown_run" }`, 422 `{ "error": "no_log_entries" }`, 502 `{ "error": "brief_failed" }` (hospital page offers "regenerate brief").
 
 ### `POST /location`
@@ -227,7 +241,7 @@ Generates from the run's log entries (Gemini on `GEMINI_MODEL`, then the fallbac
   "alerts_fired": [{"junction": "blr_j3", "stage": "PREPARE"}], "brief_due": false, "observed_speed_60s": 13.2, "traffic": "live"
 }
 ```
-`next_junction`, `approach`, `jam_m`, `eta_s`, `stage`, `exit_move`, `traffic` describe the nearest junction ahead and are `null` when none is left or the run is `off_route`. Every junction ahead is evaluated each tick (alerts and preemption can fire for a far junction while a nearer one is still to come); `alerts_fired` lists what fired this tick. `stage` is `PREPARE | STOP | null`. `exit_move`: `left | straight | right` (Routes manoeuvre at that junction; `straight` when none). `state`: `en_route` or `off_route` (vehicle more than 80 m from the Routes polyline: no junction logic, no preemption; ticks revive `stale` and `off_route` runs). `traffic`: `live | stale | scenario`.
+`next_junction`, `approach`, `jam_m`, `eta_s`, `stage`, `exit_move`, `traffic` describe the nearest junction ahead and are `null` when none is left or the run is `off_route`. Every junction ahead is evaluated each tick (alerts and preemption can fire for a far junction while a nearer one is still to come); `alerts_fired` lists what fired this tick. `stage` is `PREPARE | STOP | null`. `exit_move`: `left | straight | right` (Routes manoeuvre at that junction; `straight` when none). `state`: `en_route`, `off_route` (vehicle more than 80 m from the Routes polyline: no junction logic, no preemption; ticks revive `stale` and `off_route` runs) or `arrived` (tick within 100 m of the destination; the report card is written and later ticks get 403). `traffic`: `live | stale | scenario`.
 Preemption: when an alert fires and the run qualifies (ambulance with `confirmed_tier` and `patient_on_board`; fire or police with an incident), the contenders for that junction are the other `en_route` runs with it in `ahead_ids`; `priority.sequence` orders them and `junctions/{id}.phase` plus an `audit/` entry are written.
 Side effect: any `/location` call marks other `en_route` runs with no tick for 30 s as `stale`.
 403 `{ "error": "run_not_active", "state": "ended" }` (only `en_route`, `off_route`, `stale` runs take ticks), 404 `{ "error": "unknown_run" }`, 400 `{ "error": "unknown_corridor" }`.

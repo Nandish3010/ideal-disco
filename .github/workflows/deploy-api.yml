@@ -24,7 +24,7 @@ jobs:
           --project green-corridor-2026
           --allow-unauthenticated
           --service-account corridor-api@green-corridor-2026.iam.gserviceaccount.com
-          --set-env-vars GCP_PROJECT=green-corridor-2026,GEMINI_MODEL=gemini-3-flash-preview,GEMINI_FALLBACK_MODEL=gemini-3.1-flash-lite,GEMINI_LOCATION=global
+          --set-env-vars GCP_PROJECT=green-corridor-2026,GEMINI_MODEL=gemini-3.1-flash-lite,GEMINI_FALLBACK_MODEL=gemini-3-flash-preview,GEMINI_TEXT_MODEL=gemini-3-flash-preview,GEMINI_LOCATION=global
           --set-secrets MAPS_SERVER_KEY=corridor-maps-server-key:latest
           --memory 1Gi --max-instances 3 --quiet
       - name: Health check
