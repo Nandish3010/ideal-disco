@@ -99,6 +99,10 @@ Traffic logger: Cloud Run Job `corridor-traffic-logger` (`jobs/traffic_logger.py
 | `MEDIA_BUCKET` | `green-corridor-2026-media` |
 | `ALERT_LANG` | `en` (default): conversational English alerts and voice; `kn` / `te`: colloquial Kannada / Telugu with English loanwords; `corridor`: the corridor's own language |
 
+## Evaluation
+
+Run `python3 scripts/eval_run.py --dry-run` to preview the plan; record 10 audio clips into `data/eval/clip01.m4a` … `clip10.m4a`, then run without `--dry-run` to compute per-field and tier accuracy against `data/eval/labels.json`. Results written to `data/eval/results.json`.
+
 ## Layout
 
 ```
