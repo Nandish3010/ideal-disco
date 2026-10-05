@@ -47,3 +47,30 @@ export function vehicleLabel(type, tier) {
   const t = tier && tier !== type ? (TIER[tier] ?? String(tier).replaceAll("_", " ")) : null;
   return t ? `${kind} · ${t}` : kind;
 }
+
+// "2 min" / "90 s" for a number of seconds.
+export const dur = (s) => (s % 60 === 0 ? `${s / 60} min` : `${s} s`);
+
+const COP_KIND = {
+  delay: "delay",
+  cleared: "clear",
+  cannot_clear: "cannot clear",
+  other: "update",
+};
+// The cop's report on an alert (alerts/{n}.cop_note) as one line for the vehicle: "Cop at J3: bus stalled, +2 min".
+export function copNoteText(note, junctionId) {
+  if (!note) return "";
+  const j = String(junctionId).split("_").pop().toUpperCase();
+  const said = ["delay", "other"].includes(note.kind)
+    ? note.reason || COP_KIND[note.kind]
+    : [COP_KIND[note.kind], note.reason && `(${note.reason})`].filter(Boolean).join(" ");
+  const more = note.kind === "delay" && note.extra_seconds ? `, +${dur(note.extra_seconds)}` : "";
+  return `Cop at ${j}: ${said}${more}`;
+}
+
+// The alert a vehicle is on now: the newest one at its next junction, else the newest at all.
+export function currentAlert(alerts, nextJunction) {
+  const at = (a) => a.created_at?.toMillis?.() ?? 0;
+  const mine = alerts.filter((a) => !nextJunction || a.junction_id === nextJunction);
+  return [...(mine.length ? mine : alerts)].sort((a, b) => at(b) - at(a))[0];
+}

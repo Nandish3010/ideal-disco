@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { collection, doc, onSnapshot } from "firebase/firestore";
 import { db } from "./firebase.js";
 
@@ -170,3 +170,99 @@ export const StateBadge = ({ run, now }) => {
             : (s ?? "—");
   return <span className={`cb st-${s}`}>{label}</span>;
 };
+
+// ---- voice: shared by the vehicle page (triage, log) and the cop page (report)
+export const MAX_S = 20;
+export const b64 = (blob) =>
+  new Promise((ok, no) => {
+    const f = new FileReader();
+    f.onload = () => ok(f.result.split(",")[1]);
+    f.onerror = no;
+    f.readAsDataURL(blob);
+  });
+// Press-and-hold recorder. onClip(blob) on release, onClip(null) when the hold was too short.
+export function useHold(onClip) {
+  const [st, setSt] = useState({ on: false, s: 0 });
+  const [mic, setMic] = useState(null); // "denied" | "unavailable"
+  const x = useRef({});
+  x.current.onClip = onClip;
+
+  async function start() {
+    const c = x.current;
+    if (c.rec || c.starting) return;
+    c.held = true;
+    c.starting = true;
+    let stream;
+    try {
+      if (!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia)
+        throw new Error("unsupported");
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      c.starting = false;
+      c.held = false;
+      setMic(e.name === "NotAllowedError" || e.name === "SecurityError" ? "denied" : "unavailable");
+      return;
+    }
+    c.starting = false;
+    setMic(null);
+    if (!c.held) {
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    } // released before the mic opened
+    const type = ["audio/webm;codecs=opus", "audio/mp4"].find((t) =>
+      MediaRecorder.isTypeSupported(t),
+    );
+    const rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+    const chunks = [];
+    const t0 = Date.now();
+    rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    rec.onstop = () => {
+      clearInterval(c.tick);
+      stream.getTracks().forEach((t) => t.stop());
+      c.rec = null;
+      setSt({ on: false, s: 0 });
+      c.onClip(Date.now() - t0 < 600 ? null : new Blob(chunks, { type: rec.mimeType }));
+    };
+    c.rec = rec;
+    rec.start();
+    setSt({ on: true, s: 0 });
+    c.tick = setInterval(() => {
+      const s = (Date.now() - t0) / 1000;
+      setSt({ on: true, s });
+      if (s >= MAX_S) stop();
+    }, 100);
+  }
+  function stop() {
+    const c = x.current;
+    c.held = false;
+    if (c.rec?.state === "recording") c.rec.stop();
+  }
+  useEffect(
+    () => () => {
+      stop();
+      clearInterval(x.current.tick);
+    },
+    [],
+  );
+  return { ...st, mic, start, stop };
+}
+
+export const holdProps = (hold) => ({
+  onPointerDown: (e) => {
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    hold.start();
+  },
+  onPointerUp: hold.stop,
+  onPointerCancel: hold.stop,
+  onBlur: hold.stop,
+  onKeyDown: (e) => {
+    if ((e.key === " " || e.key === "Enter") && !e.repeat) {
+      e.preventDefault();
+      hold.start();
+    }
+  },
+  onKeyUp: (e) => {
+    if (e.key === " " || e.key === "Enter") hold.stop();
+  },
+  onContextMenu: (e) => e.preventDefault(),
+});

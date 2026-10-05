@@ -21,6 +21,7 @@ import aar
 import acuity
 import agent
 import brief
+import copnote
 import gemini
 import leadtime
 import priority
@@ -610,7 +611,13 @@ def rationale(jid, seq, lang):
     db.collection("junctions").document(jid).update(out)
 
 
-def preempt(run_id, run, jid, approach, eta_s, clear_s, stage, lang, bg):
+def cop_blocked(jid, now) -> bool:
+    """True while a cop's `cannot_clear` report on this junction is in force (copnote.BLOCK_S)."""
+    until = (db.collection("junctions").document(jid).get().to_dict() or {}).get("cop_block_until")
+    return bool(until and until > now)
+
+
+def preempt(run_id, run, jid, approach, eta_s, clear_s, stage, lang, bg, blocked=False):
     me = contender(run_id, run, eta_s, approach)
     if me is None:
         return None
@@ -630,6 +637,7 @@ def preempt(run_id, run, jid, approach, eta_s, clear_s, stage, lang, bg):
         clear_s + 30 + seq[-1]["offset_s"] + priority.spread_s(seq),
         [c["run_id"] for c in seq],
         [{"run_id": c["run_id"], "offset_s": c["offset_s"], "approach": c["approach"]} for c in seq],
+        blocked,
     )
     sequence = [{"run_id": c["run_id"], "offset_s": c["offset_s"]} for c in seq]
     defer(bg, rationale, jid, seq, lang)  # Gemini + translation: patched onto the phase after the response
@@ -870,7 +878,10 @@ def location(loc: Loc, bg: BackgroundTasks, x_device_token: str = Header("")):
             traffic = "stale" if hosp["stale"] else "live"
             routes_eta = dist * pace if pace else dist / max(observed, 3)
         jam_m = leadtime.jam_metres(intervals)
-        clear_s = leadtime.clear_seconds(jam_m)
+        blocked = cop_blocked(jid, now)
+        clear_s = leadtime.clear_seconds(jam_m) * (
+            2 if blocked else 1
+        )  # the cop said it cannot clear: warn earlier, hold longer
         eta_s = leadtime.blended_eta(routes_eta, dist, observed)
         stage = leadtime.stage(eta_s, clear_s)
         if stage is None and jam_m > 0 and jam_m >= dist - 25:  # vehicle is inside the queue: alert now
@@ -929,7 +940,7 @@ def location(loc: Loc, bg: BackgroundTasks, x_device_token: str = Header("")):
                 jam_m=round(jam_m),
                 eta_s=round(eta_s),
             )
-            seq = preempt(loc.run_id, run, jid, ap["id"], eta_s, clear_s, fire, corridor["lang"], bg)
+            seq = preempt(loc.run_id, run, jid, ap["id"], eta_s, clear_s, fire, corridor["lang"], bg, blocked)
             contenders.update(c["run_id"] for c in seq or [])
         if upd["next_junction_id"] is None:  # nearest junction ahead is what the response reports
             upd.update({"next_junction_id": jid, "next_approach": ap["id"], "next_eta_s": eta_s})
@@ -1072,3 +1083,34 @@ def duty(d: Duty, x_device_token: str = Header("")):
         ref.set({**doc, "device_token_hash": DELETE_FIELD}, merge=True)
     log(event="duty", junction_id=key, device_id=d.device_id, on=d.on)
     return {**doc, "since": since.isoformat(), **extra}
+
+
+class CopNoteReq(BaseModel):
+    corridor: str
+    junction_id: str
+    audio_b64: str | None = None
+    mime: str | None = None
+    text: str | None = None
+
+
+@app.post("/cop-note")
+def cop_note(n: CopNoteReq, x_device_token: str = Header("")):
+    """The on-duty cop's spoken or typed report. Gemini only fills the {kind, extra_seconds, reason} schema; what happens
+    next is copnote.apply, plain rules."""
+    key = junction_key(n.corridor, n.junction_id)
+    if isinstance(key, JSONResponse):
+        return key
+    if bad := deny(x_device_token, duty_hash(key)):
+        return bad
+    try:
+        audio = base64.b64decode(n.audio_b64, validate=True) if n.audio_b64 else None
+    except ValueError:
+        return err(400, "bad_request", "audio_b64 is not valid base64")
+    if not (audio or n.text):
+        return err(400, "bad_request", "audio_b64 or text required")
+    try:
+        note = gemini.cop_note(audio, n.mime, n.text)
+    except ExtractionFailed:
+        log(event="cop_note_extraction_failed", junction_id=key)
+        return err(422, "extraction_failed", fallback="text")
+    return copnote.apply(db, key, note, datetime.now(UTC))
