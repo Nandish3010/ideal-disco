@@ -34,3 +34,8 @@ button.ack { display: block; width: 100%; min-height: 180px; font-size: 56px; fo
 .atmist dt { color: var(--muted); font-weight: 700; } .atmist dd { margin: 0; }
 .check { display: flex; align-items: center; gap: 12px; min-height: 48px; color: var(--fg); }
 .check input { width: 28px; min-height: 28px; height: 28px; margin: 0; }
+.mute { min-height: 40px; padding: 4px 14px; font-size: 16px; margin: 0 0 8px; }
+.banner.pulse { animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .banner.pulse { animation: none; } }
+button.replay { float: right; min-height: 0; padding: 2px 10px; font-size: 13px; }
