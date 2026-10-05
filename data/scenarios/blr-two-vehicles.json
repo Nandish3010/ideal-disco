@@ -1,0 +1,318 @@
+{
+  "corridor": "blr",
+  "seed": 20261005,
+  "baseline_cycle": {
+    "red_fraction": 0.5,
+    "note": "Today lane: each junction runs a fixed signal cycle (cycle_s from the corridor file, first red_fraction of it red). A vehicle is assumed to arrive at a uniformly random but seeded phase of that cycle, waits out the remaining red, then the queue ahead drains at 2.0 m/s (jam_m / 2.0). Spans are in route order: the stop line is the largest to_m. Simulated estimate on recorded traffic, not a field measurement."
+  },
+  "vehicles": [
+    {
+      "run_id": "run-amb-1",
+      "plate": "KA01AB1234",
+      "type": "ambulance",
+      "tier": "critical",
+      "start_offset_s": 0,
+      "approaches": {
+        "j1": "SE",
+        "j2": "SE",
+        "j3": "SE",
+        "j4": "E",
+        "j5": "E"
+      },
+      "ticks": [
+        {"t": 0, "lat": 12.91517, "lng": 77.62379, "speed_mps": 13},
+        {"t": 5, "lat": 12.91569, "lng": 77.6235, "speed_mps": 13.5},
+        {"t": 10, "lat": 12.91622, "lng": 77.6232, "speed_mps": 14},
+        {"t": 15, "lat": 12.91676, "lng": 77.62288, "speed_mps": 10.5},
+        {"t": 20, "lat": 12.91722, "lng": 77.62289, "speed_mps": 10.5},
+        {"t": 25, "lat": 12.91762, "lng": 77.62263, "speed_mps": 14},
+        {"t": 30, "lat": 12.91815, "lng": 77.62228, "speed_mps": 13.5},
+        {"t": 35, "lat": 12.91866, "lng": 77.62195, "speed_mps": 13},
+        {"t": 40, "lat": 12.91916, "lng": 77.62163, "speed_mps": 12.4},
+        {"t": 45, "lat": 12.91963, "lng": 77.62132, "speed_mps": 12},
+        {"t": 50, "lat": 12.92008, "lng": 77.62103, "speed_mps": 11.8},
+        {"t": 55, "lat": 12.92053, "lng": 77.62074, "speed_mps": 11.8},
+        {"t": 60, "lat": 12.92098, "lng": 77.62044, "speed_mps": 12},
+        {"t": 65, "lat": 12.92144, "lng": 77.62015, "speed_mps": 12.4},
+        {"t": 70, "lat": 12.92191, "lng": 77.61984, "speed_mps": 12.9},
+        {"t": 75, "lat": 12.9224, "lng": 77.61953, "speed_mps": 13.5},
+        {"t": 80, "lat": 12.92291, "lng": 77.61919, "speed_mps": 13.9},
+        {"t": 85, "lat": 12.92306, "lng": 77.61882, "speed_mps": 14},
+        {"t": 90, "lat": 12.923, "lng": 77.61818, "speed_mps": 14},
+        {"t": 95, "lat": 12.92288, "lng": 77.61767, "speed_mps": 10.5},
+        {"t": 100, "lat": 12.92254, "lng": 77.61747, "speed_mps": 10.5},
+        {"t": 105, "lat": 12.92209, "lng": 77.61731, "speed_mps": 13},
+        {"t": 110, "lat": 12.92154, "lng": 77.61712, "speed_mps": 12.5},
+        {"t": 115, "lat": 12.92101, "lng": 77.61693, "speed_mps": 12.1},
+        {"t": 120, "lat": 12.92049, "lng": 77.61675, "speed_mps": 11.8},
+        {"t": 125, "lat": 12.91999, "lng": 77.61657, "speed_mps": 11.8},
+        {"t": 130, "lat": 12.91949, "lng": 77.6164, "speed_mps": 12},
+        {"t": 135, "lat": 12.91898, "lng": 77.61622, "speed_mps": 12.4},
+        {"t": 140, "lat": 12.91845, "lng": 77.61603, "speed_mps": 12.9},
+        {"t": 145, "lat": 12.9179, "lng": 77.61584, "speed_mps": 13.4},
+        {"t": 150, "lat": 12.91733, "lng": 77.61564, "speed_mps": 13.9},
+        {"t": 155, "lat": 12.91674, "lng": 77.61543, "speed_mps": 14},
+        {"t": 160, "lat": 12.91614, "lng": 77.61523, "speed_mps": 14},
+        {"t": 165, "lat": 12.9163, "lng": 77.61507, "speed_mps": 13.9},
+        {"t": 170, "lat": 12.91636, "lng": 77.61444, "speed_mps": 8.8},
+        {"t": 175, "lat": 12.91637, "lng": 77.61403, "speed_mps": 8.4},
+        {"t": 180, "lat": 12.91637, "lng": 77.61364, "speed_mps": 8},
+        {"t": 185, "lat": 12.91638, "lng": 77.61327, "speed_mps": 8.8},
+        {"t": 190, "lat": 12.91638, "lng": 77.61287, "speed_mps": 8.3},
+        {"t": 195, "lat": 12.91639, "lng": 77.61248, "speed_mps": 8},
+        {"t": 200, "lat": 12.9164, "lng": 77.61212, "speed_mps": 8.8},
+        {"t": 205, "lat": 12.91641, "lng": 77.61171, "speed_mps": 8.3},
+        {"t": 210, "lat": 12.91642, "lng": 77.61133, "speed_mps": 8},
+        {"t": 215, "lat": 12.91643, "lng": 77.61096, "speed_mps": 8.8},
+        {"t": 220, "lat": 12.91644, "lng": 77.61055, "speed_mps": 8.4},
+        {"t": 225, "lat": 12.91645, "lng": 77.61016, "speed_mps": 8},
+        {"t": 230, "lat": 12.91647, "lng": 77.6098, "speed_mps": 13.2},
+        {"t": 235, "lat": 12.9165, "lng": 77.60919, "speed_mps": 13.7},
+        {"t": 240, "lat": 12.91653, "lng": 77.60856, "speed_mps": 14},
+        {"t": 245, "lat": 12.91656, "lng": 77.60791, "speed_mps": 14},
+        {"t": 250, "lat": 12.9166, "lng": 77.60727, "speed_mps": 14},
+        {"t": 255, "lat": 12.91663, "lng": 77.60662, "speed_mps": 13.6},
+        {"t": 260, "lat": 12.91666, "lng": 77.60599, "speed_mps": 13.1},
+        {"t": 265, "lat": 12.91669, "lng": 77.60539, "speed_mps": 12.5},
+        {"t": 270, "lat": 12.91672, "lng": 77.60482, "speed_mps": 12.1},
+        {"t": 275, "lat": 12.91675, "lng": 77.60426, "speed_mps": 11.8},
+        {"t": 280, "lat": 12.91678, "lng": 77.60371, "speed_mps": 11.8},
+        {"t": 285, "lat": 12.9168, "lng": 77.60317, "speed_mps": 12},
+        {"t": 290, "lat": 12.91679, "lng": 77.6035, "speed_mps": 12.4},
+        {"t": 295, "lat": 12.91676, "lng": 77.60407, "speed_mps": 12.8},
+        {"t": 300, "lat": 12.91727, "lng": 77.60416, "speed_mps": 10},
+        {"t": 305, "lat": 12.91772, "lng": 77.60418, "speed_mps": 10},
+        {"t": 310, "lat": 12.91792, "lng": 77.60395, "speed_mps": 14},
+        {"t": 315, "lat": 12.91782, "lng": 77.60332, "speed_mps": 14},
+        {"t": 320, "lat": 12.91771, "lng": 77.60268, "speed_mps": 14},
+        {"t": 325, "lat": 12.9176, "lng": 77.60205, "speed_mps": 13.7},
+        {"t": 330, "lat": 12.91749, "lng": 77.60142, "speed_mps": 13.1},
+        {"t": 335, "lat": 12.91739, "lng": 77.60083, "speed_mps": 12.6},
+        {"t": 340, "lat": 12.9173, "lng": 77.60025, "speed_mps": 12.1},
+        {"t": 345, "lat": 12.9172, "lng": 77.5997, "speed_mps": 11.9},
+        {"t": 350, "lat": 12.91711, "lng": 77.59916, "speed_mps": 11.8},
+        {"t": 355, "lat": 12.91702, "lng": 77.59863, "speed_mps": 12},
+        {"t": 360, "lat": 12.91693, "lng": 77.59808, "speed_mps": 12.3},
+        {"t": 365, "lat": 12.91689, "lng": 77.59827, "speed_mps": 12.8},
+        {"t": 370, "lat": 12.91688, "lng": 77.59886, "speed_mps": 13.3},
+        {"t": 375, "lat": 12.91688, "lng": 77.59947, "speed_mps": 13.8},
+        {"t": 380, "lat": 12.91711, "lng": 77.59987, "speed_mps": 10.5},
+        {"t": 385, "lat": 12.91752, "lng": 77.59966, "speed_mps": 14},
+        {"t": 390, "lat": 12.91805, "lng": 77.5993, "speed_mps": 14}
+      ]
+    },
+    {
+      "run_id": "run-fire-1",
+      "plate": "KA01FE5678",
+      "type": "fire",
+      "tier": "fire_with_trapped",
+      "start_offset_s": 199,
+      "approaches": {
+        "j3": "NE"
+      },
+      "ticks": [
+        {"t": 0, "lat": 12.91926, "lng": 77.61035, "speed_mps": 13},
+        {"t": 5, "lat": 12.91867, "lng": 77.61031, "speed_mps": 13.5},
+        {"t": 10, "lat": 12.91807, "lng": 77.61027, "speed_mps": 14},
+        {"t": 15, "lat": 12.91744, "lng": 77.61023, "speed_mps": 14},
+        {"t": 20, "lat": 12.91681, "lng": 77.61019, "speed_mps": 10.5},
+        {"t": 25, "lat": 12.91646, "lng": 77.61005, "speed_mps": 10.5},
+        {"t": 30, "lat": 12.91648, "lng": 77.60956, "speed_mps": 13.5},
+        {"t": 35, "lat": 12.91651, "lng": 77.60894, "speed_mps": 13},
+        {"t": 40, "lat": 12.91654, "lng": 77.60834, "speed_mps": 12.4},
+        {"t": 45, "lat": 12.91657, "lng": 77.60777, "speed_mps": 12},
+        {"t": 50, "lat": 12.9166, "lng": 77.60722, "speed_mps": 11.8},
+        {"t": 55, "lat": 12.91663, "lng": 77.60667, "speed_mps": 11.8}
+      ]
+    },
+    {
+      "run_id": "run-amb-2",
+      "plate": "KA01AB4321",
+      "type": "ambulance",
+      "tier": "urgent",
+      "start_offset_s": 205,
+      "approaches": {
+        "j3": "SE",
+        "j4": "E",
+        "j5": "E"
+      },
+      "ticks": [
+        {"t": 0, "lat": 12.9163, "lng": 77.61507, "speed_mps": 13.9},
+        {"t": 5, "lat": 12.91636, "lng": 77.61444, "speed_mps": 8.8},
+        {"t": 10, "lat": 12.91637, "lng": 77.61403, "speed_mps": 8.4},
+        {"t": 15, "lat": 12.91637, "lng": 77.61364, "speed_mps": 8},
+        {"t": 20, "lat": 12.91638, "lng": 77.61327, "speed_mps": 8.8},
+        {"t": 25, "lat": 12.91638, "lng": 77.61287, "speed_mps": 8.3},
+        {"t": 30, "lat": 12.91639, "lng": 77.61248, "speed_mps": 8},
+        {"t": 35, "lat": 12.9164, "lng": 77.61212, "speed_mps": 8.8},
+        {"t": 40, "lat": 12.91641, "lng": 77.61171, "speed_mps": 8.3},
+        {"t": 45, "lat": 12.91642, "lng": 77.61133, "speed_mps": 8},
+        {"t": 50, "lat": 12.91643, "lng": 77.61096, "speed_mps": 8.8},
+        {"t": 55, "lat": 12.91644, "lng": 77.61055, "speed_mps": 8.4},
+        {"t": 60, "lat": 12.91645, "lng": 77.61016, "speed_mps": 8},
+        {"t": 65, "lat": 12.91647, "lng": 77.6098, "speed_mps": 13.2},
+        {"t": 70, "lat": 12.9165, "lng": 77.60919, "speed_mps": 13.7},
+        {"t": 75, "lat": 12.91653, "lng": 77.60856, "speed_mps": 14},
+        {"t": 80, "lat": 12.91656, "lng": 77.60791, "speed_mps": 14},
+        {"t": 85, "lat": 12.9166, "lng": 77.60727, "speed_mps": 14},
+        {"t": 90, "lat": 12.91663, "lng": 77.60662, "speed_mps": 13.6},
+        {"t": 95, "lat": 12.91666, "lng": 77.60599, "speed_mps": 13.1},
+        {"t": 100, "lat": 12.91669, "lng": 77.60539, "speed_mps": 12.5},
+        {"t": 105, "lat": 12.91672, "lng": 77.60482, "speed_mps": 12.1},
+        {"t": 110, "lat": 12.91675, "lng": 77.60426, "speed_mps": 11.8},
+        {"t": 115, "lat": 12.91678, "lng": 77.60371, "speed_mps": 11.8},
+        {"t": 120, "lat": 12.9168, "lng": 77.60317, "speed_mps": 12},
+        {"t": 125, "lat": 12.91679, "lng": 77.6035, "speed_mps": 12.4},
+        {"t": 130, "lat": 12.91676, "lng": 77.60407, "speed_mps": 12.8},
+        {"t": 135, "lat": 12.91727, "lng": 77.60416, "speed_mps": 10},
+        {"t": 140, "lat": 12.91772, "lng": 77.60418, "speed_mps": 10},
+        {"t": 145, "lat": 12.91792, "lng": 77.60395, "speed_mps": 14}
+      ]
+    }
+  ],
+  "recorded_spans": {
+    "blr_j1": [
+      {
+        "ts": "2026-10-05T09:00:00+05:30",
+        "intervals": [
+          {
+            "from_m": 0,
+            "to_m": 540,
+            "speed": "NORMAL"
+          },
+          {
+            "from_m": 540,
+            "to_m": 600,
+            "speed": "SLOW"
+          }
+        ]
+      }
+    ],
+    "blr_j2": [
+      {
+        "ts": "2026-10-05T09:00:00+05:30",
+        "intervals": [
+          {
+            "from_m": 0,
+            "to_m": 600,
+            "speed": "NORMAL"
+          }
+        ]
+      }
+    ],
+    "blr_j3": [
+      {
+        "ts": "2026-10-05T09:00:00+05:30",
+        "approach": "SE",
+        "intervals": [
+          {
+            "from_m": 0,
+            "to_m": 180,
+            "speed": "NORMAL"
+          },
+          {
+            "from_m": 180,
+            "to_m": 220,
+            "speed": "SLOW"
+          },
+          {
+            "from_m": 220,
+            "to_m": 600,
+            "speed": "TRAFFIC_JAM"
+          }
+        ]
+      },
+      {
+        "ts": "2026-10-05T09:01:30+05:30",
+        "approach": "SE",
+        "intervals": [
+          {
+            "from_m": 0,
+            "to_m": 60,
+            "speed": "NORMAL"
+          },
+          {
+            "from_m": 60,
+            "to_m": 100,
+            "speed": "SLOW"
+          },
+          {
+            "from_m": 100,
+            "to_m": 600,
+            "speed": "TRAFFIC_JAM"
+          }
+        ]
+      },
+      {
+        "ts": "2026-10-05T09:04:00+05:30",
+        "approach": "SE",
+        "intervals": [
+          {
+            "from_m": 0,
+            "to_m": 60,
+            "speed": "NORMAL"
+          },
+          {
+            "from_m": 60,
+            "to_m": 100,
+            "speed": "SLOW"
+          },
+          {
+            "from_m": 100,
+            "to_m": 600,
+            "speed": "TRAFFIC_JAM"
+          }
+        ]
+      }
+    ],
+    "blr_j4": [
+      {
+        "ts": "2026-10-05T09:00:00+05:30",
+        "intervals": [
+          {
+            "from_m": 0,
+            "to_m": 500,
+            "speed": "NORMAL"
+          },
+          {
+            "from_m": 500,
+            "to_m": 600,
+            "speed": "TRAFFIC_JAM"
+          }
+        ]
+      },
+      {
+        "ts": "2026-10-05T09:02:00+05:30",
+        "intervals": [
+          {
+            "from_m": 0,
+            "to_m": 500,
+            "speed": "NORMAL"
+          },
+          {
+            "from_m": 500,
+            "to_m": 600,
+            "speed": "TRAFFIC_JAM"
+          }
+        ]
+      }
+    ],
+    "blr_j5": [
+      {
+        "ts": "2026-10-05T09:00:00+05:30",
+        "intervals": [
+          {
+            "from_m": 0,
+            "to_m": 560,
+            "speed": "NORMAL"
+          },
+          {
+            "from_m": 560,
+            "to_m": 600,
+            "speed": "SLOW"
+          }
+        ]
+      }
+    ]
+  }
+}
