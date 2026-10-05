@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Evaluation runner: post clips to /triage, compare extracted fields to labels, compute accuracy."""
 
+import argparse
+import base64
+import json
 import os
 import sys
-import json
-import base64
-import argparse
-from pathlib import Path
-from typing import Optional, Dict, Any, List
-import urllib.request
 import urllib.error
+import urllib.request
+from pathlib import Path
+from typing import Any
 
 # ponytail: vertex eval module import deferred to --vertex-eval flag handler
 
@@ -19,13 +19,13 @@ def get_api_base() -> str:
     return os.getenv("API_BASE", "https://green-corridor-2026-emg.run.app")
 
 
-def load_labels(path: Path) -> Dict[str, Any]:
+def load_labels(path: Path) -> dict[str, Any]:
     """Load expected labels from JSON file."""
     with open(path) as f:
         return json.load(f)["clips"]
 
 
-def list_clips(data_dir: Path) -> List[str]:
+def list_clips(data_dir: Path) -> list[str]:
     """List all clip files in order."""
     clips = sorted(data_dir.glob("clip*.m4a")) + sorted(data_dir.glob("clip*.wav"))
     return [c.name for c in clips]
@@ -84,7 +84,7 @@ def field_matches(expected: Any, actual: Any, field_name: str) -> bool:
     return expected == actual
 
 
-def compute_field_accuracy(expected: Dict, actual: Dict, field_names: List[str]) -> tuple:
+def compute_field_accuracy(expected: dict, actual: dict, field_names: list[str]) -> tuple:
     """Compute accuracy for a set of fields. Returns (correct_count, total_count)."""
     correct = 0
     total = len(field_names)
@@ -99,7 +99,7 @@ def compute_field_accuracy(expected: Dict, actual: Dict, field_names: List[str])
     return correct, total, details
 
 
-def dry_run_plan(data_dir: Path, labels: Dict, clips: List[str]) -> str:
+def dry_run_plan(data_dir: Path, labels: dict, clips: list[str]) -> str:
     """Return text description of what would be done."""
     lines = [f"DRY RUN: Would process {len(clips)} clips from {data_dir}"]
     lines.append("")
@@ -109,11 +109,11 @@ def dry_run_plan(data_dir: Path, labels: Dict, clips: List[str]) -> str:
         if label:
             lines.append(f"  {clip_id}: {label.get('description', 'N/A')}")
     lines.append("")
-    lines.append(f"Expected output: data/eval/results.json")
+    lines.append("Expected output: data/eval/results.json")
     return "\n".join(lines)
 
 
-def create_incident_and_run(api_base: str, corridor: str = "blr") -> Optional[str]:
+def create_incident_and_run(api_base: str, corridor: str = "blr") -> str | None:
     """Create a throwaway incident and run, return run_id (or None on error)."""
     try:
         # Create incident
@@ -122,25 +122,24 @@ def create_incident_and_run(api_base: str, corridor: str = "blr") -> Optional[st
             f"{api_base}/incidents",
             data=incident_body,
             headers={"Content-Type": "application/json"},
-            method="POST"
+            method="POST",
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
             incident_data = json.loads(resp.read())
             incident_id = incident_data.get("incident_id")
 
         # Create run
-        run_body = json.dumps({
-            "action": "start",
-            "plate": "KA01TEST",
-            "incident_id": incident_id,
-            "corridor": corridor,
-            "source": "sim"
-        }).encode()
+        run_body = json.dumps(
+            {
+                "action": "start",
+                "plate": "KA01TEST",
+                "incident_id": incident_id,
+                "corridor": corridor,
+                "source": "sim",
+            }
+        ).encode()
         req = urllib.request.Request(
-            f"{api_base}/runs",
-            data=run_body,
-            headers={"Content-Type": "application/json"},
-            method="POST"
+            f"{api_base}/runs", data=run_body, headers={"Content-Type": "application/json"}, method="POST"
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
             run_data = json.loads(resp.read())
@@ -150,20 +149,14 @@ def create_incident_and_run(api_base: str, corridor: str = "blr") -> Optional[st
         return None
 
 
-def post_clip_to_triage(api_base: str, run_id: str, clip_audio: str, mime: str) -> Optional[Dict]:
+def post_clip_to_triage(api_base: str, run_id: str, clip_audio: str, mime: str) -> dict | None:
     """Post clip to /triage endpoint, return response or None on error."""
     try:
-        body = json.dumps({
-            "run_id": run_id,
-            "vehicle_type": "ambulance",
-            "audio_b64": clip_audio,
-            "mime": mime
-        }).encode()
+        body = json.dumps(
+            {"run_id": run_id, "vehicle_type": "ambulance", "audio_b64": clip_audio, "mime": mime}
+        ).encode()
         req = urllib.request.Request(
-            f"{api_base}/triage",
-            data=body,
-            headers={"Content-Type": "application/json"},
-            method="POST"
+            f"{api_base}/triage", data=body, headers={"Content-Type": "application/json"}, method="POST"
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read())
@@ -176,7 +169,7 @@ def post_clip_to_triage(api_base: str, run_id: str, clip_audio: str, mime: str) 
         return None
 
 
-def run_evaluation(api_base: str, data_dir: Path, labels: Dict, clips: List[str]) -> Dict[str, Any]:
+def run_evaluation(api_base: str, data_dir: Path, labels: dict, clips: list[str]) -> dict[str, Any]:
     """Run evaluation: post clips, compare results, compute accuracy."""
     results = {"clips": {}, "summary": {}}
 
@@ -233,7 +226,7 @@ def run_evaluation(api_base: str, data_dir: Path, labels: Dict, clips: List[str]
             "field_accuracy": field_correct / field_total if field_total > 0 else 0,
             "field_details": field_details,
             "extracted": extracted,
-            "expected": expected
+            "expected": expected,
         }
 
     # Compute summary
@@ -247,10 +240,12 @@ def run_evaluation(api_base: str, data_dir: Path, labels: Dict, clips: List[str]
     return results
 
 
-def markdown_table(results: Dict) -> str:
+def markdown_table(results: dict) -> str:
     """Generate markdown table of results."""
-    lines = ["| Clip | Description | Expected Tier | Suggested Tier | Tier Match | Field Accuracy |",
-             "|------|-------------|---------------|--------------------|--------------|"]
+    lines = [
+        "| Clip | Description | Expected Tier | Suggested Tier | Tier Match | Field Accuracy |",
+        "|------|-------------|---------------|--------------------|--------------|",
+    ]
     for clip_id in sorted(results.get("clips", {}).keys()):
         clip = results["clips"][clip_id]
         if "error" in clip:
@@ -265,7 +260,7 @@ def markdown_table(results: Dict) -> str:
     return "\n".join(lines)
 
 
-def submit_to_vertex_eval(results: Dict) -> None:
+def submit_to_vertex_eval(results: dict) -> None:
     """Submit clip/response pairs to Vertex AI Gen AI Evaluation Service (vertex-eval flag)."""
     # ponytail: deferred implementation - create EvalTask with exact_match metric
     # import vertexai
@@ -277,7 +272,9 @@ def submit_to_vertex_eval(results: Dict) -> None:
 def main():
     parser = argparse.ArgumentParser(description="Evaluation runner for triage clips")
     parser.add_argument("--dry-run", action="store_true", help="List plan without posting to API")
-    parser.add_argument("--vertex-eval", action="store_true", help="Also submit to Vertex AI Evaluation Service (not run)")
+    parser.add_argument(
+        "--vertex-eval", action="store_true", help="Also submit to Vertex AI Evaluation Service (not run)"
+    )
     args = parser.parse_args()
 
     data_dir = Path("data/eval")
@@ -285,7 +282,10 @@ def main():
 
     # Load or use template
     if not labels_path.exists():
-        print(f"Error: {labels_path} not found. Create from labels.template.json and name it labels.json.", file=sys.stderr)
+        print(
+            f"Error: {labels_path} not found. Create from labels.template.json and name it labels.json.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     labels = load_labels(labels_path)
@@ -317,7 +317,7 @@ def main():
     print("\n## Evaluation Results\n")
     print(markdown_table(results))
     if results["summary"]:
-        print(f"\n### Summary\n")
+        print("\n### Summary\n")
         for key, val in results["summary"].items():
             if isinstance(val, float):
                 print(f"- **{key}**: {val:.1%}")

@@ -8,6 +8,7 @@ polyline, driven at 11 m/s, then runs all 5 junctions to the hospital; fire engi
 ambulance KA01AB4321 (urgent) is the first one's whole trace, lead-in included, 40 s later (platoon).
 Span intervals use route order (stop line = largest to_m), like api/leadtime.py and the traffic logger.
 """
+
 import json
 import math
 from pathlib import Path
@@ -20,7 +21,11 @@ LEAD_M, LEAD_MPS = 900, 11  # straight lead-in before j1's approach: length, spe
 
 
 def dist(a, b):  # equirectangular, fine at junction scale
-    return math.hypot((b[1] - a[1]) * math.cos(math.radians((a[0] + b[0]) / 2)), b[0] - a[0]) * math.radians(1) * 6371000
+    return (
+        math.hypot((b[1] - a[1]) * math.cos(math.radians((a[0] + b[0]) / 2)), b[0] - a[0])
+        * math.radians(1)
+        * 6371000
+    )
 
 
 def appr(j, aid):
@@ -34,7 +39,13 @@ def tail(poly, m):
         d = dist(poly[i - 1], poly[i])
         if acc + d >= m:
             f = (m - acc) / d
-            out.insert(0, [poly[i][0] + (poly[i - 1][0] - poly[i][0]) * f, poly[i][1] + (poly[i - 1][1] - poly[i][1]) * f])
+            out.insert(
+                0,
+                [
+                    poly[i][0] + (poly[i - 1][0] - poly[i][0]) * f,
+                    poly[i][1] + (poly[i - 1][1] - poly[i][1]) * f,
+                ],
+            )
             return out
         acc += d
         out.insert(0, poly[i - 1])
@@ -109,15 +120,17 @@ def time_at(ticks, s):
 
 
 hosp = [C["hospital"]["lat"], C["hospital"]["lng"]]
-main = build([
-    ([lead_in(appr("j1", "E"), LEAD_M)], None),
-    (appr("j1", "E"), "j1"),
-    (tail(appr("j2", "SE"), 250), "j2"),
-    (appr("j3", "E"), "j3"),
-    (tail(appr("j4", "E"), 250), "j4"),
-    (tail(appr("j5", "E"), 250), "j5"),
-    ([hosp], None),
-])
+main = build(
+    [
+        ([lead_in(appr("j1", "E"), LEAD_M)], None),
+        (appr("j1", "E"), "j1"),
+        (tail(appr("j2", "SE"), 250), "j2"),
+        (appr("j3", "E"), "j3"),
+        (tail(appr("j4", "E"), 250), "j4"),
+        (tail(appr("j5", "E"), 250), "j5"),
+        ([hosp], None),
+    ]
+)
 JAMS = {"j3": 500, "j4": 100}
 amb = drive(main, 0, JAMS, 200, LEAD_M)
 amb_j3 = time_at(amb, main[2]["j3"])
@@ -164,12 +177,33 @@ out = {
         "note": "Today lane: each junction runs a fixed signal cycle (cycle_s from the corridor file, first red_fraction of it red). A vehicle is assumed to arrive at a uniformly random but seeded phase of that cycle, waits out the remaining red, then the queue ahead drains at 2.0 m/s (jam_m / 2.0). Spans are in route order: the stop line is the largest to_m. Simulated estimate on recorded traffic, not a field measurement.",
     },
     "vehicles": [
-        {"run_id": "run-amb-1", "plate": "KA01AB1234", "type": "ambulance", "tier": "critical", "start_offset_s": 0,
-         "approaches": {"j1": "E", "j2": "SE", "j3": "E", "j4": "E", "j5": "E"}, "ticks": clean(amb)},
-        {"run_id": "run-fire-1", "plate": "KA01FE5678", "type": "fire", "tier": "fire_with_trapped", "start_offset_s": fire_start,
-         "approaches": {"j3": "S"}, "ticks": clean(fire)},
-        {"run_id": "run-amb-2", "plate": "KA01AB4321", "type": "ambulance", "tier": "urgent", "start_offset_s": amb2_start,
-         "approaches": {"j1": "E", "j2": "SE", "j3": "E", "j4": "E", "j5": "E"}, "ticks": clean(amb2)},
+        {
+            "run_id": "run-amb-1",
+            "plate": "KA01AB1234",
+            "type": "ambulance",
+            "tier": "critical",
+            "start_offset_s": 0,
+            "approaches": {"j1": "E", "j2": "SE", "j3": "E", "j4": "E", "j5": "E"},
+            "ticks": clean(amb),
+        },
+        {
+            "run_id": "run-fire-1",
+            "plate": "KA01FE5678",
+            "type": "fire",
+            "tier": "fire_with_trapped",
+            "start_offset_s": fire_start,
+            "approaches": {"j3": "S"},
+            "ticks": clean(fire),
+        },
+        {
+            "run_id": "run-amb-2",
+            "plate": "KA01AB4321",
+            "type": "ambulance",
+            "tier": "urgent",
+            "start_offset_s": amb2_start,
+            "approaches": {"j1": "E", "j2": "SE", "j3": "E", "j4": "E", "j5": "E"},
+            "ticks": clean(amb2),
+        },
     ],
     "recorded_spans": {
         "blr_j1": snaps([("00:00", full(0, 60))]),
@@ -188,14 +222,21 @@ def num(x):
 # one tick per line keeps the file readable and diffable: dump with placeholders, then splice the tick blocks in
 blocks = {}
 for n, v in enumerate(out["vehicles"]):
-    blocks[f"@@{n}@@"] = "[\n" + ",\n".join(
-        "        {" + ", ".join(f'"{k}": {num(x)}' for k, x in t.items()) + "}" for t in v["ticks"]) + "\n      ]"
+    blocks[f"@@{n}@@"] = (
+        "[\n"
+        + ",\n".join(
+            "        {" + ", ".join(f'"{k}": {num(x)}' for k, x in t.items()) + "}" for t in v["ticks"]
+        )
+        + "\n      ]"
+    )
     v["ticks"] = f"@@{n}@@"
 text = json.dumps(out, indent=2)
 for k, b in blocks.items():
     text = text.replace(f'"{k}"', b)
 (ROOT / "data/scenarios/blr-two-vehicles.json").write_text(text + "\n")
 json.loads(text)  # fail loudly if the layout trick ever breaks the JSON
-print(f"first tick {main[2]['j1']:.0f} m before j1; ambulance first tick -> j3 {amb_j3:.0f} s ({len(amb)} ticks); "
-      f"fire first tick -> j3 {time_at(fire, fire_path[2]['j3']):.0f} s, starts +{fire_start} s ({len(fire)} ticks); "
-      f"platoon ambulance first tick -> j3 {amb_j3:.0f} s, starts +{amb2_start} s ({len(amb2)} ticks)")
+print(
+    f"first tick {main[2]['j1']:.0f} m before j1; ambulance first tick -> j3 {amb_j3:.0f} s ({len(amb)} ticks); "
+    f"fire first tick -> j3 {time_at(fire, fire_path[2]['j3']):.0f} s, starts +{fire_start} s ({len(fire)} ticks); "
+    f"platoon ambulance first tick -> j3 {amb_j3:.0f} s, starts +{amb2_start} s ({len(amb2)} ticks)"
+)

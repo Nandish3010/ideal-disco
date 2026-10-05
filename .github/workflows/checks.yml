@@ -12,10 +12,6 @@ jobs:
           if grep -rIiEn --exclude-dir=.git --exclude-dir=node_modules '[c]laude|[a]nthropic|co-[a]uthored-by' .; then
             exit 1
           fi
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: python api/acuity.py && python api/priority.py && python api/leadtime.py && python api/report.py
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -24,3 +20,25 @@ jobs:
       - run: cd web && npm run format:check
       - run: cd web && npm test
       - run: cd web && npm run build
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            api/requirements.txt
+            api/requirements-dev.txt
+      # google-adk is the heavy package and no test needs it: agent.py falls back to the rule-based router without it
+      - name: Install
+        run: |
+          grep -v '^google-adk' api/requirements.txt > "$RUNNER_TEMP/requirements.txt"
+          pip install -r api/requirements-dev.txt -r "$RUNNER_TEMP/requirements.txt"
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy api
+      - run: pytest --cov --cov-fail-under=80
+      - name: Engine self-checks
+        run: python api/acuity.py && python api/priority.py && python api/leadtime.py && python api/report.py

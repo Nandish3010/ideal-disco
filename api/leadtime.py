@@ -36,10 +36,25 @@ def stage(eta_s: float, clear_s: float, buffer_s: float = 15):
 
 
 if __name__ == "__main__":
-    def jam(m): return [{"from_m": 0, "to_m": 600 - m, "speed": "NORMAL"}, {"from_m": 600 - m, "to_m": 600, "speed": "TRAFFIC_JAM"}]
+
+    def jam(m):
+        return [
+            {"from_m": 0, "to_m": 600 - m, "speed": "NORMAL"},
+            {"from_m": 600 - m, "to_m": 600, "speed": "TRAFFIC_JAM"},
+        ]
+
     assert jam_metres(jam(500)) == 500 and jam_metres([]) == 0
-    assert jam_metres([{"from_m": 0, "to_m": 100, "speed": "TRAFFIC_JAM"}, {"from_m": 100, "to_m": 200, "speed": "NORMAL"},
-                       {"from_m": 200, "to_m": 300, "speed": "SLOW"}, {"from_m": 300, "to_m": 400, "speed": "TRAFFIC_JAM"}]) == 150
+    assert (
+        jam_metres(
+            [
+                {"from_m": 0, "to_m": 100, "speed": "TRAFFIC_JAM"},
+                {"from_m": 100, "to_m": 200, "speed": "NORMAL"},
+                {"from_m": 200, "to_m": 300, "speed": "SLOW"},
+                {"from_m": 300, "to_m": 400, "speed": "TRAFFIC_JAM"},
+            ]
+        )
+        == 150
+    )
     assert clear_seconds(500) > clear_seconds(100) and clear_seconds(0) == 20
     assert blended_eta(100, 300, 0) == 0.5 * 100 + 0.5 * 100  # speed floor 3
     assert stage(300, clear_seconds(500)) is None and stage(270, clear_seconds(500)) == "PREPARE"

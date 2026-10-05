@@ -28,7 +28,7 @@ Clients read; only the Cloud Run service account writes. Every server log line c
 }
 ```
 `routing` (written by the hospital routing agent, below) is optional until the tier is confirmed.
-`state`: `en_route | arrived | ended | stale | off_route`. `/location` sets `arrived` (and writes the report card) when a tick is within 100 m of the destination; `/runs` end sets `ended`. `source`: `gps | sim`. `acuity_tier` is the lookup result written by `/triage`, `confirmed_tier` the crew's tap written by `/runs/{id}/confirm` (which also sets `patient_on_board: true`); only `confirmed_tier` enters priority.
+`state`: `en_route | arrived | ended | stale | off_route` (`ended_reason: "superseded"` when a newer run for the same plate replaced it). `/location` sets `arrived` (and writes the report card) when a tick is within 100 m of the destination; `/runs` end sets `ended`. `source`: `gps | sim`. `acuity_tier` is the lookup result written by `/triage`, `confirmed_tier` the crew's tap written by `/runs/{id}/confirm` (which also sets `patient_on_board: true`); only `confirmed_tier` enters priority.
 
 Written by `/location` on every tick:
 ```json
@@ -133,7 +133,7 @@ The same row is inserted into BigQuery `corridor.run_reports` (created on first 
 
 ## API
 
-All bodies JSON. Errors: `{"error": "<code>", "detail": "..."}` with 4xx/5xx. Unwritten endpoints currently return 501 `{"todo": "<name>"}`. Request bodies that fail validation return FastAPI's 422 `{"detail": [...]}`. Firestore failures return 503 `{"error": "store_unavailable"}`.
+All bodies JSON. Errors: `{"error": "<code>", "detail": "..."}` with 4xx/5xx. Unwritten endpoints currently return 501 `{"todo": "<name>"}`. Request bodies that fail validation return 422 `{"error": "validation_error", "detail": "<field>: <message>; ..."}`; `detail` is always text, and some errors add keys (`state`, `fallback`). Firestore failures return 503 `{"error": "store_unavailable"}`, anything unexpected 500 `{"error": "internal_error"}`. Every response carries an `X-Request-Id` header (the caller's, else a new uuid4) that is also on every server log line. CORS allows only the two Firebase Hosting origins, `localhost:5173` / `127.0.0.1:5173` and the comma-separated env `EXTRA_ORIGINS`.
 
 ### `GET /health`
 Response `{"ok": true, "model": "gemini-3.1-flash-lite"}`
@@ -157,6 +157,7 @@ Start:
 { "action": "start", "plate": "KA01AB1234", "incident_id": "INC-0001", "corridor": "blr", "destination": {"name": "...", "lat": 0, "lng": 0}, "source": "gps" }
 ```
 `destination` and `scenario` (a `data/scenarios/<name>` replay: recorded spans, no Routes calls) are optional. 200 `{ "run_id": "run-1a2b3c4d" }` (state `en_route`, `patient_on_board` false). 403 `{ "error": "unregistered_vehicle" }` or `{ "error": "no_active_incident" }` (incident missing or not `open`).
+A vehicle has one active run: starting a run for a plate that already has one in `en_route`, `stale` or `off_route` first ends the earlier run (`state: "ended"`, `ended_reason: "superseded"`, `ahead` / `ahead_ids` cleared, no report card) and then creates the new one.
 End:
 ```json
 { "action": "end", "run_id": "run-amb-1" }

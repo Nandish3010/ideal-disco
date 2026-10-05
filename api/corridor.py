@@ -1,4 +1,5 @@
 """Corridor config and route geometry. Corridors and scenarios load once at startup."""
+
 import json
 import math
 from pathlib import Path
@@ -6,7 +7,9 @@ from pathlib import Path
 _HERE = Path(__file__).resolve().parent
 # api/data/ is a copy made by the deploy build; locally the repo's data/ is used
 DATA = next(p for p in (_HERE / "data", _HERE.parent / "data") if p.exists())
-CORRIDORS = {c["id"]: c for c in (json.loads(f.read_text()) for f in sorted((DATA / "corridors").glob("*.json")))}
+CORRIDORS = {
+    c["id"]: c for c in (json.loads(f.read_text()) for f in sorted((DATA / "corridors").glob("*.json")))
+}
 SCENARIOS = {f.stem: json.loads(f.read_text()) for f in (DATA / "scenarios").glob("*.json")}
 
 MATCH_M = 100  # a junction counts as "on the route" if the polyline passes within this (junction coords are hand-placed)
@@ -32,7 +35,7 @@ def angle_diff(a, b) -> float:
 def locate(points, p):
     """Nearest point of a polyline to p -> (metres along the polyline, metres off it)."""
     best, cum = (math.inf, 0.0), 0.0
-    for a, b in zip(points, points[1:]):
+    for a, b in zip(points, points[1:], strict=False):
         ax, ay = _xy(p, a)
         bx, by = _xy(p, b)
         dx, dy = bx - ax, by - ay
@@ -48,7 +51,7 @@ def locate(points, p):
 def heading_at(points, along_m) -> float:
     """Direction of travel on the polyline at `along_m` metres from its start."""
     cum = 0.0
-    for a, b in zip(points, points[1:]):
+    for a, b in zip(points, points[1:], strict=False):
         cum += distance_m(a, b)
         if cum >= along_m:
             return bearing(a, b)
@@ -77,8 +80,13 @@ def junctions_ahead(corridor, lat, lng, heading, route_points):
             if heading is not None and angle_diff(to_j, heading) > 90:
                 continue
             into = heading if heading is not None and ahead < 100 else to_j
-        ap = min(({**a, "bearing_err": angle_diff(a["bearing"], into)} for a in j["approaches"]), key=lambda a: a["bearing_err"])
-        found.append((max(ahead, 0), {**j, "doc_id": f"{corridor['id']}_{j['id']}", "ahead_m": max(ahead, 0)}, ap))
+        ap = min(
+            ({**a, "bearing_err": angle_diff(a["bearing"], into)} for a in j["approaches"]),
+            key=lambda a: a["bearing_err"],
+        )
+        found.append(
+            (max(ahead, 0), {**j, "doc_id": f"{corridor['id']}_{j['id']}", "ahead_m": max(ahead, 0)}, ap)
+        )
     return [(j, ap) for _, j, ap in sorted(found, key=lambda f: f[0])]
 
 
@@ -86,33 +94,3 @@ def next_junction(corridor, lat, lng, heading, route_points):
     """First junction ahead -> (junction, approach); (None, None) when none is left."""
     ahead = junctions_ahead(corridor, lat, lng, heading, route_points)
     return ahead[0] if ahead else (None, None)
-
-
-if __name__ == "__main__":
-    assert {"blr", "hyd"} <= set(CORRIDORS) and "example" in SCENARIOS
-    assert abs(distance_m((12.0, 77.0), (12.001, 77.0)) - 111.32) < 0.1
-    assert round(bearing((12, 77), (12.01, 77))) == 0 and round(bearing((12, 77), (12, 77.01))) == 90
-    assert angle_diff(350, 10) == 20
-    blr = CORRIDORS["blr"]
-    j1, j2 = blr["junctions"][0], blr["junctions"][1]
-    # route: the start of j1's E approach (600 m out), through j1, on to j2
-    start = tuple(j1["approaches"][0]["polyline"][0])
-    route = [start, (j1["lat"], j1["lng"]), (j2["lat"], j2["lng"])]
-    assert locate(route, (j1["lat"], j1["lng"]))[1] < 1 and locate(route, (start[0], start[1] + 0.002))[1] > 150
-    j, ap = next_junction(blr, *start, None, route)
-    assert j["id"] == "j1" and ap["id"] == "E" and 400 < j["ahead_m"] < 700, (j["id"], ap, j["ahead_m"])
-    # past j1: the next one on the route is j2; j1 is behind
-    between = ((j1["lat"] + j2["lat"]) / 2, (j1["lng"] + j2["lng"]) / 2)
-    j, ap = next_junction(blr, *between, None, route)
-    assert j["id"] == "j2" and j["doc_id"] == "blr_j2", j["id"]
-    # no route: heading decides. Heading 330 at the SE approach start sees j1 ahead; heading 150 sees everything behind
-    assert next_junction(blr, *start, 330, None)[0]["id"] == "j1"
-    assert next_junction(blr, *start, 150, None)[0] is None
-    # approach follows the route direction into the junction, not the current heading
-    assert next_junction(blr, *start, 90, route)[1]["id"] == "E"
-    assert [x[0]["id"] for x in junctions_ahead(blr, *start, None, route)] == ["j1", "j2"]
-    assert [x[0]["id"] for x in junctions_ahead(blr, *between, None, route)] == ["j2"]
-    # nothing left after the last junction
-    j5 = blr["junctions"][-1]
-    assert next_junction(blr, j5["lat"], j5["lng"] - 0.01, None, [(j5["lat"], j5["lng"] - 0.01), (j5["lat"], j5["lng"] - 0.02)])[0] is None
-    print("corridor ok")

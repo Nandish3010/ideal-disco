@@ -1,17 +1,20 @@
 import base64
 import os
+import time
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI
+from fastapi import BackgroundTasks, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from google.api_core.exceptions import GoogleAPIError
-from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud.firestore import DELETE_FIELD, SERVER_TIMESTAMP, Query
+from google.cloud.firestore_v1.base_query import FieldFilter
 from google.genai import errors as genai_errors
 from pydantic import BaseModel, Field
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import acuity
 import agent
@@ -23,17 +26,22 @@ import report
 import routes_api
 from corridor import CORRIDORS, SCENARIOS, bearing, distance_m, junctions_ahead, locate
 from firestore_client import db
-from gemini import ExtractionFailed, extract, log, offline
+from gemini import ExtractionFailed, extract, offline
 from hospitals import by_id
+from logctx import log, request_id
 from signal_adapter import SimAdapter
 from tts import speak, store_photo, translate
 
 app = FastAPI(title="corridor-api")
 if offline():
     log(event="offline_ai")
-# ponytail: demo, no auth, any origin
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
+ORIGINS = [
+    "https://green-corridor-2026.web.app",
+    "https://green-corridor-2026.firebaseapp.com",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    *(o.strip() for o in os.environ.get("EXTRA_ORIGINS", "").split(",") if o.strip()),
+]
 IMAGE_MIMES = {"image/jpeg", "image/png", "image/webp"}
 TIERS = {"critical", "urgent", "stable", "fire", "fire_with_trapped", "police", "police_with_incident"}
 
@@ -42,14 +50,66 @@ def todo(name: str) -> JSONResponse:
     return JSONResponse({"todo": name}, status_code=501)
 
 
-def err(status: int, code: str, **kw) -> JSONResponse:
-    return JSONResponse({"error": code, **kw}, status_code=status)
+def err(status: int, code: str, detail: str = "", **kw) -> JSONResponse:
+    """The one error envelope: {"error": code, "detail": text}, plus any extra keys a client reads (state, fallback)."""
+    return JSONResponse({"error": code, "detail": detail or code.replace("_", " "), **kw}, status_code=status)
+
+
+@app.middleware("http")
+async def request_context(request: Request, call_next):
+    """Request id (X-Request-Id or a new uuid4) on every log line and the response; one access line per request."""
+    rid = (request.headers.get("X-Request-Id") or str(uuid.uuid4()))[:64]
+    token = request_id.set(rid)
+    t0 = time.perf_counter()
+    try:
+        resp = await call_next(request)
+    except Exception as e:
+        log(event="unhandled_error", path=request.url.path, error=type(e).__name__, detail=str(e)[:200])
+        resp = err(500, "internal_error")
+    resp.headers["X-Request-Id"] = rid
+    log(
+        event="request",
+        method=request.method,
+        path=request.url.path,
+        status=resp.status_code,
+        ms=round((time.perf_counter() - t0) * 1000),
+    )
+    request_id.reset(token)
+    return resp
+
+
+# added last so it is outermost: even a 500 from request_context carries the CORS headers
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ORIGINS,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["X-Request-Id"],
+)
 
 
 @app.exception_handler(GoogleAPIError)
 def firestore_down(request, exc):
     log(event="firestore_error", path=request.url.path, error=type(exc).__name__, detail=str(exc)[:200])
-    return err(503, "store_unavailable")
+    return err(503, "store_unavailable", "Firestore is unavailable")
+
+
+@app.exception_handler(RequestValidationError)
+def invalid_request(request, exc):
+    return err(
+        422,
+        "validation_error",
+        "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors()),
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+def http_error(request, exc):
+    return err(
+        exc.status_code,
+        {404: "not_found", 405: "method_not_allowed"}.get(exc.status_code, "http_error"),
+        str(exc.detail),
+    )
 
 
 class Bind(BaseModel):
@@ -64,24 +124,24 @@ class Incident(BaseModel):
 
 class RunReq(BaseModel):
     action: str  # start | end
-    plate: Optional[str] = None
-    incident_id: Optional[str] = None
-    corridor: Optional[str] = None
-    destination: Optional[dict] = None
+    plate: str | None = None
+    incident_id: str | None = None
+    corridor: str | None = None
+    destination: dict | None = None
     source: str = "gps"
-    run_id: Optional[str] = None
-    scenario: Optional[str] = None  # a data/scenarios/<name>.json replay: recorded spans, no Routes calls
+    run_id: str | None = None
+    scenario: str | None = None  # a data/scenarios/<name>.json replay: recorded spans, no Routes calls
 
 
 class Triage(BaseModel):
     run_id: str
-    vehicle_type: Optional[str] = None
-    text: Optional[str] = None
-    audio_b64: Optional[str] = None
-    image_b64: Optional[str] = None  # photo of a monitor or ECG strip; mime is then image/jpeg|png|webp
-    mime: Optional[str] = None
-    lang_hint: Optional[str] = None
-    kind: Optional[str] = None  # /log only
+    vehicle_type: str | None = None
+    text: str | None = None
+    audio_b64: str | None = None
+    image_b64: str | None = None  # photo of a monitor or ECG strip; mime is then image/jpeg|png|webp
+    mime: str | None = None
+    lang_hint: str | None = None
+    kind: str | None = None  # /log only
 
 
 class Confirm(BaseModel):
@@ -108,7 +168,8 @@ def vehicles_bind(b: Bind):
 def incidents(i: Incident):
     iid = "INC-" + uuid.uuid4().hex[:6].upper()
     db.collection("incidents").document(iid).set(
-        {"type": i.type, "severity_note": i.severity_note, "created_at": datetime.now(timezone.utc), "state": "open"})
+        {"type": i.type, "severity_note": i.severity_note, "created_at": datetime.now(UTC), "state": "open"}
+    )
     return {"incident_id": iid}
 
 
@@ -122,19 +183,36 @@ def runs(r: RunReq):
         log(event="run_ended", run_id=r.run_id)
         return {"run_id": r.run_id, "state": "ended", "report": report.write(r.run_id, ref)}
     if r.action != "start" or not (r.plate and r.incident_id and r.corridor):
-        return err(400, "bad_request", detail="start needs plate, incident_id, corridor")
+        return err(400, "bad_request", "start needs plate, incident_id, corridor")
     v = db.collection("vehicles").document(r.plate).get()
     inc = db.collection("incidents").document(r.incident_id).get()
     if not (v.exists and v.to_dict().get("active")):
         return err(403, "unregistered_vehicle")
     if not (inc.exists and inc.to_dict().get("state") == "open"):
         return err(403, "no_active_incident")
+    # one active run per vehicle: the new one supersedes. ponytail: equality-only query (no composite index), state filtered here
+    for old in db.collection("runs").where(filter=FieldFilter("vehicle_plate", "==", r.plate)).stream():
+        if old.to_dict().get("state") in LIVE:
+            old.reference.update(
+                {"state": "ended", "ended_reason": "superseded", "ahead_ids": [], "ahead": {}}
+            )  # no report card
+            log(event="run_superseded", run_id=old.id, plate=r.plate)
     run_id = "run-" + uuid.uuid4().hex[:8]
-    db.collection("runs").document(run_id).set({
-        "vehicle_plate": r.plate, "vehicle_type": v.to_dict()["type"], "incident_id": r.incident_id,
-        "corridor": r.corridor, "destination": r.destination, "source": r.source, "state": "en_route",
-        "patient_on_board": False, "brief_fired": False, "started_at": datetime.now(timezone.utc),
-        **({"scenario": r.scenario} if r.scenario else {})})
+    db.collection("runs").document(run_id).set(
+        {
+            "vehicle_plate": r.plate,
+            "vehicle_type": v.to_dict()["type"],
+            "incident_id": r.incident_id,
+            "corridor": r.corridor,
+            "destination": r.destination,
+            "source": r.source,
+            "state": "en_route",
+            "patient_on_board": False,
+            "brief_fired": False,
+            "started_at": datetime.now(UTC),
+            **({"scenario": r.scenario} if r.scenario else {}),
+        }
+    )
     log(event="run_started", run_id=run_id, plate=r.plate)
     return {"run_id": run_id}
 
@@ -149,23 +227,40 @@ def _extract_and_log(t: Triage, interventions=False):
     audio = base64.b64decode(t.audio_b64) if t.audio_b64 else None
     image = base64.b64decode(t.image_b64) if t.image_b64 else None
     if not (audio or image or t.text):
-        return err(400, "bad_request", detail="audio_b64, image_b64 or text required")
+        return err(400, "bad_request", "audio_b64, image_b64 or text required")
     if image and (audio or t.mime not in IMAGE_MIMES):
-        return err(400, "bad_request", detail=f"image_b64 takes mime {sorted(IMAGE_MIMES)} and no audio_b64")
+        return err(400, "bad_request", f"image_b64 takes mime {sorted(IMAGE_MIMES)} and no audio_b64")
     try:
-        fields = extract(audio, t.mime, t.text, t.vehicle_type or run["vehicle_type"], t.lang_hint, run_id=t.run_id,
-                        interventions=interventions, image_bytes=image)
+        fields = extract(
+            audio,
+            t.mime,
+            t.text,
+            t.vehicle_type or run["vehicle_type"],
+            t.lang_hint,
+            run_id=t.run_id,
+            interventions=interventions,
+            image_bytes=image,
+        )
     except ExtractionFailed:
         log(event="extraction_failed", run_id=t.run_id)
         return err(422, "extraction_failed", fallback="form")
     given = fields.pop("interventions", [])  # kept on the entry, not inside fields
     coll = run_ref.collection("log")
     n = len(list(coll.stream()))  # ponytail: count-based index, racy under concurrent writers
-    photo_url = store_photo(image, t.mime, f"photos/{t.run_id}/{n}.jpg") if image else None  # None: upload failed, entry still saved
-    coll.document(str(n)).set({
-        "t": datetime.now(timezone.utc), "kind": t.kind or ("photo" if image else "voice" if audio else "form"),
-        "transcript_en": fields["transcript_en"], "fields": fields, "interventions": given, "confirmed": False,
-        **({"photo_url": photo_url} if image else {})})
+    photo_url = (
+        store_photo(image, t.mime or "image/jpeg", f"photos/{t.run_id}/{n}.jpg") if image else None
+    )  # None: upload failed, entry still saved
+    coll.document(str(n)).set(
+        {
+            "t": datetime.now(UTC),
+            "kind": t.kind or ("photo" if image else "voice" if audio else "form"),
+            "transcript_en": fields["transcript_en"],
+            "fields": fields,
+            "interventions": given,
+            "confirmed": False,
+            **({"photo_url": photo_url} if image else {}),
+        }
+    )
     return run, fields, run_ref, n, given, photo_url
 
 
@@ -179,8 +274,12 @@ def triage(t: Triage):
     tier = acuity.tier({**fields, "incident_id": run.get("incident_id")}, vtype)
     run_ref.update({"acuity_tier": tier})
     log(event="triage", run_id=t.run_id, suggested_tier=tier)
-    return {"fields": fields, "transcript_en": fields["transcript_en"], "suggested_tier": tier,
-            **({"photo_url": photo_url} if t.image_b64 else {})}
+    return {
+        "fields": fields,
+        "transcript_en": fields["transcript_en"],
+        "suggested_tier": tier,
+        **({"photo_url": photo_url} if t.image_b64 else {}),
+    }
 
 
 @app.post("/log")
@@ -189,20 +288,28 @@ def log_entry(t: Triage):
     if isinstance(out, JSONResponse):
         return out
     _, fields, _, n, given, photo_url = out
-    return {"n": n, "transcript_en": fields["transcript_en"], "fields": fields, "interventions": given, "confirmed": False,
-            **({"photo_url": photo_url} if t.image_b64 else {})}
+    return {
+        "n": n,
+        "transcript_en": fields["transcript_en"],
+        "fields": fields,
+        "interventions": given,
+        "confirmed": False,
+        **({"photo_url": photo_url} if t.image_b64 else {}),
+    }
 
 
 @app.post("/runs/{run_id}/confirm")
 def confirm(run_id: str, c: Confirm, bg: BackgroundTasks):
     if c.tier not in TIERS:
-        return err(400, "bad_tier", detail=sorted(TIERS))
+        return err(400, "bad_tier", "tier must be one of: " + ", ".join(sorted(TIERS)))
     ref = db.collection("runs").document(run_id)
     if not ref.get().exists:
         return err(404, "unknown_run")
     ref.update({"confirmed_tier": c.tier, "patient_on_board": True})
     log(event="tier_confirmed", run_id=run_id, tier=c.tier)
-    bg.add_task(agent.apply, ref)  # hospital routing agent after the response (Cloud Run runs with --no-cpu-throttling); the UI reads runs/{id}.routing live
+    bg.add_task(
+        agent.apply, ref
+    )  # hospital routing agent after the response (Cloud Run runs with --no-cpu-throttling); the UI reads runs/{id}.routing live
     return {"run_id": run_id, "confirmed_tier": c.tier, "patient_on_board": True, "routing": None}
 
 
@@ -215,13 +322,15 @@ def route(r: RouteReq):
     ref = db.collection("runs").document(r.run_id)
     if not ref.get().exists:
         return err(404, "unknown_run")
-    return agent.apply(ref) or err(409, "not_routable", detail="needs a confirmed ambulance run on a corridor with a roster")
+    return agent.apply(ref) or err(
+        409, "not_routable", "needs a confirmed ambulance run on a corridor with a roster"
+    )
 
 
 def write_brief(run_id, run_ref, run, entries):
     """Generate from the log and store briefs/{run_id}; marks the run's brief as fired. Raises ExtractionFailed."""
     b, model = brief.generate(run, entries, run_id=run_id)
-    doc = {**b, "disclaimer": brief.DISCLAIMER, "generated_at": datetime.now(timezone.utc), "model": model}
+    doc = {**b, "disclaimer": brief.DISCLAIMER, "generated_at": datetime.now(UTC), "model": model}
     db.collection("briefs").document(run_id).set(doc)
     run_ref.update({"brief_fired": True, "brief_due": False})
     log(event="brief_written", run_id=run_id, model=model)
@@ -244,7 +353,7 @@ def brief_endpoint(b: BriefReq):
         return err(404, "unknown_run")
     entries = log_entries(run_ref)
     if not entries:
-        return err(422, "no_log_entries", detail="nothing to brief yet")
+        return err(422, "no_log_entries", "nothing to brief yet")
     try:
         return write_brief(b.run_id, run_ref, run.to_dict(), entries)
     except ExtractionFailed:
@@ -257,17 +366,28 @@ class Loc(BaseModel):
     lat: float = Field(ge=-90, le=90)
     lng: float = Field(ge=-180, le=180)
     speed_mps: float = Field(ge=0)
-    heading: Optional[float] = None  # degrees; derived from the previous tick when absent
-    t: Optional[datetime] = None  # tick time; server time when absent
+    heading: float | None = None  # degrees; derived from the previous tick when absent
+    t: datetime | None = None  # tick time; server time when absent
     source: str = Field("gps", pattern="^(gps|sim)$")
 
 
 LIVE = {"en_route", "off_route", "stale"}  # ticks revive stale and off_route runs; ended/arrived get 403
 OFF_ROUTE_M, STALE_S, BRIEF_ETA_S, MIN_TICK_GAP_S, ARRIVE_M = 80, 30, 300, 5, 100
-BRIEF_MIN_M, PREPARE_MIN_JAM_M = 500, 50  # brief needs a junction passed or this far driven; PREPARE needs a queue this long
+BRIEF_MIN_M, PREPARE_MIN_JAM_M = (
+    500,
+    50,
+)  # brief needs a junction passed or this far driven; PREPARE needs a queue this long
 LABEL = {"ambulance": "AMBULANCE", "fire": "FIRE ENGINE", "police": "POLICE"}
-COMPASS = {"N": "north", "NE": "north-east", "E": "east", "SE": "south-east", "S": "south", "SW": "south-west",
-           "W": "west", "NW": "north-west"}
+COMPASS = {
+    "N": "north",
+    "NE": "north-east",
+    "E": "east",
+    "SE": "south-east",
+    "S": "south",
+    "SW": "south-west",
+    "W": "west",
+    "NW": "north-west",
+}
 
 
 def alert_text(run, stage, jam_m, approach, exit_move, eta_s):
@@ -300,11 +420,12 @@ def contender(run_id, r, eta_s, approach):
 def rationale(jid, seq, lang):
     """Gemini's one-line 'why this order' on the phase, English plus the junction language. Failure: omit and log.
     Always rewritten (deleted when fewer than 2 vehicles) so a stale line never outlives its sequence."""
-    out = {"phase.rationale": DELETE_FIELD, "phase.rationale_local": DELETE_FIELD}
+    out: dict[str, Any] = {"phase.rationale": DELETE_FIELD, "phase.rationale_local": DELETE_FIELD}
     if len(seq) >= 2 and not offline():
         try:
             en = gemini.explain_sequence(
-                [{k: c[k] for k in ("vehicle_type", "tier", "approach", "offset_s")} for c in seq], "en")
+                [{k: c[k] for k in ("vehicle_type", "tier", "approach", "offset_s")} for c in seq], "en"
+            )
             out["phase.rationale"] = en
             out["phase.rationale_local"] = translate(en, lang)
         except (genai_errors.APIError, GoogleAPIError) as e:
@@ -317,7 +438,9 @@ def preempt(run_id, run, jid, approach, eta_s, clear_s, stage, lang):
     if me is None:
         return None
     rows = [me]
-    for d in db.collection("runs").where(filter=FieldFilter("ahead_ids", "array_contains", jid)).limit(20).stream():
+    for d in (
+        db.collection("runs").where(filter=FieldFilter("ahead_ids", "array_contains", jid)).limit(20).stream()
+    ):
         r = d.to_dict()
         if d.id != run_id and r.get("state") == "en_route" and jid in (r.get("ahead") or {}):
             c = contender(d.id, r, r["ahead"][jid]["eta_s"], r["ahead"][jid]["approach"])
@@ -325,20 +448,37 @@ def preempt(run_id, run, jid, approach, eta_s, clear_s, stage, lang):
                 rows.append(c)
     seq = priority.sequence(rows)
     SimAdapter(db).request_green(
-        jid, seq[0]["approach"], clear_s + 30 + seq[-1]["offset_s"] + priority.spread_s(seq), [c["run_id"] for c in seq],
-        [{"run_id": c["run_id"], "offset_s": c["offset_s"], "approach": c["approach"]} for c in seq])
+        jid,
+        seq[0]["approach"],
+        clear_s + 30 + seq[-1]["offset_s"] + priority.spread_s(seq),
+        [c["run_id"] for c in seq],
+        [{"run_id": c["run_id"], "offset_s": c["offset_s"], "approach": c["approach"]} for c in seq],
+    )
     sequence = [{"run_id": c["run_id"], "offset_s": c["offset_s"]} for c in seq]
     rationale(jid, seq, lang)
-    db.collection("audit").add({"run_id": run_id, "junction_id": jid, "action": "preempt_requested", "stage": stage,
-                                "approach": seq[0]["approach"], "sequence": sequence, "at": datetime.now(timezone.utc)})
+    db.collection("audit").add(
+        {
+            "run_id": run_id,
+            "junction_id": jid,
+            "action": "preempt_requested",
+            "stage": stage,
+            "approach": seq[0]["approach"],
+            "sequence": sequence,
+            "at": datetime.now(UTC),
+        }
+    )
     log(event="preempt_requested", run_id=run_id, junction_id=jid, sequence=sequence)
     return sequence
 
 
 def mark_stale(now, skip):
     """Piggyback on any tick: runs with no tick for 30 s go stale. ponytail: newest 20 below the cutoff, no scheduler."""
-    q = (db.collection("runs").where(filter=FieldFilter("last_tick_at", "<", now - timedelta(seconds=STALE_S)))
-         .order_by("last_tick_at", direction=Query.DESCENDING).limit(20))
+    q = (
+        db.collection("runs")
+        .where(filter=FieldFilter("last_tick_at", "<", now - timedelta(seconds=STALE_S)))
+        .order_by("last_tick_at", direction=Query.DESCENDING)
+        .limit(20)
+    )
     for d in q.stream():
         if d.id != skip and d.to_dict().get("state") == "en_route":
             d.reference.update({"state": "stale", "ahead_ids": []})
@@ -358,21 +498,34 @@ def escalate(now, mine, others):
         if r.exists and r.to_dict().get("state") == "en_route":
             ids.append(rid)
     for rid in ids:
-        q = (db.collection("runs").document(rid).collection("alerts")
-             .where(filter=FieldFilter("acked_at", "==", None)).where(filter=FieldFilter("escalated", "==", False)))
+        q = (
+            db.collection("runs")
+            .document(rid)
+            .collection("alerts")
+            .where(filter=FieldFilter("acked_at", "==", None))
+            .where(filter=FieldFilter("escalated", "==", False))
+        )
         for d in q.stream():
             a = d.to_dict()
             if a.get("created_at") is None or (now - a["created_at"]).total_seconds() <= ESCALATE_S:
                 continue
             d.reference.update({"escalated": True, "escalated_at": SERVER_TIMESTAMP})
-            db.collection("audit").add({"run_id": rid, "junction_id": a["junction_id"], "action": "escalation",
-                                        "alert_n": int(d.id), "stage": a["stage"], "at": now})
+            db.collection("audit").add(
+                {
+                    "run_id": rid,
+                    "junction_id": a["junction_id"],
+                    "action": "escalation",
+                    "alert_n": int(d.id),
+                    "stage": a["stage"],
+                    "at": now,
+                }
+            )
             log(event="escalation", run_id=rid, junction_id=a["junction_id"], alert_n=int(d.id))
 
 
 @app.post("/location")
-def location(l: Loc):
-    ref = db.collection("runs").document(l.run_id)
+def location(loc: Loc):
+    ref = db.collection("runs").document(loc.run_id)
     snap = ref.get()
     if not snap.exists:
         return err(404, "unknown_run")
@@ -381,65 +534,120 @@ def location(l: Loc):
         return err(403, "run_not_active", state=run["state"])
     corridor = CORRIDORS.get(run.get("corridor"))
     if corridor is None:
-        return err(400, "unknown_corridor", detail=str(run.get("corridor")))
-    now = datetime.now(timezone.utc)
-    t = l.t if l.t and l.t.tzinfo else (l.t.replace(tzinfo=timezone.utc) if l.t else now)
-    me = (l.lat, l.lng)
+        return err(400, "unknown_corridor", str(run.get("corridor")))
+    now = datetime.now(UTC)
+    t = loc.t if loc.t and loc.t.tzinfo else (loc.t.replace(tzinfo=UTC) if loc.t else now)
+    me = (loc.lat, loc.lng)
     first = run.get("first_tick_at") is None
 
     # tick history: last 12, at most one per 5 s so they span ~60 s
     prev = run.get("ticks") or []
     last = prev[-1] if prev else None
-    heading = l.heading
+    heading = loc.heading
     if heading is None:
-        heading = bearing((last["lat"], last["lng"]), me) if last and distance_m((last["lat"], last["lng"]), me) > 5 else run.get("heading")
-    tick = {"t": t, "lat": l.lat, "lng": l.lng, "speed_mps": l.speed_mps}
+        heading = (
+            bearing((last["lat"], last["lng"]), me)
+            if last and distance_m((last["lat"], last["lng"]), me) > 5
+            else run.get("heading")
+        )
+    tick = {"t": t, "lat": loc.lat, "lng": loc.lng, "speed_mps": loc.speed_mps}
     ticks = (prev[:-1] if last and (t - last["t"]).total_seconds() < MIN_TICK_GAP_S else prev)[-11:] + [tick]
     window = [k["speed_mps"] for k in ticks if (t - k["t"]).total_seconds() <= 60]
     observed = sum(window) / len(window)
 
     # hospital route: ETA, polyline for junction and off-route detection. While off_route the old polyline stays pinned
     # so the state holds until the vehicle rejoins it (the cache is per instance; a restart heals it).
-    scenario = run.get("scenario") in SCENARIOS  # replays follow the corridor config, not Google's road choice
+    scenario = (
+        run.get("scenario") in SCENARIOS
+    )  # replays follow the corridor config, not Google's road choice
     # a replay keeps its own destination (routing is recorded, not applied)
-    dest = (None if scenario else by_id((run.get("routing") or {}).get("hospital_id"))) or run.get("destination") or corridor["hospital"]
+    dest = (
+        (None if scenario else by_id((run.get("routing") or {}).get("hospital_id")))
+        or run.get("destination")
+        or corridor["hospital"]
+    )
     if scenario:
-        hosp = {"polyline_points": [], "steps": [], "age_s": 0, "duration_s": distance_m(me, (dest["lat"], dest["lng"])) / max(observed, 3)}
+        hosp = {
+            "polyline_points": [],
+            "steps": [],
+            "age_s": 0,
+            "duration_s": distance_m(me, (dest["lat"], dest["lng"])) / max(observed, 3),
+        }
     else:
         hosp = routes_api.traffic_to_point(
-            me, (dest["lat"], dest["lng"]), key=(l.run_id, "hospital"), ttl=1e9 if run["state"] == "off_route" else 30,
-            steps=True, run_id=l.run_id, junction_id=None)
+            me,
+            (dest["lat"], dest["lng"]),
+            key=(loc.run_id, "hospital"),
+            ttl=1e9 if run["state"] == "off_route" else 30,
+            steps=True,
+            run_id=loc.run_id,
+            junction_id=None,
+        )
     pts = hosp["polyline_points"]
     off = locate(pts, me)[1] if pts else 0
     state = "off_route" if off > OFF_ROUTE_M else "en_route"
     eta_h = run.get("eta_hospital_s")
     if hosp["duration_s"] is not None and hosp["age_s"] < 120:  # older means a pinned route: not an ETA
         eta_h = round(max(hosp["duration_s"] - hosp["age_s"], 0))
-    out = {"state": state, "next_junction": None, "approach": None, "jam_m": None, "eta_s": None, "stage": None,
-           "exit_move": None, "eta_hospital_s": eta_h, "alerts_fired": [], "brief_due": bool(run.get("brief_due")),
-           "observed_speed_60s": round(observed, 1), "traffic": None}
-    upd = {"ticks": ticks, "last_tick_at": now, "source": l.source, "state": state, "heading": heading,
-           "eta_hospital_s": eta_h, "next_junction_id": None}
+    out = {
+        "state": state,
+        "next_junction": None,
+        "approach": None,
+        "jam_m": None,
+        "eta_s": None,
+        "stage": None,
+        "exit_move": None,
+        "eta_hospital_s": eta_h,
+        "alerts_fired": [],
+        "brief_due": bool(run.get("brief_due")),
+        "observed_speed_60s": round(observed, 1),
+        "traffic": None,
+    }
+    upd = {
+        "ticks": ticks,
+        "last_tick_at": now,
+        "source": loc.source,
+        "state": state,
+        "heading": heading,
+        "eta_hospital_s": eta_h,
+        "next_junction_id": None,
+    }
     if first:
         upd["first_tick_at"] = t  # the drive starts at the first tick, not at run creation (report card)
 
     # every junction ahead is evaluated, not just the next: a long queue needs the cop warned minutes before the vehicle
     # reaches the junction, while nearer junctions are still to come. One Routes call per (run, junction) per 20 s.
     passed = list(run.get("passed_junctions") or [])  # always a prefix of corridor["junctions"]: route order
-    ahead = [(j, ap) for j, ap in junctions_ahead(corridor, l.lat, l.lng, heading, pts) if j["doc_id"] not in passed] if state == "en_route" else []
+    ahead = (
+        [
+            (j, ap)
+            for j, ap in junctions_ahead(corridor, loc.lat, loc.lng, heading, pts)
+            if j["doc_id"] not in passed
+        ]
+        if state == "en_route"
+        else []
+    )
     alerts = dict(run.get("alert_state") or {})
     n = run.get("alert_count", 0)
     upd["ahead"], upd["ahead_ids"] = {}, []
-    contenders = set(run.get("contenders") or [])  # run ids met in a preemption sequence; their alerts get escalation-checked too
+    contenders = set(
+        run.get("contenders") or []
+    )  # run ids met in a preemption sequence; their alerts get escalation-checked too
     for j, ap in ahead:
         jid, jc, dist = j["doc_id"], (j["lat"], j["lng"]), j["ahead_m"]
         if scenario:  # recorded spans, no Routes call; a junction with none recorded is NORMAL
             rec = SCENARIOS[run["scenario"]].get("recorded_spans", {}).get(jid) or [{"intervals": []}]
             intervals, routes_eta, traffic = rec[0]["intervals"], dist / max(observed, 3), "scenario"
         else:
-            tr = routes_api.traffic_to_point(me, jc, key=(l.run_id, jid), ttl=20, run_id=l.run_id, junction_id=jid)
+            tr = routes_api.traffic_to_point(
+                me, jc, key=(loc.run_id, jid), ttl=20, run_id=loc.run_id, junction_id=jid
+            )
             intervals, traffic = tr["intervals"], "stale" if tr["stale"] else "live"
-            routes_eta = max(tr["duration_s"] - tr["age_s"], 0) if tr["duration_s"] is not None else dist / max(observed, 3)
+            routes_eta = (
+                max(tr["duration_s"] - tr["age_s"], 0)
+                if tr["duration_s"] is not None
+                else dist / max(observed, 3)
+            )
         jam_m = leadtime.jam_metres(intervals)
         clear_s = leadtime.clear_seconds(jam_m)
         eta_s = leadtime.blended_eta(routes_eta, dist, observed)
@@ -449,7 +657,13 @@ def location(l: Loc):
         if distance_m(me, jc) <= ap["radius_m"]:  # at the stop line
             stage = "STOP"
         if ap["bearing_err"] > 45:
-            log(event="approach_bearing_mismatch", run_id=l.run_id, junction_id=jid, approach=ap["id"], err=round(ap["bearing_err"]))
+            log(
+                event="approach_bearing_mismatch",
+                run_id=loc.run_id,
+                junction_id=jid,
+                approach=ap["id"],
+                err=round(ap["bearing_err"]),
+            )
         move = routes_api.exit_move(hosp["steps"], jc)
         upd["ahead"][jid] = {"eta_s": eta_s, "approach": ap["id"]}
         upd["ahead_ids"].append(jid)
@@ -465,44 +679,93 @@ def location(l: Loc):
             fire = "UPDATE"
         if fire:
             text = alert_text(run, fire, jam_m, ap["id"], move, eta_s)
-            audio_url, text_local = speak(text, corridor["lang"], f"alerts/{l.run_id}/{jid}/{fire}-{n}.mp3")  # None: text-only alert
-            ref.collection("alerts").document(str(n)).set({
-                "junction_id": jid, "approach": ap["id"], "stage": fire, "jam_m": round(jam_m), "eta_s": round(eta_s),
-                "exit_move": move, "text": text, "text_local": text_local, "audio_url": audio_url, "acked_at": None,
-                "escalated": False, "created_at": SERVER_TIMESTAMP})
+            audio_url, text_local = speak(
+                text, corridor["lang"], f"alerts/{loc.run_id}/{jid}/{fire}-{n}.mp3"
+            )  # None: text-only alert
+            ref.collection("alerts").document(str(n)).set(
+                {
+                    "junction_id": jid,
+                    "approach": ap["id"],
+                    "stage": fire,
+                    "jam_m": round(jam_m),
+                    "eta_s": round(eta_s),
+                    "exit_move": move,
+                    "text": text,
+                    "text_local": text_local,
+                    "audio_url": audio_url,
+                    "acked_at": None,
+                    "escalated": False,
+                    "created_at": SERVER_TIMESTAMP,
+                }
+            )
             n += 1
             s.update({"prepare": True, "stop": s.get("stop") or fire == "STOP", "jam_m": jam_m})
             alerts[jid] = s
             upd.update({"alert_state": alerts, "alert_count": n})
             out["alerts_fired"].append({"junction": jid, "stage": fire})
-            log(event="alert", run_id=l.run_id, junction_id=jid, stage=fire, jam_m=round(jam_m), eta_s=round(eta_s))
-            seq = preempt(l.run_id, run, jid, ap["id"], eta_s, clear_s, fire, corridor["lang"])
+            log(
+                event="alert",
+                run_id=loc.run_id,
+                junction_id=jid,
+                stage=fire,
+                jam_m=round(jam_m),
+                eta_s=round(eta_s),
+            )
+            seq = preempt(loc.run_id, run, jid, ap["id"], eta_s, clear_s, fire, corridor["lang"])
             contenders.update(c["run_id"] for c in seq or [])
         if upd["next_junction_id"] is None:  # nearest junction ahead is what the response reports
             upd.update({"next_junction_id": jid, "next_approach": ap["id"], "next_eta_s": eta_s})
-            out.update({"next_junction": jid, "approach": ap["id"], "jam_m": round(jam_m), "eta_s": round(eta_s),
-                        "stage": stage, "exit_move": move, "traffic": traffic})
-    upd["last_eval"] = {k: out[k] for k in ("next_junction", "approach", "jam_m", "eta_s", "stage", "exit_move", "traffic")}
+            out.update(
+                {
+                    "next_junction": jid,
+                    "approach": ap["id"],
+                    "jam_m": round(jam_m),
+                    "eta_s": round(eta_s),
+                    "stage": stage,
+                    "exit_move": move,
+                    "traffic": traffic,
+                }
+            )
+    upd["last_eval"] = {
+        k: out[k] for k in ("next_junction", "approach", "jam_m", "eta_s", "stage", "exit_move", "traffic")
+    }
 
     # passed: a junction is passed once the step from the last tick crossed its stop-line circle and the vehicle is out of it
     # again; passing one passes every earlier one (corridor order is route order), so next_junction never goes backwards
     hi = len(passed) - 1
     for i, j in enumerate(corridor["junctions"]):
         jc = (j["lat"], j["lng"])
-        if i > hi and last and locate([(last["lat"], last["lng"]), me], jc)[1] <= j["approaches"][0]["radius_m"] < distance_m(me, jc):
+        if (
+            i > hi
+            and last
+            and locate([(last["lat"], last["lng"]), me], jc)[1]
+            <= j["approaches"][0]["radius_m"]
+            < distance_m(me, jc)
+        ):
             hi = i
-    upd["passed_junctions"] = passed = [f"{corridor['id']}_{j['id']}" for j in corridor["junctions"][:hi + 1]]
+    upd["passed_junctions"] = passed = [
+        f"{corridor['id']}_{j['id']}" for j in corridor["junctions"][: hi + 1]
+    ]
 
     # brief: ambulances only, once per run at ETA <= 300 s, and only once the run is under way (a junction passed or 500 m
     # driven; never a scenario run's first tick). Needs log entries, else retried next tick; on Gemini failure brief_due stays
     # true and the hospital's Regenerate button (POST /brief) takes over.
     entries = []
-    upd["distance_m"] = round(run.get("distance_m", 0) + (distance_m((last["lat"], last["lng"]), me) if last else 0))
-    if (run["vehicle_type"] == "ambulance" and eta_h is not None and eta_h <= BRIEF_ETA_S and (passed or upd["distance_m"] >= BRIEF_MIN_M)
-            and not (scenario and first) and not run.get("brief_fired") and not run.get("brief_due")):
+    upd["distance_m"] = round(
+        run.get("distance_m", 0) + (distance_m((last["lat"], last["lng"]), me) if last else 0)
+    )
+    if (
+        run["vehicle_type"] == "ambulance"
+        and eta_h is not None
+        and eta_h <= BRIEF_ETA_S
+        and (passed or upd["distance_m"] >= BRIEF_MIN_M)
+        and not (scenario and first)
+        and not run.get("brief_fired")
+        and not run.get("brief_due")
+    ):
         entries = log_entries(ref)
         upd["brief_due"] = out["brief_due"] = bool(entries)
-    upd["contenders"] = sorted(contenders - {l.run_id})
+    upd["contenders"] = sorted(contenders - {loc.run_id})
     arrived = distance_m(me, (dest["lat"], dest["lng"])) <= ARRIVE_M
     if arrived:
         upd.update({"state": "arrived", "ahead_ids": [], "ahead": {}})
@@ -510,14 +773,14 @@ def location(l: Loc):
     ref.update(upd)
     if entries:
         try:
-            write_brief(l.run_id, ref, run, entries)
+            write_brief(loc.run_id, ref, run, entries)
             out["brief_due"] = False
         except ExtractionFailed:
-            log(event="brief_error", run_id=l.run_id, via="location")
-    mark_stale(now, l.run_id)
-    escalate(now, [l.run_id], upd["contenders"])
+            log(event="brief_error", run_id=loc.run_id, via="location")
+    mark_stale(now, loc.run_id)
+    escalate(now, [loc.run_id], upd["contenders"])
     if arrived:
-        report.write(l.run_id, ref)
+        report.write(loc.run_id, ref)
     return out
 
 
@@ -525,7 +788,7 @@ class Ack(BaseModel):
     run_id: str
     alert_n: int
     junction_id: str
-    device_id: Optional[str] = None
+    device_id: str | None = None
 
 
 @app.post("/ack")
@@ -538,7 +801,7 @@ def ack(a: Ack):
     if d.get("acked_at"):  # idempotent: the first ACK stands
         acked, latency = d["acked_at"], d.get("ack_latency_s")
     else:
-        acked = datetime.now(timezone.utc)
+        acked = datetime.now(UTC)
         latency = round(max((acked - d["created_at"]).total_seconds(), 0), 1) if d.get("created_at") else None
         ref.update({"acked_at": acked, "ack_latency_s": latency, "acked_by": a.device_id})
         log(event="ack", run_id=a.run_id, junction_id=a.junction_id, alert_n=a.alert_n, ack_latency_s=latency)
@@ -551,18 +814,19 @@ class Duty(BaseModel):
     junction_id: str  # "blr_j3" or "j3"
     device_id: str
     on: bool
-    name: Optional[str] = None
+    name: str | None = None
 
 
 @app.post("/duty")
 def duty(d: Duty):
     c = CORRIDORS.get(d.corridor)
     if c is None:
-        return err(400, "unknown_corridor", detail=d.corridor)
+        return err(400, "unknown_corridor", d.corridor)
     jid = d.junction_id.removeprefix(d.corridor + "_")
     if jid not in {j["id"] for j in c["junctions"]}:
-        return err(404, "unknown_junction", detail=d.junction_id)
-    doc = {"device_id": d.device_id, "name": d.name, "on": d.on, "since": datetime.now(timezone.utc)}
+        return err(404, "unknown_junction", d.junction_id)
+    since = datetime.now(UTC)
+    doc = {"device_id": d.device_id, "name": d.name, "on": d.on, "since": since}
     db.collection("duty").document(f"{d.corridor}_{jid}").set(doc)
     log(event="duty", junction_id=f"{d.corridor}_{jid}", device_id=d.device_id, on=d.on)
-    return {**doc, "since": doc["since"].isoformat()}
+    return {**doc, "since": since.isoformat()}
