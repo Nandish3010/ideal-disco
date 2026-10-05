@@ -115,7 +115,7 @@ function loadMaps() {
     if (window.google?.maps?.importLibrary) return resolve();
     window.__gmReady = resolve;
     const s = document.createElement("script");
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(KEY)}&loading=async&libraries=geometry&callback=__gmReady`;
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(KEY)}&loading=async&libraries=geometry&language=en&region=IN&callback=__gmReady`;
     s.async = true;
     s.onerror = () => reject(new Error("maps_script_failed"));
     document.head.appendChild(s);

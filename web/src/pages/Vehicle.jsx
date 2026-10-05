@@ -353,7 +353,7 @@ function Triage({ runId, vehicleType, confirmed, setDone }) {
           capture="environment"
           disabled={busy}
           onChange={photo}
-          hidden
+          className="sr-only"
         />
       </label>
       {note && <p className="muted">{note}</p>}
@@ -477,8 +477,8 @@ function Log({ runId }) {
   );
 }
 
-// What the cop at the vehicle's next junction last reported on its alert (alerts/{n}.cop_note), e.g. a stalled bus.
-function CopNote({ runId, next }) {
+// The newest cop report on any of this run's alerts (alerts/{n}.cop_note), e.g. a stalled bus.
+function CopNote({ runId }) {
   const [alerts, setAlerts] = useState([]);
   useEffect(() => {
     setAlerts([]);
@@ -488,8 +488,11 @@ function CopNote({ runId, next }) {
       () => {},
     );
   }, [runId]);
-  const a = currentAlert(alerts, next);
-  return a?.cop_note ? (
+  const a = currentAlert(
+    alerts.filter((x) => x.cop_note),
+    null,
+  );
+  return a ? (
     <p className="card" role="status">
       {copNoteText(a.cop_note, a.junction_id)}
     </p>
@@ -585,12 +588,16 @@ function Run({ bound }) {
                   <p>
                     {r.vehicle_plate} · incident {r.incident_id} · to {r.destination?.name ?? "—"}
                   </p>
-                  {r.eta_hospital_s != null && (
-                    <p>Hospital ETA: {Math.round(r.eta_hospital_s / 60)} min</p>
+                  {r.state === "arrived" ? (
+                    <p>Hospital ETA: arrived</p>
+                  ) : (
+                    r.eta_hospital_s != null && (
+                      <p>Hospital ETA: {Math.round(r.eta_hospital_s / 60)} min</p>
+                    )
                   )}
                 </>
               )}
-              <CopNote runId={runId} next={r?.next_junction_id} />
+              <CopNote runId={runId} />
               <p className="muted">{gps}</p>
               <button className="danger" disabled={busy} onClick={end}>
                 {busy ? "Ending…" : "End run"}

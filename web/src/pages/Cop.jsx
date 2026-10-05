@@ -269,7 +269,11 @@ function Report({ corridor, junction }) {
   });
   return (
     <section>
-      <button className={"giant" + (hold.on ? " live" : "")} disabled={busy} {...holdProps(hold)}>
+      <button
+        className={"giant report" + (hold.on ? " live" : "")}
+        disabled={busy}
+        {...holdProps(hold)}
+      >
         {busy ? "Thinking…" : hold.on ? `Listening ${Math.floor(hold.s)} s` : "Hold to report"}
         {hold.on && (
           <small>

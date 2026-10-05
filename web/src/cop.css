@@ -3,7 +3,7 @@
   --info: #4da3ff;
 }
 .stage {
-  font-size: 25vw;
+  font-size: 14vw;
   line-height: 1;
   font-weight: 900;
   letter-spacing: -0.02em;
@@ -16,10 +16,6 @@
   }
 }
 .alert-full {
-  min-height: calc(100dvh - 130px);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
   border: 6px solid var(--line);
   border-radius: 16px;
   padding: 14px;
@@ -45,9 +41,9 @@
   color: var(--info);
 }
 .alert-text {
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 700;
-  margin: 8px 0;
+  margin: 6px 0;
 }
 .alert-en {
   font-size: 16px;
@@ -60,26 +56,44 @@
   font-weight: 800;
 }
 .eta {
-  font-size: 40px;
+  font-size: 32px;
   font-weight: 800;
   margin: 4px 0;
 }
 .move {
-  font-size: 36px;
+  font-size: 28px;
   font-weight: 800;
   margin: 4px 0;
 }
+/* ACK is pinned to the bottom of the viewport so it never falls below the fold. */
 button.ack {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
   display: block;
   width: 100%;
-  min-height: 180px;
-  font-size: 56px;
+  max-width: 640px;
+  margin: 0 auto;
+  min-height: 96px;
+  box-sizing: content-box;
+  padding: 0 0 env(safe-area-inset-bottom);
+  font-size: 44px;
   font-weight: 900;
-  border-radius: 24px;
+  border-radius: 24px 24px 0 0;
   background: var(--accent);
   color: #000;
   border-color: var(--accent);
-  margin-top: 12px;
+}
+body:has(button.ack) main {
+  padding-bottom: calc(120px + env(safe-area-inset-bottom));
+}
+button.giant.report {
+  min-height: 64px;
+  font-size: 20px;
+  border-radius: 32px;
+  margin: 0 0 12px;
 }
 .idle {
   text-align: center;

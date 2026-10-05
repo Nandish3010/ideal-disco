@@ -5,7 +5,7 @@ import { api } from "../api.js";
 import { typeLabel, within } from "../pick.js";
 import { Err, ErrCard, Offline, rel, useListen, useNow, when } from "../ui.jsx";
 
-function Recent() {
+function Recent({ showClosed }) {
   const s = useListen(
     (ok, bad) =>
       onSnapshot(
@@ -18,8 +18,11 @@ function Recent() {
   const now = useNow(10000);
   if (s.loading) return <p className="muted">Loading…</p>;
   if (s.error) return <ErrCard what="incidents" error={s.error} retry={s.retry} />;
-  const rows = within(s.data, now);
-  if (!rows.length) return <p className="muted">No incidents in the last 24 h</p>;
+  const rows = within(s.data, now).filter((r) => showClosed || r.state !== "closed");
+  if (!rows.length)
+    return (
+      <p className="muted">{showClosed ? "No incidents" : "No open incidents"} in the last 24 h</p>
+    );
   return (
     <ul className="list">
       {rows.map((r) => (
@@ -42,6 +45,7 @@ export default function Dispatch() {
   const [err, setErr] = useState(null);
   const [id, setId] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [showClosed, setShowClosed] = useState(false);
 
   async function submit(e, body = { type, severity_note: note }) {
     e?.preventDefault();
@@ -106,7 +110,10 @@ export default function Dispatch() {
         </div>
       )}
       <h2>Incidents, last 24 h</h2>
-      <Recent />
+      <button type="button" aria-pressed={showClosed} onClick={() => setShowClosed(!showClosed)}>
+        {showClosed ? "Hide closed" : "Show closed"}
+      </button>
+      <Recent showClosed={showClosed} />
     </>
   );
 }

@@ -88,7 +88,7 @@ The /sim?corridor=blr screen replays the same trace twice. On the left the vehic
 <div>
 
 ![w:520 img-shadow](img/hospital.png)
-`/hospital` live log, ATMIST brief
+`/hospital` live log, vitals, treatment so far (the ATMIST brief lands at ETA−5)
 
 </div>
 </div>
