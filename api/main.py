@@ -10,7 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from google.api_core.exceptions import GoogleAPIError
-from google.cloud.firestore import DELETE_FIELD, SERVER_TIMESTAMP, Query
+from google.cloud.firestore import DELETE_FIELD, SERVER_TIMESTAMP, Increment, Query, transactional
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.genai import errors as genai_errors
 from pydantic import BaseModel, Field
@@ -23,6 +23,7 @@ import brief
 import gemini
 import leadtime
 import priority
+import ratelimit
 import report
 import routes_api
 from corridor import CORRIDORS, SCENARIOS, bearing, distance_m, junctions_ahead, locate
@@ -47,10 +48,6 @@ IMAGE_MIMES = {"image/jpeg", "image/png", "image/webp"}
 TIERS = {"critical", "urgent", "stable", "fire", "fire_with_trapped", "police", "police_with_incident"}
 
 
-def todo(name: str) -> JSONResponse:
-    return JSONResponse({"todo": name}, status_code=501)
-
-
 def err(status: int, code: str, detail: str = "", **kw) -> JSONResponse:
     """The one error envelope: {"error": code, "detail": text}, plus any extra keys a client reads (state, fallback)."""
     return JSONResponse({"error": code, "detail": detail or code.replace("_", " "), **kw}, status_code=status)
@@ -58,12 +55,22 @@ def err(status: int, code: str, detail: str = "", **kw) -> JSONResponse:
 
 @app.middleware("http")
 async def request_context(request: Request, call_next):
-    """Request id (X-Request-Id or a new uuid4) on every log line and the response; one access line per request."""
+    """Request id (X-Request-Id or a new uuid4) on every log line and the response; one access line per request. The
+    per-IP rate limit comes first: 429 `rate_limited` with Retry-After."""
     rid = (request.headers.get("X-Request-Id") or str(uuid.uuid4()))[:64]
     token = request_id.set(rid)
     t0 = time.perf_counter()
+    # Cloud Run appends the connecting address to X-Forwarded-For, so the last entry is the one a caller cannot forge
+    ip = request.headers.get("X-Forwarded-For", "").split(",")[-1].strip() or (
+        request.client.host if request.client else "-"
+    )
+    wait_s = ratelimit.retry_after(ip, request.url.path)
     try:
-        resp = await call_next(request)
+        if wait_s is None:
+            resp = await call_next(request)
+        else:
+            resp = err(429, "rate_limited")
+            resp.headers["Retry-After"] = str(wait_s)
     except Exception as e:
         log(event="unhandled_error", path=request.url.path, error=type(e).__name__, detail=str(e)[:200])
         resp = err(500, "internal_error")
@@ -180,7 +187,7 @@ def runs(r: RunReq):
         ref = db.collection("runs").document(r.run_id or "-")
         if not ref.get().exists:
             return err(404, "unknown_run")
-        ref.update({"state": "ended", "ahead_ids": []})
+        ref.update({"state": "ended", "ahead_ids": [], "ahead": {}})
         log(event="run_ended", run_id=r.run_id)
         return {"run_id": r.run_id, "state": "ended", "report": report.write(r.run_id, ref)}
     if r.action != "start" or not (r.plate and r.incident_id and r.corridor):
@@ -218,8 +225,30 @@ def runs(r: RunReq):
     return {"run_id": run_id}
 
 
+MAX_EXTRACTS = 20  # triage + log calls per run: each one is a Gemini call
+BRIEF_COOLDOWN_S = 600  # one brief per run per 10 minutes unless the caller asks to regenerate
+
+
+def next_log_n(run_ref) -> int:
+    """The run's next log number, 1-based, from runs/{id}.log_count bumped with Increment inside one transaction (Firestore
+    retries on contention, so two writers never get the same n). A run with log entries but no counter yet counts them first."""
+
+    @transactional  # built per call: the wrapper keeps retry state
+    def bump(tx):
+        snap = run_ref.get(transaction=tx).to_dict() or {}
+        n = (
+            snap["log_count"]
+            if "log_count" in snap
+            else len(list(run_ref.collection("log").stream(transaction=tx)))
+        )
+        tx.update(run_ref, {"log_count": Increment(1) if "log_count" in snap else n + 1})
+        return n + 1
+
+    return bump(db.transaction())
+
+
 def _extract_and_log(t: Triage, interventions=False):
-    """Returns (run, fields, entry_ref) or a JSONResponse error."""
+    """Returns (run, fields, run_ref, n, interventions, photo_url) or a JSONResponse error."""
     run_ref = db.collection("runs").document(t.run_id)
     run = run_ref.get()
     if not run.exists:
@@ -231,6 +260,11 @@ def _extract_and_log(t: Triage, interventions=False):
         return err(400, "bad_request", "audio_b64, image_b64 or text required")
     if image and (audio or t.mime not in IMAGE_MIMES):
         return err(400, "bad_request", f"image_b64 takes mime {sorted(IMAGE_MIMES)} and no audio_b64")
+    if run.get("extract_calls", 0) >= MAX_EXTRACTS:
+        return err(429, "run_cap_reached", f"at most {MAX_EXTRACTS} triage and log calls per run")
+    run_ref.update(
+        {"extract_calls": Increment(1)}
+    )  # counted before the call: a failed extraction cost one too
     try:
         fields = extract(
             audio,
@@ -247,7 +281,7 @@ def _extract_and_log(t: Triage, interventions=False):
         return err(422, "extraction_failed", fallback="form")
     given = fields.pop("interventions", [])  # kept on the entry, not inside fields
     coll = run_ref.collection("log")
-    n = len(list(coll.stream()))  # ponytail: count-based index, racy under concurrent writers
+    n = next_log_n(run_ref)
     photo_url = (
         store_photo(image, t.mime or "image/jpeg", f"photos/{t.run_id}/{n}.jpg") if image else None
     )  # None: upload failed, entry still saved
@@ -344,6 +378,7 @@ def log_entries(run_ref):
 
 class BriefReq(BaseModel):
     run_id: str
+    regenerate: bool = False  # a brief written in the last 10 minutes is refused (429) unless this is set
 
 
 @app.post("/brief")
@@ -355,6 +390,16 @@ def brief_endpoint(b: BriefReq):
     entries = log_entries(run_ref)
     if not entries:
         return err(422, "no_log_entries", "nothing to brief yet")
+    old = db.collection("briefs").document(b.run_id).get()
+    if not b.regenerate and old.exists and (made := (old.to_dict() or {}).get("generated_at")):
+        wait = BRIEF_COOLDOWN_S - (datetime.now(UTC) - made).total_seconds()
+        if wait > 0:
+            return err(
+                429,
+                "brief_cooldown",
+                "one brief per run per 10 minutes; send regenerate to replace it",
+                retry_after_s=round(wait),
+            )
     try:
         return write_brief(b.run_id, run_ref, run.to_dict(), entries)
     except ExtractionFailed:
