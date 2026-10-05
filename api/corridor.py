@@ -95,22 +95,23 @@ if __name__ == "__main__":
     assert angle_diff(350, 10) == 20
     blr = CORRIDORS["blr"]
     j1, j2 = blr["junctions"][0], blr["junctions"][1]
-    # route: 300 m before j1's SE approach, through j1, on to j2
-    route = [(12.9125, 77.6257), (j1["lat"], j1["lng"]), (j2["lat"], j2["lng"])]
-    start = route[0]
-    assert locate(route, (j1["lat"], j1["lng"]))[1] < 1 and locate(route, (12.9125, 77.6257 + 0.002))[1] > 150
+    # route: the start of j1's E approach (600 m out), through j1, on to j2
+    start = tuple(j1["approaches"][0]["polyline"][0])
+    route = [start, (j1["lat"], j1["lng"]), (j2["lat"], j2["lng"])]
+    assert locate(route, (j1["lat"], j1["lng"]))[1] < 1 and locate(route, (start[0], start[1] + 0.002))[1] > 150
     j, ap = next_junction(blr, *start, None, route)
-    assert j["id"] == "j1" and ap["id"] == "SE" and 500 < j["ahead_m"] < 700, (j["id"], ap, j["ahead_m"])
+    assert j["id"] == "j1" and ap["id"] == "E" and 400 < j["ahead_m"] < 700, (j["id"], ap, j["ahead_m"])
     # past j1: the next one on the route is j2; j1 is behind
-    j, ap = next_junction(blr, 12.9190, 77.6200, None, route)
+    between = ((j1["lat"] + j2["lat"]) / 2, (j1["lng"] + j2["lng"]) / 2)
+    j, ap = next_junction(blr, *between, None, route)
     assert j["id"] == "j2" and j["doc_id"] == "blr_j2", j["id"]
     # no route: heading decides. Heading 330 at the SE approach start sees j1 ahead; heading 150 sees everything behind
     assert next_junction(blr, *start, 330, None)[0]["id"] == "j1"
     assert next_junction(blr, *start, 150, None)[0] is None
     # approach follows the route direction into the junction, not the current heading
-    assert next_junction(blr, *start, 90, route)[1]["id"] == "SE"
+    assert next_junction(blr, *start, 90, route)[1]["id"] == "E"
     assert [x[0]["id"] for x in junctions_ahead(blr, *start, None, route)] == ["j1", "j2"]
-    assert [x[0]["id"] for x in junctions_ahead(blr, 12.9190, 77.6200, None, route)] == ["j2"]
+    assert [x[0]["id"] for x in junctions_ahead(blr, *between, None, route)] == ["j2"]
     # nothing left after the last junction
     j5 = blr["junctions"][-1]
     assert next_junction(blr, j5["lat"], j5["lng"] - 0.01, None, [(j5["lat"], j5["lng"] - 0.01), (j5["lat"], j5["lng"] - 0.02)])[0] is None

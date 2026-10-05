@@ -24,7 +24,7 @@ def _log(**kw):
 def compute(run_id, run, alerts, audits, ended_at):
     """alerts: alert dicts; audits: audit dicts for this run. Baseline per junction cleared: remaining red (arrival at
     mid-red = cycle_s / 4) plus the queue drain time jam_m / 2.0, jam_m from that junction's PREPARE alert (0 if none)."""
-    started = run["started_at"]
+    started = run.get("first_tick_at") or run["started_at"]  # the drive starts at the first tick, not at run creation
     actual_s = max((ended_at - started).total_seconds(), 0)
     cleared = {a["junction_id"] for a in audits if a.get("action") == "preempt_requested"}
     cycles = {f"{run['corridor']}_{j['id']}": j["cycle_s"] for j in CORRIDORS[run["corridor"]]["junctions"]}
@@ -100,6 +100,9 @@ if __name__ == "__main__":
     stops = c3 / 4 + 400 / 2 + c4 / 4  # j3 uses its PREPARE jam (400), j4 has only a STOP alert with jam 0
     assert r["actual_s"] == 540 and r["baseline_s"] == round(540 + stops) and r["minutes_saved"] == round(stops / 60, 1), r
     assert (r["junctions_cleared"], r["alerts"], r["escalations"], r["ack_latency_s"], r["avg_ack_latency_s"]) == (2, 3, 1, [4.0, 8.0], 6.0)
+    first = datetime(2026, 10, 5, 9, 4, tzinfo=timezone.utc)  # run created at 9:00, first tick at 9:04: 5 min drive
+    r2 = compute("r", {**run, "first_tick_at": first}, [], [], t1)
+    assert r2["actual_s"] == 300 and r2["started_at"] == first
     assert compute("r", run, [], [], t1)["baseline_s"] == 540 and compute("r", run, [], [], t1)["avg_ack_latency_s"] is None
     assert [f[0] for f in SCHEMA] == list(r)  # BigQuery schema covers exactly the report keys, in order
     print("report ok")

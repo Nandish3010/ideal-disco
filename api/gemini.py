@@ -26,6 +26,11 @@ class ExtractionFailed(Exception):
     pass
 
 
+def offline() -> bool:
+    """OFFLINE_AI=1 (dev only): no Gemini, Translation, TTS, Storage or ADK calls anywhere in the API."""
+    return os.environ.get("OFFLINE_AI") == "1"
+
+
 class Vitals(BaseModel):
     sbp: Optional[int] = None
     dbp: Optional[int] = None
@@ -89,6 +94,8 @@ def text_models():
 
 
 def extract(audio_bytes, mime, text, vehicle_type, lang_hint, run_id=None, interventions=False, image_bytes=None) -> dict:
+    if offline():
+        raise ExtractionFailed(run_id)
     parts = []
     if audio_bytes:
         parts.append(types.Part.from_bytes(data=audio_bytes, mime_type=mime or "audio/webm"))
