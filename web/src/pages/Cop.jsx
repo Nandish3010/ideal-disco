@@ -9,7 +9,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../firebase.js";
-import { api } from "../api.js";
+import { api, copTokenKey } from "../api.js";
 import { corridors } from "../data.js";
 import { SampleAlert } from "../samples.jsx";
 import { ErrCard, Offline, StateBadge, deviceId, store, useDoc, useNow, when } from "../ui.jsx";
@@ -172,9 +172,12 @@ function useAlerts(jid) {
   return { ...s, retry: () => setN((x) => x + 1) };
 }
 
-// Fire and forget: when offline, duty stays a local-only state.
+// Fire and forget: when offline, duty stays a local-only state. Going on duty returns the junction's device token
+// (api.js sends it on /ack and /duty off); going off drops it.
 const duty_ = (corridor, junction_id, on) =>
-  api("/duty", { corridor, junction_id, device_id: deviceId(), on }).catch(() => {});
+  api("/duty", { corridor, junction_id, device_id: deviceId(), on })
+    .then((r) => store.set(copTokenKey(corridor, junction_id), on ? r.device_token : null))
+    .catch(() => {});
 
 const ARROW = { left: "←", straight: "↑", right: "→" };
 const left = (s) =>
@@ -230,6 +233,7 @@ function Duty({ corridor, junction, onOff }) {
   const now = useNow();
   const [local, setLocal] = useState({});
   const [blocked, setBlocked] = useState(false);
+  const [denied, setDenied] = useState(false); // the server refused our device token on an ACK
   const [seen] = useState({}); // first-seen time for alerts whose created_at has not resolved yet
   const [onDutyAt] = useState(Date.now); // alerts created before this are shown but never spoken
   const [muted, setMuted] = useState(() => store.get("cop_muted") === "1");
@@ -300,8 +304,12 @@ function Duty({ corridor, junction, onOff }) {
         device_id: deviceId(),
       });
       setLocal((l) => ({ ...l, [a.key]: { s: "ok", latency: r.ack_latency_s } }));
-    } catch {
-      /* offline: stays "sent" */
+    } catch (e) {
+      // offline: stays "sent"; a rejected token means someone else took this junction: the alert stays open
+      if (e.status === 401 || e.status === 403) {
+        setDenied(true);
+        setLocal(({ [a.key]: _, ...rest }) => rest);
+      }
     }
   }
   const state = (a) =>
@@ -323,6 +331,11 @@ function Duty({ corridor, junction, onOff }) {
       <button className="mute" onClick={toggleMute} aria-pressed={muted}>
         {muted ? "🔇 Sound off" : "🔊 Sound on"}
       </button>
+      {denied && (
+        <p className="banner pulse">
+          ACK refused: another device is on duty here. Go off duty, then on again.
+        </p>
+      )}
       {muted && cur && <p className="banner pulse">SOUND OFF · ALERT ON SCREEN</p>}
       {blocked && (
         <button

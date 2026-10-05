@@ -28,11 +28,17 @@ function Bind({ bound, setBound }) {
     setBound(null);
     store.set("plate", p);
     try {
-      const r = await api("/vehicles/bind", { plate: p, device_id: deviceId() });
+      // the token goes in its own key (api.js sends it as X-Device-Token), not into the bound record
+      const { device_token, ...r } = await api("/vehicles/bind", {
+        plate: p,
+        device_id: deviceId(),
+      });
+      store.set("vehicle_token", device_token);
       store.set("bound", JSON.stringify(r));
       setBound(r);
     } catch (x) {
       store.set("bound", null);
+      store.set("vehicle_token", null);
       setErr(x);
     }
     setBusy(false);
@@ -687,11 +693,13 @@ function Run({ bound }) {
           </form>
         )}
         {ended && <p className="card good">Run {ended} ended.</p>}
-        {err?.status === 403 ? (
+        {err?.status === 403 || err?.status === 401 ? (
           <p className="card reject">
             {err.message === "no_active_incident"
               ? "No active incident: that incident ID is unknown or not open."
-              : "Unregistered vehicle: run refused."}
+              : err.message.startsWith("device_token")
+                ? "This device is no longer bound to the vehicle (another device took it over). Bind again."
+                : "Unregistered vehicle: run refused."}
           </p>
         ) : (
           <Err e={err} />

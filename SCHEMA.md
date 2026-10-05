@@ -7,9 +7,9 @@ Clients read; only the Cloud Run service account writes. Every server log line c
 
 ### `vehicles/{plate}`
 ```json
-{ "type": "ambulance", "agency": "108 Karnataka", "active": true, "bound_device_id": "dev-1" }
+{ "type": "ambulance", "agency": "108 Karnataka", "active": true, "bound_device_id": "dev-1", "device_token_hash": "9f86d0..." }
 ```
-`bound_device_id` is set by `/vehicles/bind`. `type`: `ambulance | fire | police`.
+`bound_device_id` and `device_token_hash` (sha256 of the device token, hex) are set by `/vehicles/bind`; the token itself is never stored. `type`: `ambulance | fire | police`.
 
 ### `incidents/{id}`
 ```json
@@ -104,9 +104,9 @@ Server-side guards (the model's answer is used only if all hold): it may add cap
 
 ### `duty/{corridor}_{junction_id}`
 ```json
-{ "device_id": "dev-cop-1", "name": "Constable Rao", "on": true, "since": "2026-10-05T09:00:00Z" }
+{ "device_id": "dev-cop-1", "name": "Constable Rao", "on": true, "since": "2026-10-05T09:00:00Z", "device_token_hash": "5e8848..." }
 ```
-Written by `/duty` when a cop goes on or off duty at a junction (doc id like `blr_j3`). `name` may be `null`.
+Written by `/duty` when a cop goes on or off duty at a junction (doc id like `blr_j3`). `name` may be `null`. `device_token_hash` is the sha256 of the token handed to the cop who went on duty; it is removed when that cop goes off duty.
 
 ### `briefs/{run_id}`
 ```json
@@ -158,8 +158,28 @@ The same row is inserted into BigQuery `corridor.run_reports` (created on first 
 
 All bodies JSON. Errors: `{"error": "<code>", "detail": "..."}` with 4xx/5xx. Request bodies that fail validation return 422 `{"error": "validation_error", "detail": "<field>: <message>; ..."}`; `detail` is always text, and some errors add keys (`state`, `fallback`). Firestore failures return 503 `{"error": "store_unavailable"}`, anything unexpected 500 `{"error": "internal_error"}`. Every response carries an `X-Request-Id` header (the caller's, else a new uuid4) that is also on every server log line. CORS allows only the two Firebase Hosting origins, `localhost:5173` / `127.0.0.1:5173` and the comma-separated env `EXTRA_ORIGINS`.
 
+### Device tokens
+There are no accounts. Instead a device holds a random token (32 bytes, urlsafe) and the calls that change a run or a junction must send it in the header `X-Device-Token`. Only its sha256 is stored (`vehicles/{plate}.device_token_hash`, `duty/{junction}.device_token_hash`), so a read of Firestore gives nobody a usable token.
+
+| Token | Handed out by | Rotated by |
+|---|---|---|
+| vehicle token | `POST /vehicles/bind` (`device_token` in the response) | the next bind of that plate, from any device: the previous device's calls then get 403 |
+| junction token | `POST /duty` with `on: true` (`device_token` in the response) | the next go-on-duty at that junction; removed by go-off-duty |
+
+Which token each protected call needs:
+
+| Call | Token that must match |
+|---|---|
+| `POST /runs` (start and end), `POST /triage`, `POST /log`, `POST /location`, `POST /runs/{id}/confirm` | the vehicle token of the run's plate (for a start, of the `plate` in the body) |
+| `POST /ack` | the token of the cop on duty at the alert's junction, or the vehicle token of the run's plate |
+| `POST /duty` with `on: false` | the junction token of that junction (going on duty needs none) |
+
+Errors: 401 `{ "error": "device_token_required" }` (no header), 403 `{ "error": "device_token_mismatch" }` (not a token that call accepts, including a vehicle that was never bound, or a cop who is off duty). A missing run or alert is still 404 first. Left open on purpose: `/health`, every read, `POST /incidents` (the dispatch console; per-IP rate limited), `POST /route`, `POST /brief` (the hospital's Regenerate), `POST /runs/{id}/after-action`, and `POST /housekeeping` (its own `X-Housekeeping-Token`).
+This is a demo-grade control, not authentication: `/vehicles/bind` stands in for the agency registry and `/duty` for a roster, and both are open, so anyone who knows a registered plate or a junction can take its token over (which also locks the previous holder out). Real binding would sit behind agency sign-in. The web sim feeder binds each scenario vehicle itself (`device_id: "sim-<plate>"`) and uses that token, which rotates the token of a real phone bound to the same plate: the phone must bind again.
+Env `DEVICE_TOKENS_DISABLED=1` turns the check off (for `api/offline_replay.py` only); unset, the default, it is enforced.
+
 ### Rate limits and caps
-The endpoints are unauthenticated by decision (demo), so they are limited instead. Per client IP (the last `X-Forwarded-For` entry, else the socket address), an in-memory token bucket per Cloud Run instance, refilled continuously:
+The endpoints are unauthenticated apart from the device tokens above, so they are limited per client. Per client IP (the last `X-Forwarded-For` entry, else the socket address), an in-memory token bucket per Cloud Run instance, refilled continuously:
 
 | Bucket | Paths | Limit |
 |---|---|---|
@@ -177,7 +197,7 @@ Response `{"ok": true, "model": "gemini-3.1-flash-lite"}`
 ```json
 { "plate": "KA01AB1234", "device_id": "dev-1" }
 ```
-200 `{ "plate": "KA01AB1234", "type": "ambulance", "agency": "108 Karnataka", "active": true, "bound_device_id": "dev-1" }`
+200 `{ "plate": "KA01AB1234", "type": "ambulance", "agency": "108 Karnataka", "active": true, "bound_device_id": "dev-1", "device_token": "<43 characters>" }` (a new token on every bind; see Device tokens)
 404 `{ "error": "unregistered_vehicle" }` (also when the vehicle is inactive) (the UI shows a visible rejection)
 
 ### `POST /incidents` (mock dispatch console)
@@ -292,7 +312,7 @@ Side effect: any `/location` call marks other `en_route` runs with no tick for 3
 ```json
 { "run_id": "run-amb-1", "junction_id": "blr_j3", "alert_n": 0, "device_id": "dev-cop-1" }
 ```
-`device_id` is optional. Sets `acked_at` (server time) and `ack_latency_s` on `runs/{run_id}/alerts/{alert_n}`; a repeat ACK changes nothing and returns the first values.
+`device_id` is optional. Needs `X-Device-Token`: the on-duty cop's junction token or the run's vehicle token (401 / 403, see Device tokens). Sets `acked_at` (server time) and `ack_latency_s` on `runs/{run_id}/alerts/{alert_n}`; a repeat ACK changes nothing and returns the first values.
 200 `{ "ok": true, "acked_at": "2026-10-05T09:03:26Z", "ack_latency_s": 6.2, "latency_s": 6.2 }` (`latency_s` duplicates `ack_latency_s` for the cop page). 404 `{ "error": "unknown_alert" }` (no such alert, or its `junction_id` differs).
 
 ### `POST /housekeeping`
@@ -309,7 +329,7 @@ gcloud scheduler jobs create http corridor-housekeeping --location asia-south1 -
 { "corridor": "blr", "junction_id": "blr_j3", "device_id": "dev-cop-1", "on": true, "name": "Constable Rao" }
 ```
 `junction_id` may be `blr_j3` or `j3`; `name` is optional. Writes `duty/blr_j3`.
-200 the doc: `{ "device_id": "dev-cop-1", "name": "Constable Rao", "on": true, "since": "2026-10-05T09:00:00Z" }`. 400 `{ "error": "unknown_corridor" }`, 404 `{ "error": "unknown_junction" }`.
+200 the doc: `{ "device_id": "dev-cop-1", "name": "Constable Rao", "on": true, "since": "2026-10-05T09:00:00Z", "device_token": "<43 characters>" }`; `device_token` is present only when `on` is true and is new every time (see Device tokens). `on: false` needs the header `X-Device-Token` with that junction's token (401 / 403) and answers without a token. 400 `{ "error": "unknown_corridor" }`, 404 `{ "error": "unknown_junction" }`.
 
 ## Routes call budget
 
@@ -322,6 +342,6 @@ A live run makes **one** Routes `computeRoutes` call (vehicle to hospital, `TRAF
 
 Scenario runs make no Routes calls (recorded spans). The routing agent's `eta_to` calls are separate (cached 30 s per origin and destination) and happen only when a tier is confirmed or `/route` is called.
 
-## Dev-only: `OFFLINE_AI=1`
+## Dev-only: `OFFLINE_AI=1` and `DEVICE_TOKENS_DISABLED=1`
 
-Local testing without any paid Google call (never set in a deploy workflow; the API logs `{"event": "offline_ai"}` once at startup when it is on). Firestore is still used. With it set: `tts.localize_alert` returns the English text, `tts.speak` returns `(None, text)` so alerts are text only (no Translation, TTS or Storage), `brief.generate` returns a fixed stub (`model: "offline"`), `aar.generate` a fixed summary, issues and recommendations (`model: "offline"`, the timeline is still built from the record), the routing agent returns its rule-based fallback at once (`trace: [{"fallback": "offline_ai"}]`, straight-line ETAs, no Routes call), the preemption `rationale` is skipped, and `/triage` and `/log` answer 422 `extraction_failed` (set tiers through `/runs/{id}/confirm`). `api/offline_replay.py` replays a scenario against a local API in this mode; start that API with `RATE_LIMIT_DISABLED=1` too (see Rate limits and caps) so the replay is never throttled.
+Local testing without any paid Google call (never set in a deploy workflow; the API logs `{"event": "offline_ai"}` once at startup when it is on). Firestore is still used. With it set: `tts.localize_alert` returns the English text, `tts.speak` returns `(None, text)` so alerts are text only (no Translation, TTS or Storage), `brief.generate` returns a fixed stub (`model: "offline"`), `aar.generate` a fixed summary, issues and recommendations (`model: "offline"`, the timeline is still built from the record), the routing agent returns its rule-based fallback at once (`trace: [{"fallback": "offline_ai"}]`, straight-line ETAs, no Routes call), the preemption `rationale` is skipped, and `/triage` and `/log` answer 422 `extraction_failed` (set tiers through `/runs/{id}/confirm`). `api/offline_replay.py` replays a scenario against a local API in this mode; start that API with `RATE_LIMIT_DISABLED=1` too (see Rate limits and caps) so the replay is never throttled, and with `DEVICE_TOKENS_DISABLED=1` because the replay sends no device tokens (see Device tokens).
