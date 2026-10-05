@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from fastapi.testclient import TestClient
 
 import aar
@@ -42,6 +43,16 @@ def test_timeline_is_built_in_time_order_from_the_record() -> None:
     report = {"ended_at": at(300).isoformat()}  # a stored report may carry ISO strings
     tl = aar.timeline(run, [{"t": at(60), "kind": "voice"}, {"kind": "form"}], alerts, report)
     assert [e["t"] for e in tl] == [at(s).isoformat() for s in (0, 30, 60, 100, 121, 200, 206, 300)]
+    assert [e["offset"] for e in tl] == [
+        "t+0:00",
+        "t+0:30",
+        "t+1:00",
+        "t+1:40",
+        "t+2:01",
+        "t+3:20",
+        "t+3:26",
+        "t+5:00",
+    ]
     assert [e["event"] for e in tl] == [
         "Run created (ambulance KA01AB1234)",
         "First location tick, drive started",
@@ -56,7 +67,71 @@ def test_timeline_is_built_in_time_order_from_the_record() -> None:
 
 def test_timeline_ends_at_the_last_tick_without_a_report() -> None:
     run = {"state": "ended", "ticks": [{"t": at(10)}, {"t": at(50)}]}
-    assert aar.timeline(run, [], [], None) == [{"t": at(50).isoformat(), "event": "Run ended"}]
+    assert aar.timeline(run, [], [], None) == [
+        {"t": at(50).isoformat(), "offset": "t+0:00", "event": "Run ended"}
+    ]
+
+
+def test_timeline_puts_a_skewed_tick_clock_on_the_run_clock() -> None:
+    """Ticks stamped by a simulated clock hours ahead must not sort after the alerts the server stamped itself."""
+    skew = timedelta(hours=3)
+    run = {
+        "state": "arrived",
+        "vehicle_type": "ambulance",
+        "vehicle_plate": "KA01AB1234",
+        "started_at": at(0),
+        "first_tick_at": at(10) + skew,
+        "last_tick_at": at(445),  # server arrival of the last tick, which the client stamped at(445) + skew
+        "ticks": [{"t": at(445) + skew}],
+    }
+    alerts = [{"junction_id": "blr_j1", "stage": "PREPARE", "created_at": at(120)}]
+    tl = aar.timeline(run, [], alerts, {"ended_at": (at(445) + skew).isoformat()})
+    assert [(e["offset"], e["event"]) for e in tl] == [
+        ("t+0:00", "Run created (ambulance KA01AB1234)"),
+        ("t+0:10", "First location tick, drive started"),
+        ("t+2:00", "PREPARE alert at blr_j1"),
+        ("t+7:25", "Run arrived"),
+    ]
+    assert [e["t"] for e in tl] == sorted(e["t"] for e in tl) and tl[-1]["t"] == at(445).isoformat()
+
+
+def test_grounded_drops_causes_the_record_does_not_give() -> None:
+    tl = [{"t": "x", "offset": "t+0:00", "event": "Run created"}]
+    items = [
+        "Investigate connectivity issues on the route",
+        "Acknowledge alerts sooner",
+        "Check the hardware and network at junction 3",
+        "Review a GPS fault in the app",
+    ]
+    assert aar.grounded(items, tl) == ["Acknowledge alerts sooner"]
+    tl.append({"t": "x", "offset": "t+1:00", "event": "Network outage logged"})
+    assert aar.grounded(["Check the network at junction 3", items[0]], tl) == [
+        "Check the network at junction 3"
+    ]
+
+
+def test_generate_applies_the_grounding_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(aar, "offline", lambda: False)
+    monkeypatch.setenv("GEMINI_MODEL", "m")
+    seen: dict = {}
+
+    def fake(
+        models: list, contents: str, cfg: object, schema: object, run_id: object, timeout_ms: int, what: str
+    ) -> tuple:
+        seen["ctx"] = contents
+        return {
+            "summary": "s",
+            "issues": ["Slow acknowledgement", "Connectivity issues"],
+            "recommendations": ["Acknowledge sooner", "Fix the network"],
+        }, "m"
+
+    monkeypatch.setattr(aar, "generate_json", fake)
+    run = {"state": "ended", "started_at": at(0), "vehicle_type": "ambulance"}
+    body, model = aar.generate(run, [], [], None, None)
+    assert body["issues"] == ["Slow acknowledgement"] and body["recommendations"] == ["Acknowledge sooner"]
+    assert (
+        '"offset": "t+0:00"' in seen["ctx"] and "2026-10-05" not in seen["ctx"]
+    )  # no wall-clock in the prompt
 
 
 def finished(client: TestClient, db: FakeFirestore, state: str = "ended") -> str:

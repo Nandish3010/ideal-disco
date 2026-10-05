@@ -163,6 +163,20 @@ def test_start_403_no_active_incident(client: TestClient, seeded: FakeFirestore)
     assert client.post("/runs", json={**body, "incident_id": iid}).status_code == 403
 
 
+def test_scenario_start_defaults_destination_to_the_corridor_hospital(
+    client: TestClient, seeded: FakeFirestore
+) -> None:
+    assert (
+        run_doc(seeded, start(client, scenario="blr-two-vehicles", source="sim"))["destination"]
+        == BLR_HOSPITAL
+    )
+    other = {"name": "Elsewhere", "lat": 12.9, "lng": 77.6}
+    assert (
+        run_doc(seeded, start(client, scenario="blr-two-vehicles", destination=other))["destination"] == other
+    )
+    assert run_doc(seeded, start(client))["destination"] is None  # a live run waits for the routing agent
+
+
 def test_start_200_stores_the_scenario(client: TestClient, seeded: FakeFirestore) -> None:
     rid = start(client, scenario="blr-two-vehicles", source="sim", destination=BLR_HOSPITAL)
     run = run_doc(seeded, rid)
@@ -470,7 +484,7 @@ def run_with_alert(
     )
 
 
-def test_rationale_keeps_a_grounded_sentence_and_replaces_an_invented_one(
+def test_rationale_stores_the_template_and_keeps_only_a_valid_paraphrase(
     seeded: FakeFirestore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     seq = priority.sequence(
@@ -485,30 +499,42 @@ def test_rationale_keeps_a_grounded_sentence_and_replaces_an_invented_one(
             {"run_id": "a", "vehicle_type": "ambulance", "tier": "critical", "eta_s": 30, "approach": "E"},
         ]
     )
+    template = (
+        "Fire engine with trapped persons goes first: higher priority tier. Ambulance follows 12 s later."
+    )
     monkeypatch.setattr(main, "offline", lambda: False)
     monkeypatch.setattr(main, "translate", lambda text, lang: f"[{lang}] {text}")
     seen: list = []
-    reply = {"text": "The fire engine goes first because its tier is higher."}
+    reply = {"text": "The fire engine goes first, then the ambulance 12 s later."}
 
-    def explain(facts: list, lang: str) -> str:
-        seen.append(facts)
+    def paraphrase(sentence: str, facts: list) -> str:
+        seen.append((sentence, facts))
         return reply["text"]
 
-    monkeypatch.setattr(main.gemini, "explain_sequence", explain)
+    monkeypatch.setattr(main.gemini, "paraphrase_sequence", paraphrase)
     junction = seeded.collection("junctions").document("blr_j3")
     junction.update({"phase": {"approach": "S"}})
     main.rationale("blr_j3", seq, "kn")
     assert junction.get().to_dict()["phase"]["rationale"] == reply["text"]
-    assert (
-        seen[0][0]["reason_code"] == "higher_tier" and seen[0][0]["offset_s_is_gap_assigned_by_rules"] is True
+    assert seen[0][0] == template and seen[0][1][0]["reason_code"] == "higher_tier"
+    for leak in (
+        "The fire engine goes first because of higher_tier.",  # a raw reason code
+        "Ambulance goes first because of platoon_shared_approach, then the fire engine 12 s later.",
+        "The ambulance goes first.",  # wrong first vehicle
+        "The fire engine goes first, then the ambulance 7 s later.",  # a number nobody gave
+    ):
+        reply["text"] = leak
+        main.rationale("blr_j3", seq, "kn")
+        phase = junction.get().to_dict()["phase"]
+        assert phase["rationale"] == template and phase["rationale_local"] == "[kn] " + template
+    reply["text"] = ""  # Gemini fails outright: the template still lands
+    monkeypatch.setattr(
+        main.gemini,
+        "paraphrase_sequence",
+        lambda s, f: (_ for _ in ()).throw(main.httpx.ReadTimeout("slow")),
     )
-    reply["text"] = "The fire engine goes first because it arrives 12 seconds earlier."  # a false reason
     main.rationale("blr_j3", seq, "kn")
-    phase = junction.get().to_dict()["phase"]
-    assert phase["rationale"] == (
-        "Fire engine with trapped persons goes first: higher priority tier. Ambulance follows 12 s later."
-    )
-    assert phase["rationale_local"] == "[kn] " + phase["rationale"]
+    assert junction.get().to_dict()["phase"]["rationale"] == template
 
 
 def test_housekeeping_is_off_without_a_token_and_checks_it_otherwise(

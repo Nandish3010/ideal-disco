@@ -80,19 +80,22 @@ def rationale_facts(seq: list[dict]) -> list[dict]:
 
 
 ARRIVAL_WORDS = re.compile(r"arriv|reach|earlier|sooner|first to get|ahead of time", re.I)
+VEHICLE_WORDS = re.compile(r"\b(fire|ambulance|police)\b", re.I)
+MAX_RATIONALE = 200
 
 
-def valid_rationale(text: str, facts: list[dict]) -> bool:
-    """A model explanation is kept only if it names the first vehicle's type, uses no number absent from the facts, and
-    does not give arrival timing as a reason unless a slot's reason is earlier_eta_same_tier (the offsets are gaps the
-    rules assigned, so 'arrives 12 s earlier' is wrong even though 12 is a given number)."""
-    given = {str(f[k]) for f in facts for k in ("eta_s", "offset_s")}
-    eta_reason = any(f["reason_code"] == "earlier_eta_same_tier" for f in facts)
+def valid_paraphrase(text: str, template: str) -> bool:
+    """A model rewrite of `template` is kept only if it is plain prose (no code token such as higher_tier), under
+    MAX_RATIONALE chars, names the same vehicle types in the same order as the template, uses no digit the template does
+    not, and gives arrival timing only when the template does."""
+    order = lambda t: list(dict.fromkeys(w.lower() for w in VEHICLE_WORDS.findall(t)))  # noqa: E731
     return bool(
         text.strip()
-        and facts[0]["vehicle_type"].lower() in text.lower()
-        and all(n in given for n in re.findall(r"\d+", text))
-        and (eta_reason or not ARRIVAL_WORDS.search(text))
+        and len(text) < MAX_RATIONALE
+        and not re.search(r"[_`{}\[\]<>]", text)
+        and order(text) == order(template)
+        and set(re.findall(r"\d+", text)) <= set(re.findall(r"\d+", template))
+        and (ARRIVAL_WORDS.search(template) or not ARRIVAL_WORDS.search(text))
     )
 
 
@@ -105,7 +108,8 @@ REASONS = {
 
 
 def template_rationale(facts: list[dict]) -> str:
-    """Deterministic fallback sentence: first vehicle and why, then each later vehicle's gap (or shared green)."""
+    """The stored explanation: first vehicle and why, then each later vehicle's gap (or shared green). Gemini may only
+    rephrase it (gemini.paraphrase_sequence, checked by valid_paraphrase)."""
 
     def name(f: dict) -> str:
         return NAMES[f["vehicle_type"]] + (
@@ -145,7 +149,11 @@ if __name__ == "__main__":
         12,
     ]  # no approach known: never grouped
     facts = rationale_facts(sequence([amb, fire]))
-    assert template_rationale(facts) == (
-        "Fire engine with trapped persons goes first: higher priority tier. Ambulance follows 12 s later."
+    want = template_rationale(facts)
+    assert (
+        want
+        == "Fire engine with trapped persons goes first: higher priority tier. Ambulance follows 12 s later."
     )
+    assert valid_paraphrase("The fire engine goes first, then the ambulance 12 s later.", want)
+    assert not valid_paraphrase("The ambulance goes first because of higher_tier.", want)
     print("priority ok")

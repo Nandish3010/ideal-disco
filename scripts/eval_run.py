@@ -167,9 +167,7 @@ def create_incident_and_run(
         headers = {"Content-Type": "application/json"}
         if device_token:
             headers["X-Device-Token"] = device_token
-        req = urllib.request.Request(
-            f"{api_base}/runs", data=run_body, headers=headers, method="POST"
-        )
+        req = urllib.request.Request(f"{api_base}/runs", data=run_body, headers=headers, method="POST")
         with urllib.request.urlopen(req, timeout=10) as resp:
             run_data = json.loads(resp.read())
             return run_data.get("run_id")
@@ -189,9 +187,7 @@ def post_clip_to_triage(
         headers = {"Content-Type": "application/json"}
         if device_token:
             headers["X-Device-Token"] = device_token
-        req = urllib.request.Request(
-            f"{api_base}/triage", data=body, headers=headers, method="POST"
-        )
+        req = urllib.request.Request(f"{api_base}/triage", data=body, headers=headers, method="POST")
         with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
