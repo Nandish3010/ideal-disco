@@ -14,6 +14,7 @@ from google.genai import errors as genai_errors
 from pydantic import BaseModel, Field
 
 import acuity
+import agent
 import brief
 import gemini
 import leadtime
@@ -22,6 +23,7 @@ import routes_api
 from corridor import CORRIDORS, SCENARIOS, bearing, distance_m, junctions_ahead, locate
 from firestore_client import db
 from gemini import ExtractionFailed, extract, log
+from hospitals import by_id
 from signal_adapter import SimAdapter
 from tts import speak, translate
 
@@ -186,7 +188,20 @@ def confirm(run_id: str, c: Confirm):
         return err(404, "unknown_run")
     ref.update({"confirmed_tier": c.tier, "patient_on_board": True})
     log(event="tier_confirmed", run_id=run_id, tier=c.tier)
-    return {"run_id": run_id, "confirmed_tier": c.tier, "patient_on_board": True}
+    routing = agent.apply(ref)  # hospital routing agent; None when not an ambulance run. Up to 20 s, then rule-based fallback
+    return {"run_id": run_id, "confirmed_tier": c.tier, "patient_on_board": True, "routing": routing}
+
+
+class RouteReq(BaseModel):
+    run_id: str
+
+
+@app.post("/route")
+def route(r: RouteReq):
+    ref = db.collection("runs").document(r.run_id)
+    if not ref.get().exists:
+        return err(404, "unknown_run")
+    return agent.apply(ref) or err(409, "not_routable", detail="needs a confirmed ambulance run on a corridor with a roster")
 
 
 def write_brief(run_id, run_ref, run, entries):
@@ -369,7 +384,7 @@ def location(l: Loc):
 
     # hospital route: ETA, polyline for junction and off-route detection. While off_route the old polyline stays pinned
     # so the state holds until the vehicle rejoins it (the cache is per instance; a restart heals it).
-    dest = run.get("destination") or corridor["hospital"]
+    dest = by_id((run.get("routing") or {}).get("hospital_id")) or run.get("destination") or corridor["hospital"]
     scenario = run.get("scenario") in SCENARIOS  # replays follow the corridor config, not Google's road choice
     if scenario:
         hosp = {"polyline_points": [], "steps": [], "age_s": 0, "duration_s": distance_m(me, (dest["lat"], dest["lng"])) / max(observed, 3)}
