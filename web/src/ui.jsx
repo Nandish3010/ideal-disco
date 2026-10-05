@@ -50,4 +50,52 @@ export function useLog(runId) {
 
 export const when = (v) => (v?.toDate ? v.toDate() : v ? new Date(v) : null)?.toLocaleTimeString() ?? "";
 
-export const Err = ({ e }) => e ? <p className="card bad">Error: {e.message}{e.status ? ` (${e.status})` : ""}</p> : null;
+export const Err = ({ e, retry }) => e ? <p className="card bad">Error: {e.message}{e.status ? ` (${e.status})` : ""}{retry && <> <button onClick={retry}>Retry</button></>}</p> : null;
+
+// ---- shared UI states (loading / error / offline / stale) ----
+export function useNow(step = 1000) {
+  const [n, setN] = useState(Date.now());
+  useEffect(() => { const id = setInterval(() => setN(Date.now()), step); return () => clearInterval(id); }, [step]);
+  return n;
+}
+
+// Generic live listener -> {data, loading, error, retry}. subscribe(ok, bad) returns the unsubscribe fn.
+// A Firestore listener error is terminal, so retry() re-subscribes.
+export function useListen(subscribe, deps) {
+  const [s, setS] = useState({ loading: true });
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    setS({ loading: true });
+    return subscribe((data) => setS({ data }), (e) => setS({ error: e.message || String(e) }));
+  }, [...deps, n]); // eslint-disable-line react-hooks/exhaustive-deps
+  return { ...s, retry: () => setN((x) => x + 1) };
+}
+
+export const ErrCard = ({ what, error, retry }) => error
+  ? <div className="card bad" role="alert">Could not load {what}: {error} <button onClick={retry}>Retry</button></div> : null;
+
+// Slim top banner while the browser is offline; the page stays usable.
+export function Offline() {
+  const [on, setOn] = useState(navigator.onLine);
+  useEffect(() => {
+    const up = () => setOn(true), down = () => setOn(false);
+    addEventListener("online", up); addEventListener("offline", down);
+    return () => { removeEventListener("online", up); removeEventListener("offline", down); };
+  }, []);
+  return on ? null : <div className="offline" role="status">Reconnecting…</div>;
+}
+
+const t = (v) => (v?.toMillis ? v.toMillis() : v ? new Date(v).getTime() : 0);
+export const rel = (v, now) => {
+  if (!t(v)) return "";
+  const s = Math.max(0, Math.round((now - t(v)) / 1000));
+  return s < 5 ? "just now" : s < 60 ? `${s} s ago` : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : `${Math.floor(s / 86400)} d ago`;
+};
+
+// Run state badge: STALE (grey) / OFF ROUTE (amber) / ARRIVED (green) / EN ROUTE.
+export const StateBadge = ({ run, now }) => {
+  const s = run.state, tick = t(run.last_tick_at);
+  const label = s === "stale" ? `STALE · last tick ${tick ? Math.max(0, Math.round((now - tick) / 1000)) : "?"} s ago`
+    : s === "off_route" ? "OFF ROUTE" : s === "arrived" ? "ARRIVED" : s === "en_route" ? "EN ROUTE" : s ?? "—";
+  return <span className={`cb st-${s}`}>{label}</span>;
+};

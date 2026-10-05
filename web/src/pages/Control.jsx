@@ -2,11 +2,14 @@ import { useEffect, useState } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase.js";
 import { corridors } from "../data.js";
-import { useActiveRuns, useJunctions } from "../live.js";
+import { LIVE, useActiveRuns, useJunctions } from "../live.js";
 import CorridorMap from "../map.jsx";
+import { ErrCard, Offline, StateBadge, useListen, useNow } from "../ui.jsx";
 import "../control.css";
 
 const ESCALATE_S = 20;
+const RECENT_S = 600; // the banner shows escalations from the last 10 minutes; older unacked alerts are collapsed
+const dur = (s) => (s < 120 ? `${s} s` : s < 7200 ? `${Math.round(s / 60)} min` : `${Math.round(s / 3600)} h`);
 const ICON = { ambulance: "🚑", fire: "🚒", police: "🚓" };
 const ms = (v) => (v?.toMillis ? v.toMillis() : v ? new Date(v).getTime() : 0);
 const clock = (v) => new Date(ms(v)).toLocaleTimeString([], { hour12: false });
@@ -14,41 +17,36 @@ const dash = (v, f = (x) => x) => (v == null || v === "" ? "—" : f(v));
 const tierOf = (r) => r.confirmed_tier ?? r.acuity_tier;
 const ago = (v, now) => (v ? `${Math.max(0, Math.round((now - ms(v)) / 60000))} min ago` : "—");
 
-const useNow = () => {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
-  return now;
-};
-
-// Whole (small) collection, optionally keyed by doc id prefix. ponytail: no query, filter client-side.
+// Whole (small) collection, optionally keyed by doc id prefix -> {data: rows, loading, error, retry}. ponytail: no query, filter client-side.
 function useCol(name, prefix = "") {
-  const [rows, setRows] = useState([]);
-  useEffect(() => {
-    setRows([]);
-    return onSnapshot(
-      collection(db, name),
-      (q) => setRows(q.docs.filter((d) => d.id.startsWith(prefix)).map((d) => ({ id: d.id, ...d.data() }))),
-      (e) => console.warn(`${name} listener:`, e.message),
-    );
-  }, [name, prefix]);
-  return rows;
+  const s = useListen((ok, bad) => onSnapshot(
+    collection(db, name),
+    (q) => ok(q.docs.filter((d) => d.id.startsWith(prefix)).map((d) => ({ id: d.id, ...d.data() }))),
+    (e) => { console.warn(`${name} listener:`, e.message); bad(e); },
+  ), [name, prefix]);
+  return { ...s, data: s.data ?? [] };
 }
 
-// Every alert of every active run (runs/{id}/alerts, no index). useAlerts in live.js only returns the newest 5,
+// Every alert of every live run (runs/{id}/alerts, no index). useAlerts in live.js only returns the newest 5,
 // which would hide an unacked alert behind newer ones; escalations need all of them.
 function useRunAlerts(runIds) {
   const [per, setPer] = useState({});
+  const [error, setError] = useState(null);
+  const [n, setN] = useState(0);
   const key = runIds.join(",");
   useEffect(() => {
-    setPer({});
+    setPer({}); setError(null);
     const offs = runIds.map((id) => onSnapshot(
       collection(db, `runs/${id}/alerts`),
       (q) => setPer((p) => ({ ...p, [id]: q.docs.map((d) => ({ id: d.id, run_id: id, ...d.data() })) })),
-      (e) => console.warn("alerts listener:", id, e.message),
+      (e) => { console.warn("alerts listener:", id, e.message); setError(e.message); },
     ));
     return () => offs.forEach((f) => f());
-  }, [key]);
-  return runIds.flatMap((id) => per[id] ?? []).sort((a, b) => ms(b.created_at) - ms(a.created_at));
+  }, [key, n]);
+  return {
+    rows: runIds.flatMap((id) => per[id] ?? []).sort((a, b) => ms(b.created_at) - ms(a.created_at)),
+    loading: !error && runIds.some((id) => !per[id]), error, retry: () => setN((x) => x + 1),
+  };
 }
 
 const Badge = ({ cls, children }) => <span className={`cb ${cls}`}>{children}</span>;
@@ -58,11 +56,14 @@ export default function Control() {
   const corridor = corridors[cid];
   const pick = (c) => { setCid(c); history.replaceState(null, "", `?corridor=${c}`); };
   const now = useNow();
-  const junctions = useJunctions(cid);
-  const runs = useActiveRuns(cid);
-  const alerts = useRunAlerts(runs.map((r) => r.id).sort());
-  const duty = Object.fromEntries(useCol("duty", `${cid}_`).map((d) => [d.id, d]));
-  const reports = useCol("reports").filter((r) => !r.corridor || r.corridor === cid)
+  const jq = useJunctions(cid), junctions = jq.data;
+  const rq = useActiveRuns(cid), runs = rq.data;
+  // escalations come only from runs still moving (arrived runs are history)
+  const aq = useRunAlerts(runs.filter((r) => LIVE.includes(r.state)).map((r) => r.id).sort()), alerts = aq.rows;
+  const dq = useCol("duty", `${cid}_`);
+  const duty = Object.fromEntries(dq.data.map((d) => [d.id, d]));
+  const pq = useCol("reports");
+  const reports = pq.data.filter((r) => !r.corridor || r.corridor === cid)
     .sort((a, b) => ms(b.generated_at ?? b.created_at) - ms(a.generated_at ?? a.created_at));
   const [sel, setSel] = useState(null);
 
@@ -70,17 +71,22 @@ export default function Control() {
   const runOf = (id) => runs.find((r) => r.id === id);
   const age = (a) => (a.created_at ? Math.round((now - ms(a.created_at)) / 1000) : 0);
   const late = (a) => !a.acked_at && (a.escalated || age(a) > ESCALATE_S);
-  const esc = alerts.filter(late);
+  const unacked = alerts.filter(late);
+  const esc = unacked.filter((a) => age(a) <= RECENT_S), older = unacked.filter((a) => age(a) > RECENT_S);
   const stageOf = (r) => r.stage ?? alerts.find((a) => a.run_id === r.id)?.stage;
 
   const vehicles = runs.map((r) => {
     const k = r.ticks?.at(-1);
-    return { id: r.id, type: r.vehicle_type, lat: k?.lat ?? r.lat, lng: k?.lng ?? r.lng };
+    return { id: r.id, type: r.vehicle_type, lat: k?.lat ?? r.lat, lng: k?.lng ?? r.lng, stale: r.state === "stale" };
   }).filter((x) => Number.isFinite(x.lat));
   const s = runOf(sel);
 
   return (
     <div className="control">
+      <Offline />
+      <ErrCard what="active runs" error={rq.error} retry={rq.retry} />
+      <ErrCard what="alerts" error={aq.error} retry={aq.retry} />
+      <ErrCard what="junction state" error={jq.error} retry={jq.retry} />
       {esc.length > 0 && (
         <section className="escs" role="alert">
           <b>{esc.length} ESCALATED, no ACK in {ESCALATE_S} s</b>
@@ -89,7 +95,7 @@ export default function Control() {
             return (
               <div key={`${a.run_id}/${a.id}`} className="esc">
                 <span>
-                  <b>{a.junction_id?.split("_").pop().toUpperCase()} {jname(a.junction_id)}</b>: {dash(a.stage)} alert unacked {age(a)} s
+                  <b>{a.junction_id?.split("_").pop().toUpperCase()} {jname(a.junction_id)}</b>: {dash(a.stage)} alert unacked {dur(age(a))}
                   {r ? ` · ${r.vehicle_type} ${dash(tierOf(r), (t) => t.toUpperCase())}` : ""}
                 </span>
                 <button title="Placeholder, does nothing yet" onClick={() => {}}>Call junction (placeholder)</button>
@@ -97,6 +103,16 @@ export default function Control() {
             );
           })}
         </section>
+      )}
+      {older.length > 0 && (
+        <details className="older">
+          <summary>Older unacked alerts ({older.length})</summary>
+          {older.map((a) => (
+            <div key={`${a.run_id}/${a.id}`} className="esc muted">
+              <b>{a.junction_id?.split("_").pop().toUpperCase()} {jname(a.junction_id)}</b>: {dash(a.stage)} · unacked {dur(age(a))}
+            </div>
+          ))}
+        </details>
       )}
       <div className="cgrid">
         <div className="cmapbox"><CorridorMap corridor={corridor} junctions={junctions} vehicles={vehicles} selected={sel} /></div>
@@ -108,16 +124,16 @@ export default function Control() {
               </select>
             </label>
             <h2>Active runs ({runs.length})</h2>
-            {runs.length === 0 ? <p className="muted">No active runs. Start one on /vehicle or feed one on /sim.</p> : (
+            {rq.loading ? <p className="muted">Loading…</p> : rq.error ? null : runs.length === 0 ? <p className="muted">No vehicles on the corridor right now</p> : (
               <div className="tscroll"><table className="runs">
                 <thead><tr><th></th><th>Plate</th><th>Tier</th><th>State</th><th>Next</th><th>ETA</th><th>Stage</th><th>Incident</th><th>Started</th></tr></thead>
                 <tbody>
                   {runs.map((r) => (
-                    <tr key={r.id} className={r.id === sel ? "sel" : ""} onClick={() => setSel(r.id === sel ? null : r.id)}>
+                    <tr key={r.id} className={`${r.id === sel ? "sel " : ""}st-${r.state}`} onClick={() => setSel(r.id === sel ? null : r.id)}>
                       <td>{ICON[r.vehicle_type] ?? "?"}</td>
                       <td><b>{r.vehicle_plate ?? r.id}</b></td>
                       <td>{tierOf(r) ? <Badge cls={`t-${tierOf(r)}`}>{tierOf(r)}</Badge> : "—"}</td>
-                      <td><Badge cls={`st-${r.state}`}>{r.state}</Badge></td>
+                      <td><StateBadge run={r} now={now} /></td>
                       <td>{dash(r.next_junction_id ?? r.next_junction, jname)}</td>
                       <td>{dash(r.eta_s, (x) => `${x} s`)}</td>
                       <td>{dash(stageOf(r))}</td>
@@ -142,6 +158,7 @@ export default function Control() {
 
           <section className="card">
             <h2>Junction board</h2>
+            <ErrCard what="cop duty roster" error={dq.error} retry={dq.retry} />
             <div className="jboard">
               {corridor.junctions.map((j) => {
                 const key = `${cid}_${j.id}`;
@@ -149,7 +166,7 @@ export default function Control() {
                 const green = ph && ms(ph.until) > now;
                 const mine = alerts.filter((a) => a.junction_id === key || a.junction_id === j.id);
                 const a = mine[0];
-                const hot = mine.some(late);
+                const hot = mine.some((x) => late(x) && age(x) <= RECENT_S);
                 const d = duty[key];
                 return (
                   <div key={j.id} className={`jcard${hot ? " hot" : ""}`}>
@@ -163,7 +180,7 @@ export default function Control() {
                         <Badge cls={`s-${a.stage}`}>{dash(a.stage)}</Badge>{" "}
                         {a.acked_at
                           ? <>ACKed · {((ms(a.acked_at) - ms(a.created_at)) / 1000).toFixed(1)} s</>
-                          : <span className={late(a) ? "bad" : ""}>unacked {age(a)} s</span>}
+                          : <span className={late(a) && age(a) <= RECENT_S ? "bad" : ""}>unacked {dur(age(a))}</span>}
                       </div>
                     ) : <div className="muted">no alerts</div>}
                   </div>
@@ -174,7 +191,8 @@ export default function Control() {
 
           <section className="card">
             <h2>Report cards</h2>
-            {reports.length === 0 ? <p className="muted">No completed runs yet.</p> : reports.map((r) => (
+            <ErrCard what="report cards" error={pq.error} retry={pq.retry} />
+            {pq.loading ? <p className="muted">Loading…</p> : pq.error ? null : reports.length === 0 ? <p className="muted">No completed runs yet.</p> : reports.map((r) => (
               <div key={r.id} className="rep">
                 <b>{r.id}</b>
                 <span>{dash(r.minutes_saved, (m) => `${m} min saved`)}</span>

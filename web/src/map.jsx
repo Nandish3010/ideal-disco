@@ -4,13 +4,14 @@ import { useEffect, useRef, useState } from "react";
 //   corridor   data/corridors/*.json object (junction + approach geometry, hospital)
 //   junctions  {docId: firestore junction doc}, docId = `${corridor.id}_${junction.id}` (bare id also accepted)
 //   phases     optional {docId: phase} that wins over junctions[docId].phase
-//   vehicles   [{id, type: ambulance|fire|police, lat, lng}]
+//   vehicles   [{id, type: ambulance|fire|police, lat, lng, stale?}]  (stale: grey, frozen marker)
 //   spans      {junction_id: [{from_m,to_m,speed}]} (or a recorded [{ts, intervals}] list: latest snapshot is used);
 //              from_m/to_m are metres along the approach polyline from its origin to the stop line (route order)
 //   onReady    called with the google.maps.Map once created (never called by the SVG fallback)
 // Without VITE_MAPS_BROWSER_KEY (or if Maps fails to load) a plain SVG drawing is rendered instead.
 
 const KEY = import.meta.env.VITE_MAPS_BROWSER_KEY;
+export const HAS_MAPS_KEY = !!KEY;
 const SPEED = { NORMAL: "#8a94a3", SLOW: "#ffb020", TRAFFIC_JAM: "#ff4d4d" };
 const GREEN = "#3ddc84", GREY = "#8a94a3";
 const VEH = { ambulance: ["#e11d48", "A"], fire: ["#f97316", "F"], police: ["#3b82f6", "P"] };
@@ -72,7 +73,7 @@ function scene({ corridor, junctions, phases, spans, vehicles }, now) {
     }
   }
   const veh = (vehicles ?? []).filter((v) => Number.isFinite(v.lat) && Number.isFinite(v.lng))
-    .map((v) => ({ id: v.id, lat: v.lat, lng: v.lng, fill: (VEH[v.type] ?? ["#ddd", "?"])[0], text: (VEH[v.type] ?? ["", "?"])[1], title: `${v.type ?? "vehicle"} ${v.id}` }));
+    .map((v) => ({ id: v.id, lat: v.lat, lng: v.lng, fill: v.stale ? GREY : (VEH[v.type] ?? ["#ddd", "?"])[0], text: (VEH[v.type] ?? ["", "?"])[1], title: `${v.type ?? "vehicle"} ${v.id}${v.stale ? " (stale)" : ""}` }));
   return { lines, dots, veh, hospital: corridor.hospital };
 }
 
@@ -151,11 +152,9 @@ function GMap({ onReady, onFail, ...props }) {
       seen.add(v.id);
       const pos = { lat: v.lat, lng: v.lng };
       const m = veh.get(v.id);
-      if (m) m.setPosition(pos);
-      else veh.set(v.id, new G.Marker({
-        map, position: pos, title: v.title, zIndex: 40,
-        icon: { url: icon(v.fill, v.text, { fg: "#fff", size: 38 }), scaledSize: new G.Size(38, 38), anchor: new G.Point(19, 19) },
-      }));
+      const ic = { url: icon(v.fill, v.text, { fg: "#fff", size: 38 }), scaledSize: new G.Size(38, 38), anchor: new G.Point(19, 19) };
+      if (m) { m.setPosition(pos); m.setTitle(v.title); if (m.fill !== v.fill) { m.setIcon(ic); m.fill = v.fill; } } // stale turns the marker grey
+      else veh.set(v.id, Object.assign(new G.Marker({ map, position: pos, title: v.title, zIndex: 40, icon: ic }), { fill: v.fill }));
     }
     for (const [id, m] of veh) if (!seen.has(id)) { m.setMap(null); veh.delete(id); }
   }, [ready, vsig]);

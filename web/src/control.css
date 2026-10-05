@@ -3,7 +3,7 @@ main:has(.control) { max-width: none; padding: 8px; }
 .escs { max-height: 22dvh; overflow-y: auto; background: #4a0a0a; border: 2px solid var(--bad); border-radius: 12px; padding: 6px 10px; margin-bottom: 8px; }
 .esc { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; padding: 4px 0; font-size: 18px; color: #fff; }
 .esc button { min-height: 44px; font-size: 16px; }
-.cgrid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.cgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .cmapbox { height: 45dvh; min-height: 260px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: #1d2430; }
 .cmapbox .cmap { display: block; width: 100%; height: 100%; }
 .cpanel .card { margin: 0 0 8px; }
@@ -14,10 +14,9 @@ main:has(.control) { max-width: none; padding: 8px; }
 .runs td { padding: 6px 8px; border-top: 1px solid var(--line); }
 .runs tbody tr { cursor: pointer; }
 .runs tr.sel { background: #243040; outline: 2px solid var(--accent); }
-.cb { font-size: 13px; font-weight: 700; padding: 1px 10px; border-radius: 99px; background: #2a313b; color: var(--fg); }
-.cb.t-critical, .cb.s-STOP, .cb.st-off_route { background: var(--bad); color: #000; }
-.cb.t-urgent, .cb.s-PREPARE, .cb.st-stale { background: var(--warn); color: #000; }
-.cb.t-stable, .cb.st-en_route { background: var(--accent); color: #000; }
+.cb.t-critical, .cb.s-STOP { background: var(--bad); color: #000; }
+.cb.t-urgent, .cb.s-PREPARE { background: var(--warn); color: #000; }
+.cb.t-stable { background: var(--accent); color: #000; }
 .cb.s-UPDATE { background: #3b82f6; color: #fff; }
 .cb.esc-b { background: var(--bad); color: #fff; font-size: 14px; }
 .detail { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 8px 0 0; font-size: 16px; }
@@ -32,3 +31,6 @@ main:has(.control) { max-width: none; padding: 8px; }
   .cgrid { grid-template-columns: 1fr 520px; align-items: start; }
   .cmapbox { height: calc(100dvh - 190px); position: sticky; top: 100px; }
 }
+.runs tr.st-stale td { color: var(--muted); }
+.older { margin-bottom: 8px; font-size: 16px; }
+.older summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--muted); }
