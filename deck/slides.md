@@ -50,9 +50,9 @@ Every Bengaluru commuter has seen this on Hosur Road. The missing piece is not a
 
 **Today:** stops at every red.
 **With corridor:** cop warned early, queue cleared.
-Silk Board → Jayadeva Hospital, same recorded GPS trace and recorded traffic in both lanes. The 3 vehicles run as one scenario: a critical ambulance, an ambulance following it as a platoon, and a fire engine.
+Silk Board → Jayadeva Hospital, the same scripted scenario in both lanes: GPS ticks generated along the real corridor roads, with hand-authored traffic spans (a 500 m queue at junction 3, 100 m at junction 4). The 3 vehicles run as one scenario: a critical ambulance, an ambulance following it as a platoon, and a fire engine.
 
-<div class="stats two"><div class="stat"><b>12.3 min</b><span>saved across 3 vehicles (738.8 s)</span></div><div class="stat"><b>3</b><span>critical ambulance, platoon ambulance, fire engine</span></div></div>
+<div class="stats two"><div class="stat"><b>≈ {MINUTES} min</b><span>saved across 3 vehicles</span></div> <!-- update from replay test --><div class="stat"><b>3</b><span>critical ambulance, platoon ambulance, fire engine</span></div></div>
 
 </div>
 <div>
@@ -62,10 +62,10 @@ Silk Board → Jayadeva Hospital, same recorded GPS trace and recorded traffic i
 </div>
 </div>
 
-<p class="cite">Simulated baseline on recorded traffic, not a field measurement. Figure from the scenario replay (<code>blr-two-vehicles</code>).</p>
+<p class="cite">Simulated baseline on a scripted scenario, not a field measurement: per junction passed, cycle/4 + queue/2 m/s. Figure from the scenario replay (<code>blr-two-vehicles</code>). Live runs use live Routes traffic; scenario runs use the scripted spans.</p>
 
 <!--
-The /sim?corridor=blr screen replays the same trace twice. On the left the vehicle stops at each junction for the remaining red of a fixed signal cycle, on the right the corridor is cleared and only sequencing gaps remain. The replay on the current scenario saves 738.8 s, about 12.3 minutes, summed across the critical ambulance, the platoon ambulance behind it and the fire engine. That is the number the counter on screen reaches, computed in the browser from the scenario file and asserted by a unit test. It is a simulated baseline on recorded traffic, not a field measurement, and the slide says so. The first 20 seconds of the video show this replay sped up.
+The /sim?corridor=blr screen replays the same trace twice. On the left the vehicle stops at each junction for the expected remaining red plus the queue drain, one method everywhere: per junction passed, cycle/4 + queue/2 m/s, the same formula in the replay and the report cards. On the right the corridor is cleared and only sequencing gaps remain. The replay on the current scenario saves about {MINUTES} minutes (update from the replay test), summed across the critical ambulance, the platoon ambulance behind it and the fire engine. That is the number the counter on screen reaches, computed in the browser from the scenario file and asserted by a unit test. The scenario is scripted: GPS ticks generated along the real roads, hand-authored spans. It is a simulated baseline, not a field measurement, and the slide says so. The first 20 seconds of the video show this replay at 50x.
 -->
 
 ---
@@ -103,7 +103,7 @@ Six React PWA routes, one Firestore event bus, every screen subscribes live. Unk
 
 ## How a cop gets warned: the lead-time engine
 
-Live Routes traffic spans → queue metres → clearance time → two-stage alert.
+Live runs: Routes traffic spans (scenario runs: scripted spans) → queue metres → clearance time → two-stage alert.
 
 <div class="cols wide-left">
 <div>
@@ -185,12 +185,13 @@ Each use changes what a human sees or hears next, and each has a form or templat
 <div>
 
 ```
-required_capabilities(critical) -> cath_lab
 list_hospitals(blr) -> 3 hospitals
 eta_to(Jayadeva Institute) -> 438 s
+check_diversion(blr_jayadeva) -> accepting
+required_capabilities(critical) -> cath_lab
 ```
 
-An ADK agent on Vertex AI picks the destination after the crew confirms the tier. The server re-checks the choice; any failure or 20 s timeout falls back to the nearest eligible hospital.
+An ADK agent on Vertex AI picks the destination after the crew confirms the tier, with up to two rejected alternatives and a confidence. `required_capabilities` is a keyword baseline for validation. A code guard re-checks the choice; any failure or 20 s timeout falls back to the nearest eligible hospital.
 
 </div>
 <div>
@@ -201,7 +202,7 @@ An ADK agent on Vertex AI picks the destination after the crew confirms the tier
 </div>
 
 <!--
-The trace on the left is the contract example from SCHEMA.md; the screenshot on the right is the live trace in /vehicle. The agent never changes acuity or signal priority. The roster is invented demo data and the slide says so. Three tools: required_capabilities(tier, fields), list_hospitals(corridor) (mock capability and bed roster), eta_to(...) (traffic-aware Routes ETA).
+The trace on the left is the contract example from SCHEMA.md; the screenshot on the right is the live trace in /vehicle. The agent never changes acuity or signal priority. The roster is invented demo data and the slide says so. Four tools: list_hospitals(corridor) (mock capability and bed roster), eta_to(...) (traffic-aware Routes ETA), check_diversion(hospital_id) (a mock diversion feed), and required_capabilities(tier, fields), which is the keyword-table baseline used to validate the agent's own reading. The code guard rejects a dropped critical capability, an unknown hospital, a diverted one, no bed, or a missing capability. The trace lines on the slide are illustrative of the contract in SCHEMA.md.
 -->
 
 ---
@@ -210,7 +211,7 @@ The trace on the left is the contract example from SCHEMA.md; the screenshot on 
 
 ![w:1100](img/architecture.svg)
 
-<p class="cite">Cost by design: ~3 traffic-aware Routes calls per vehicle-minute; AI side effects run off the request path. Wired on main only. The BigQuery ML jam forecast is trained on N peak-hour rows ([fill at freeze]); it is not a deployed forecast.</p>
+<p class="cite">Cost by design: ~3 traffic-aware Routes calls per vehicle-minute; AI side effects run off the request path. Wired on main only. BigQuery ML: pipeline in place, retrained before submission on N rows ([fill at freeze]); not a deployed forecast.</p>
 
 <!--
 The SignalAdapter seam is the point: today SimAdapter writes the junction phase to Firestore, tomorrow a real controller adapter implements the same one method. Firestore is the single event bus and the accepted single point of failure for the demo. Cost is a design target: about 3 traffic-aware Routes calls per vehicle-minute, with Gemini, translation and speech side effects off the request path. Only products wired on main are shown. The BigQuery ML model is retrained before submission on peak-hour logger rows; state N from the freeze count.
@@ -224,7 +225,7 @@ The SignalAdapter seam is the point: today SimAdapter writes the junction phase 
 <div>
 
 ### Built
-- Cloud Scheduler → Cloud Run Job during Bengaluru peak hours (08–11, 17–21 IST)
+- Cloud Scheduler → Cloud Run Job during Bengaluru peak hours (08–11, 17–21 IST), running since 6 Oct
 - Live jam and slow spans per approach → BigQuery `traffic_spans`, two corridors
 - Same `jam_metres` as the live engine
 
@@ -232,8 +233,8 @@ The SignalAdapter seam is the point: today SimAdapter writes the junction phase 
 <div>
 
 ### Proof of pipeline, not a forecast
-- BigQuery ML boosted-tree model, retrained before submission, trained on N peak-hour rows ([fill at freeze])
-- A short peak-hour sample: it demonstrates the loop, it is not a deployed forecast
+- Rows so far: N ([fill at freeze]). The first 216 rows were midnight with zero queues
+- BigQuery ML model: a pipeline proof until peak rows accumulate; retrained before submission, not a deployed forecast
 - First step to a learning controller; clearance rate stays constant until observed
 
 </div>
@@ -242,7 +243,7 @@ The SignalAdapter seam is the point: today SimAdapter writes the junction phase 
 <p class="cite">Run reports (the with-vs-without report card per run) also land in BigQuery <code>run_reports</code>.</p>
 
 <!--
-Be explicit about scale: the logger now runs on Cloud Scheduler during Bengaluru peak hours (08-11 and 17-21 IST) and the model is retrained before submission, trained on N peak-hour rows (fill N at freeze). It is still a short sample, so we call it a demonstration of the loop, not a deployed forecast. Collection, feature view and training run end to end.
+Be explicit about scale: the logger has run on Cloud Scheduler during Bengaluru peak hours (08-11 and 17-21 IST) since 6 Oct, with N rows so far (fill N at freeze). The first 216 rows were logged at midnight with zero queues, so the model learned nothing from them. The BigQuery ML model is a pipeline proof until peak rows accumulate, retrained before submission, not a deployed forecast. Collection, feature view and training run end to end.
 -->
 
 ---
@@ -264,7 +265,7 @@ Preemption also idles the cross traffic, so the claim is the **net** effect. We 
 <p class="cite">Idle burn: Argonne National Laboratory (Gaines, Rask, Keller), US DOE, 2014. CO₂: US EPA, GHG Equivalencies Calculator, 8,887 g/gal petrol and 10,180 g/gal diesel, 2024. The per-queue arithmetic (20 vehicles, 60 s) is an illustration, not a measurement or a net saving.</p>
 
 <!--
-The queue length comes from the same Routes spans the engine already reads, so the estimate costs nothing extra. Be honest that preemption makes cross traffic idle too: the net effect is what counts, and because the green is sized to the queue, the cross-traffic idling is bounded by clear_s. The per-queue figure below is an illustration of scale, not a net saving. Arithmetic for one queue: 20 vehicles x 0.76 L/h x 60 s / 3600 = 0.25 L; x 2.35 kg/L = 0.6 kg CO2. We use the low end of the Argonne passenger-car range as a conservative idle rate. Argonne tested US cars; we have not sourced an Indian auto-rickshaw or bus figure, so we do not claim one. Divide the gallon values by 3.785 for litres.
+In live runs the queue length comes from the same Routes spans the engine already reads, so the estimate costs nothing extra. Be honest that preemption makes cross traffic idle too: the net effect is what counts, and because the green is sized to the queue, the cross-traffic idling is bounded by clear_s. The per-queue figure below is an illustration of scale, not a net saving. Arithmetic for one queue: 20 vehicles x 0.76 L/h x 60 s / 3600 = 0.25 L; x 2.35 kg/L = 0.6 kg CO2. We use the low end of the Argonne passenger-car range as a conservative idle rate. Argonne tested US cars; we have not sourced an Indian auto-rickshaw or bus figure, so we do not claim one. Divide the gallon values by 3.785 for litres.
 -->
 
 ---
@@ -284,8 +285,8 @@ The queue length comes from the same Routes spans the engine already reads, so t
 <div>
 
 ### Stated plainly
-- Signals simulated, patients synthetic, hospital roster mock
-- Demo-only auth: endpoints publicly writable, mock plate registry
+- Traffic signals are simulated behind an adapter; the demo scenario uses hand-authored traffic spans
+- Patients are synthetic; no authentication in the demo; demo endpoints are rate-limited but public
 - Minutes saved is a simulation estimate
 
 </div>

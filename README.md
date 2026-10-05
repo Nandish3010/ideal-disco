@@ -30,11 +30,11 @@ A crew binds a registered vehicle, starts a run against a dispatched incident, s
 
 Pick a corridor with `?corridor=blr` or `?corridor=hyd`; a corridor is one JSON file in `data/corridors/`.
 
-The replay on the current scenario (`blr-two-vehicles`: a critical ambulance, a platoon ambulance behind it, and a fire engine) saves 738.8 s, about 12.3 minutes across the three vehicles. That is a simulated baseline on recorded traffic, not a field measurement.
+The replay on the current scenario (`blr-two-vehicles`: a critical ambulance, a platoon ambulance behind it, and a fire engine) saves ≈ {MINUTES} min <!-- update from replay test --> across the three vehicles. The scenario is a scripted demo scenario: GPS ticks generated along the real corridor roads, with hand-authored traffic spans (a 500 m queue at junction 3, 100 m at junction 4). The saving is one simulated baseline, not a field measurement: per junction passed, the "Today" lane waits `cycle_s / 4 + queue_m / 2` seconds (expected remaining red for an arrival at a random point of the cycle, plus the queue draining at 2 m/s). The replay and the run report cards use the same formula.
 
 ## How a cop gets warned
 
-Live Routes traffic spans give the queue at each junction approach. The lead-time engine (`api/leadtime.py`, mirrored in `web/src/replay.js`) turns it into a time budget:
+Live runs use live Routes traffic spans for the queue at each junction approach; scenario runs use the scripted spans from `data/scenarios/`. The lead-time engine (`api/leadtime.py`, mirrored in `web/src/replay.js`) turns it into a time budget:
 
 ```
 jam_m   = Σ JAM m + 0.5 × Σ SLOW m          (walking back from the stop line to the first NORMAL span)
@@ -65,7 +65,7 @@ All calls go through Vertex AI (`google-genai`, global endpoint). Each has a tem
 - **Photo to vitals.** A photo of a monitor or ECG is read with the same schema; unreadable values stay null.
 - **ATMIST brief.** A hospital handover brief with prep checklist, generated at ETA minus 5 minutes.
 - **Rationale.** The one-line sequencing explanation above, and the wording of the spoken alert.
-- **Routing agent.** An agent built on Agent Development Kit picks the destination hospital with three tools: `required_capabilities`, `list_hospitals` (a mock capability and bed roster) and `eta_to` (traffic-aware Routes ETA). The tool trace is shown on `/vehicle`. The server re-checks the choice and falls back to the nearest eligible hospital on any failure or 20 s timeout. The agent never changes acuity or signal priority.
+- **Routing agent.** An agent built on Agent Development Kit picks the destination hospital with four tools: `list_hospitals` (a mock capability and bed roster), `eta_to` (traffic-aware Routes ETA), `check_diversion` (a mock diversion feed), and `required_capabilities`, which is a keyword-table baseline used for validation, not an answer. The agent returns the chosen hospital with up to two rejected alternatives and a confidence. A code guard re-checks the choice (known hospital, no diversion, a bed, every required capability, no critical baseline capability dropped) and falls back to the nearest eligible hospital on any failure or 20 s timeout. The tool trace, including any guard that tripped, is shown on `/vehicle`; the alternatives and confidence come back in the `/route` response. The agent never changes acuity or signal priority.
 
 ## Architecture
 
@@ -82,7 +82,7 @@ Google products actually wired:
 - **Cloud Text-to-Speech, Cloud Translation, Cloud Storage:** spoken alerts and their MP3s.
 - **Secret Manager:** Maps server key.
 - **Cloud Scheduler, Cloud Build, Artifact Registry:** traffic logger schedule and image.
-- **BigQuery and BigQuery ML:** traffic spans, run reports, jam forecast.
+- **BigQuery:** traffic spans and run reports. **BigQuery ML:** a jam-forecast pipeline is in place and is retrained before submission; it is a pipeline proof, not a deployed forecast (see Real data).
 - **Workload Identity Federation:** keyless CI deploys.
 
 Signal preemption sits behind a one-method `SignalAdapter` (`api/signal_adapter.py`). Today `SimAdapter` writes the junction phase to Firestore; a real controller implements the same method.
@@ -91,15 +91,20 @@ Signal preemption sits behind a one-method `SignalAdapter` (`api/signal_adapter.
 
 A Cloud Run Job (`jobs/traffic_logger.py`), triggered by Cloud Scheduler during peak hours, logs Routes traffic spans per junction approach into BigQuery `corridor.traffic_spans`, using the same `jam_metres` as the live engine. [jobs/bqml](jobs/bqml) builds a feature view and a BigQuery ML boosted-tree model, `corridor.jam_forecast`, for the next reading's jam length. Every run also writes its report card to `corridor.run_reports`.
 
-Be clear about what that is today: the sample so far is short (about 50 minutes) and was free-flowing, so the label has no variance and the model has learned nothing useful. It is a proof that the collection, features and training run end to end, and it will only say something after the logger has seen weeks of real congestion. See [jobs/bqml/README.md](jobs/bqml/README.md) for the numbers and limits.
+Be clear about what that is today: the logger has run on Cloud Scheduler for Bengaluru peak hours since 6 Oct, with N rows so far [fill at freeze]. The first 216 rows were logged at midnight with zero queues, so the label had no variance and the model learned nothing useful. The BigQuery ML model is a pipeline proof until peak-hour rows accumulate; it is retrained before submission and is not a deployed forecast. It will only say something after the logger has seen weeks of real congestion. See [jobs/bqml/README.md](jobs/bqml/README.md) for the numbers and limits.
 
 ## Honest limits
 
-- **Signals are simulated** behind `SignalAdapter`. Cop alerts are deployable today; real signal data is phase 2.
-- **Patients are synthetic** and the hospital roster is invented demo data. A clinician confirms every extracted value.
-- **Demo-only auth.** Identity is a mock plate registry that visibly rejects unknown plates. Demo endpoints are publicly writable so judges can open every screen.
-- **Minutes saved is a simulation** on recorded traffic, not a field measurement. Corridor coordinates are approximate.
-- **Scenario mode.** `/sim` replay and the feeder play recorded GPS and traffic from `data/scenarios/`; the live feeder drives the real API with that recorded trace, not real vehicles.
+Traffic signals are simulated behind an adapter; the demo scenario uses hand-authored traffic spans; patients are synthetic; no authentication in the demo; demo endpoints are rate-limited but public.
+
+- Cop alerts are deployable today; real signal data is phase 2.
+- The hospital roster is invented demo data, and a clinician confirms every extracted value. Identity is a mock plate registry that visibly rejects unknown plates.
+- Minutes saved is a simulation, not a field measurement. Corridor coordinates are approximate.
+- **Scenario mode.** `/sim` replay and the feeder play the scripted scenario from `data/scenarios/` (generated GPS ticks, hand-authored spans); the feeder drives the real API with that trace, not real vehicles. Live runs use live Routes traffic.
+
+## Security posture for the demo
+
+Firestore is public read, and every write goes through the API's service account. The API is unauthenticated so judges can open every screen; it is protected by per-IP rate limits (10 Gemini, Routes or agent calls a minute, 60 general) and a per-run cap of 20 triage and log calls. There are no per-device credentials yet; moving ACK, duty and end-run behind device-scoped credentials is on the roadmap.
 
 ## Run locally
 
@@ -129,7 +134,7 @@ For repository workflow and contribution conventions, see CONTRIBUTING.md.
 ## Testing
 
 - **API:** pytest against a fake Firestore, so tests need no credentials and make no cloud calls; the engines also self-check with `python3 api/acuity.py` and friends.
-- **Web:** vitest unit tests, including the replay maths and the recorded minutes-saved total on the current scenario; ESLint and Prettier checks.
+- **Web:** vitest unit tests, including the replay maths and the scenario minutes-saved total; ESLint and Prettier checks.
 - **Gate:** CI runs lint, format, tests and the production build, and enforces a minimum coverage threshold on the API. Run the same commands locally before opening a PR.
 
 ## Deploy
@@ -166,5 +171,6 @@ deck/       Marp slides, video plan and voiceover, architecture diagram
 ## Roadmap
 
 1. **Real signal adapter.** A controller implementation of `SignalAdapter`, starting with one pilot junction.
-2. **Learning controller.** Replace the constant 2 m/s clearance rate with a model trained on logged junction data and run report cards.
-3. **Agency rosters.** Replace the mock plate registry and hospital roster with real agency and bed data, with real authentication.
+2. **Device credentials.** Per-device tokens for ACK, duty and end-run.
+3. **Learning controller.** Replace the constant 2 m/s clearance rate with a model trained on logged junction data and run report cards.
+4. **Agency rosters.** Replace the mock plate registry and hospital roster with real agency and bed data, with real authentication.

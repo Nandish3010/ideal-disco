@@ -29,7 +29,7 @@ A long queue means an early alert. A short queue means a late one, so nobody is 
 A fire engine joins from the cross street. Rules set the order, so the fire engine goes first and the ambulance gets its green twelve seconds later.
 
 1:54 (shot 9)
-The rules choose the order; the model writes the one-line explanation the cop sees.
+The rules choose the order; the model writes the sentence, and the system checks it.
 
 2:04 (shot 10)
 The hospital sees the live log, and the brief lands before the ambulance does, for a clinician to confirm.
