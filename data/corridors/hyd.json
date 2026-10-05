@@ -1,0 +1,117 @@
+{
+  "note": "Coordinates are approximate (hand-placed for demo/sim use), not surveyed stop lines. Verify against the map before any field use.",
+  "id": "hyd",
+  "name": "Gachibowli → Continental Hospitals",
+  "lang": "te",
+  "hospital": {"name": "Continental Hospitals", "lat": 17.4185, "lng": 78.34},
+  "junctions": [
+    {
+      "id": "j1",
+      "name": "Gachibowli Junction",
+      "lat": 17.4401,
+      "lng": 78.3489,
+      "cycle_s": 120,
+      "approaches": [
+        {
+          "id": "N",
+          "bearing": 200,
+          "radius_m": 60,
+          "polyline": [
+            [17.44516, 78.35083],
+            [17.4401, 78.3489]
+          ]
+        },
+        {
+          "id": "E",
+          "bearing": 290,
+          "radius_m": 60,
+          "polyline": [
+            [17.43826, 78.35421],
+            [17.4401, 78.3489]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "j2",
+      "name": "Wipro Junction",
+      "lat": 17.434,
+      "lng": 78.3418,
+      "cycle_s": 120,
+      "approaches": [
+        {
+          "id": "NE",
+          "bearing": 228,
+          "radius_m": 60,
+          "polyline": [
+            [17.43761, 78.346],
+            [17.434, 78.3418]
+          ]
+        },
+        {
+          "id": "SE",
+          "bearing": 318,
+          "radius_m": 60,
+          "polyline": [
+            [17.42999, 78.34558],
+            [17.434, 78.3418]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "j3",
+      "name": "Financial District Junction",
+      "lat": 17.4235,
+      "lng": 78.341,
+      "cycle_s": 120,
+      "approaches": [
+        {
+          "id": "N",
+          "bearing": 184,
+          "radius_m": 60,
+          "polyline": [
+            [17.42888, 78.34139],
+            [17.4235, 78.341]
+          ]
+        },
+        {
+          "id": "E",
+          "bearing": 274,
+          "radius_m": 60,
+          "polyline": [
+            [17.42312, 78.34664],
+            [17.4235, 78.341]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "j4",
+      "name": "Nanakramguda Junction",
+      "lat": 17.418,
+      "lng": 78.343,
+      "cycle_s": 120,
+      "approaches": [
+        {
+          "id": "N",
+          "bearing": 161,
+          "radius_m": 60,
+          "polyline": [
+            [17.4231, 78.34116],
+            [17.418, 78.343]
+          ]
+        },
+        {
+          "id": "E",
+          "bearing": 251,
+          "radius_m": 60,
+          "polyline": [
+            [17.41975, 78.34834],
+            [17.418, 78.343]
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+# build from repo root: docker build -f Dockerfile.job .
+FROM python:3.12-slim
+WORKDIR /app
+RUN pip install --no-cache-dir httpx google-cloud-bigquery
+COPY api/leadtime.py api/leadtime.py
+COPY jobs jobs
+COPY data/corridors data/corridors
+CMD ["python", "jobs/traffic_logger.py"]

@@ -1,0 +1,71 @@
+{
+  "corridor": "blr",
+  "vehicles": [
+    {
+      "run_id": "run-amb-1",
+      "plate": "KA01AB1234",
+      "type": "ambulance",
+      "start_offset_s": 0,
+      "ticks": [
+        {"t": 0, "lat": 12.91253, "lng": 77.62566, "speed_mps": 13.2},
+        {"t": 25, "lat": 12.9151, "lng": 77.62414, "speed_mps": 13.2},
+        {"t": 50, "lat": 12.91759, "lng": 77.6225, "speed_mps": 13.2},
+        {"t": 75, "lat": 12.9197, "lng": 77.62036, "speed_mps": 13.2},
+        {"t": 100, "lat": 12.9218, "lng": 77.61821, "speed_mps": 13.2},
+        {"t": 125, "lat": 12.92141, "lng": 77.61596, "speed_mps": 13.2},
+        {"t": 150, "lat": 12.91949, "lng": 77.61363, "speed_mps": 13.2},
+        {"t": 175, "lat": 12.91758, "lng": 77.6113, "speed_mps": 13.2},
+        {"t": 200, "lat": 12.91682, "lng": 77.6087, "speed_mps": 13.2},
+        {"t": 225, "lat": 12.91756, "lng": 77.60575, "speed_mps": 13.2},
+        {"t": 250, "lat": 12.91777, "lng": 77.60279, "speed_mps": 13.2},
+        {"t": 275, "lat": 12.9172, "lng": 77.5998, "speed_mps": 13.2}
+      ]
+    },
+    {
+      "run_id": "run-fire-1",
+      "plate": "KA01FE5678",
+      "type": "fire",
+      "start_offset_s": 90,
+      "ticks": [
+        {"t": 0, "lat": 12.91237, "lng": 77.61355, "speed_mps": 12.1},
+        {"t": 15, "lat": 12.91362, "lng": 77.61247, "speed_mps": 12.1},
+        {"t": 30, "lat": 12.91487, "lng": 77.6114, "speed_mps": 12.1},
+        {"t": 45, "lat": 12.91612, "lng": 77.61032, "speed_mps": 12.1},
+        {"t": 60, "lat": 12.91678, "lng": 77.60887, "speed_mps": 12.1},
+        {"t": 75, "lat": 12.91719, "lng": 77.60724, "speed_mps": 12.1},
+        {"t": 90, "lat": 12.91759, "lng": 77.60562, "speed_mps": 12.1},
+        {"t": 105, "lat": 12.918, "lng": 77.604, "speed_mps": 12.1}
+      ]
+    }
+  ],
+  "recorded_spans": {
+    "blr_j3": [
+      {
+        "ts": "2026-10-05T09:00:00+05:30",
+        "intervals": [
+          {"from_m": 0, "to_m": 60, "speed": "NORMAL"},
+          {"from_m": 60, "to_m": 100, "speed": "SLOW"},
+          {"from_m": 100, "to_m": 600, "speed": "TRAFFIC_JAM"}
+        ]
+      },
+      {
+        "ts": "2026-10-05T09:01:00+05:30",
+        "intervals": [
+          {"from_m": 0, "to_m": 40, "speed": "NORMAL"},
+          {"from_m": 40, "to_m": 100, "speed": "SLOW"},
+          {"from_m": 100, "to_m": 600, "speed": "TRAFFIC_JAM"}
+        ]
+      }
+    ],
+    "blr_j4": [
+      {
+        "ts": "2026-10-05T09:00:00+05:30",
+        "intervals": [
+          {"from_m": 0, "to_m": 520, "speed": "NORMAL"},
+          {"from_m": 520, "to_m": 540, "speed": "SLOW"},
+          {"from_m": 540, "to_m": 600, "speed": "TRAFFIC_JAM"}
+        ]
+      }
+    ]
+  }
+}

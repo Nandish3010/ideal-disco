@@ -1,0 +1,144 @@
+{
+  "note": "Coordinates are approximate (hand-placed for demo/sim use), not surveyed stop lines. Verify against the map before any field use.",
+  "id": "blr",
+  "name": "Silk Board → Jayadeva Hospital",
+  "lang": "kn",
+  "hospital": {"name": "Jayadeva Institute of Cardiovascular Sciences", "lat": 12.9185, "lng": 77.599},
+  "junctions": [
+    {
+      "id": "j1",
+      "name": "Silk Board Junction",
+      "lat": 12.9172,
+      "lng": 77.6229,
+      "cycle_s": 120,
+      "approaches": [
+        {
+          "id": "SE",
+          "bearing": 330,
+          "radius_m": 60,
+          "polyline": [
+            [12.91253, 77.62566],
+            [12.9172, 77.6229]
+          ]
+        },
+        {
+          "id": "SW",
+          "bearing": 60,
+          "radius_m": 60,
+          "polyline": [
+            [12.91451, 77.61811],
+            [12.9172, 77.6229]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "j2",
+      "name": "Madiwala Junction",
+      "lat": 12.9226,
+      "lng": 77.6174,
+      "cycle_s": 120,
+      "approaches": [
+        {
+          "id": "SE",
+          "bearing": 315,
+          "radius_m": 60,
+          "polyline": [
+            [12.91879, 77.62131],
+            [12.9226, 77.6174]
+          ]
+        },
+        {
+          "id": "SW",
+          "bearing": 45,
+          "radius_m": 60,
+          "polyline": [
+            [12.91879, 77.61349],
+            [12.9226, 77.6174]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "j3",
+      "name": "BTM Udupi Garden Junction",
+      "lat": 12.9165,
+      "lng": 77.61,
+      "cycle_s": 120,
+      "approaches": [
+        {
+          "id": "NE",
+          "bearing": 230,
+          "radius_m": 60,
+          "polyline": [
+            [12.91996, 77.61424],
+            [12.9165, 77.61]
+          ]
+        },
+        {
+          "id": "SE",
+          "bearing": 320,
+          "radius_m": 60,
+          "polyline": [
+            [12.91237, 77.61355],
+            [12.9165, 77.61]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "j4",
+      "name": "Gurappanapalya Cross",
+      "lat": 12.918,
+      "lng": 77.604,
+      "cycle_s": 120,
+      "approaches": [
+        {
+          "id": "E",
+          "bearing": 284,
+          "radius_m": 60,
+          "polyline": [
+            [12.9167, 77.60937],
+            [12.918, 77.604]
+          ]
+        },
+        {
+          "id": "S",
+          "bearing": 14,
+          "radius_m": 60,
+          "polyline": [
+            [12.91277, 77.60266],
+            [12.918, 77.604]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "j5",
+      "name": "Jayadeva Junction",
+      "lat": 12.9172,
+      "lng": 77.5998,
+      "cycle_s": 120,
+      "approaches": [
+        {
+          "id": "E",
+          "bearing": 259,
+          "radius_m": 60,
+          "polyline": [
+            [12.91823, 77.60523],
+            [12.9172, 77.5998]
+          ]
+        },
+        {
+          "id": "S",
+          "bearing": 349,
+          "radius_m": 60,
+          "polyline": [
+            [12.91191, 77.60086],
+            [12.9172, 77.5998]
+          ]
+        }
+      ]
+    }
+  ]
+}

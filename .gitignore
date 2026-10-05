@@ -1,0 +1,17 @@
+# secrets
+amru-*.json
+*-key.json
+keys/
+.env
+.env.*
+!.env.example
+
+# deps / build
+node_modules/
+dist/
+__pycache__/
+.venv/
+venv/
+*.pyc
+.DS_Store
+web/.firebase/
