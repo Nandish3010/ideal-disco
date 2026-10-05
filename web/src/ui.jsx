@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { doc, onSnapshot } from "firebase/firestore";
+import { collection, doc, onSnapshot } from "firebase/firestore";
 import { db } from "./firebase.js";
 
 // localStorage can throw (private mode); fall back to memory-less defaults.
@@ -30,6 +30,21 @@ export function useDoc(path) {
       (e) => setS({ error: e.message }),
     );
   }, [path]);
+  return s;
+}
+
+// Live runs/{id}/log -> {rows, error}. Sorted client-side by `n` (field, else doc id) so a doc missing the field is never dropped.
+export function useLog(runId) {
+  const [s, setS] = useState({});
+  useEffect(() => {
+    setS({});
+    if (!runId) return;
+    return onSnapshot(
+      collection(db, `runs/${runId}/log`),
+      (q) => setS({ rows: q.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.n ?? a.id) - (b.n ?? b.id)) }),
+      (e) => setS({ error: e.message }),
+    );
+  }, [runId]);
   return s;
 }
 

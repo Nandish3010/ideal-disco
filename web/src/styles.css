@@ -25,8 +25,25 @@ button { min-height: 56px; padding: 0 20px; font: inherit; font-weight: 700; col
 button.primary { background: var(--accent); color: #000; border-color: var(--accent); width: 100%; }
 button.danger { background: var(--bad); color: #000; border-color: var(--bad); width: 100%; }
 button:disabled { opacity: .5; }
-button.giant { display: block; width: 100%; min-height: 160px; font-size: 28px; border-radius: 80px; margin: 12px 0; }
-button.giant small { display: block; font-size: 16px; font-weight: 400; }
+button.giant { display: block; width: 100%; min-height: 160px; font-size: 32px; border-radius: 80px; margin: 12px 0;
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+button.giant.live { background: var(--bad); color: #000; border-color: var(--bad); }
+button.giant small { display: block; font-size: 18px; font-weight: 400; }
+.meter { display: block; height: 10px; margin: 8px auto 0; max-width: 70%; background: #0003; border-radius: 5px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: #000; }
+.row button.on { background: var(--fg); color: #000; border-color: var(--fg); }
+.tierpill { display: block; text-align: center; font-size: 36px; font-weight: 800; padding: 10px; margin-bottom: 8px;
+  border-radius: 99px; background: #2a313b; color: var(--muted); }
+.tierpill.t-critical, button.t-critical { background: var(--bad); color: #000; border-color: var(--bad); }
+.tierpill.t-urgent, button.t-urgent { background: var(--warn); color: #000; border-color: var(--warn); }
+.tierpill.t-stable, button.t-stable { background: var(--accent); color: #000; border-color: var(--accent); }
+.quote { font-size: 22px; margin: 4px 0 12px; }
+.kv { margin: 4px 0 12px; }
+.kv div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.kv dt { color: var(--muted); font-size: 18px; word-break: break-word; }
+.kv dd { margin: 0; text-align: right; font-weight: 700; }
+.kv small { display: block; font-size: 14px; font-weight: 400; }
+.kv .src { color: var(--accent); } .kv .inf { color: var(--warn); }
 .row { display: flex; gap: 10px; margin-bottom: 12px; }
 .row button { flex: 1; }
 .list { list-style: none; padding: 0; margin: 0; }
