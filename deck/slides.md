@@ -210,10 +210,10 @@ The trace on the left is the contract example from SCHEMA.md; the screenshot on 
 
 ![w:1100](img/architecture.svg)
 
-<p class="cite">Wired on main only. The BigQuery ML jam forecast is a pipeline proof on a small sample, not a deployed forecast.</p>
+<p class="cite">Cost by design: ~3 traffic-aware Routes calls per vehicle-minute; AI side effects run off the request path. Wired on main only. The BigQuery ML jam forecast is trained on N peak-hour rows ([fill at freeze]); it is not a deployed forecast.</p>
 
 <!--
-The SignalAdapter seam is the point: today SimAdapter writes the junction phase to Firestore, tomorrow a real controller adapter implements the same one method. Firestore is the single event bus and the accepted single point of failure for the demo. Only products wired on main are shown. The BigQuery ML model exists but is trained on a small, free-flowing sample.
+The SignalAdapter seam is the point: today SimAdapter writes the junction phase to Firestore, tomorrow a real controller adapter implements the same one method. Firestore is the single event bus and the accepted single point of failure for the demo. Cost is a design target: about 3 traffic-aware Routes calls per vehicle-minute, with Gemini, translation and speech side effects off the request path. Only products wired on main are shown. The BigQuery ML model is retrained before submission on peak-hour logger rows; state N from the freeze count.
 -->
 
 ---
@@ -224,7 +224,7 @@ The SignalAdapter seam is the point: today SimAdapter writes the junction phase 
 <div>
 
 ### Built
-- Cloud Scheduler → Cloud Run Job every 10 minutes
+- Cloud Scheduler → Cloud Run Job during Bengaluru peak hours (08–11, 17–21 IST)
 - Live jam and slow spans per approach → BigQuery `traffic_spans`, two corridors
 - Same `jam_metres` as the live engine
 
@@ -232,8 +232,8 @@ The SignalAdapter seam is the point: today SimAdapter writes the junction phase 
 <div>
 
 ### Proof of pipeline, not a forecast
-- BigQuery ML boosted-tree model on the logged spans
-- Current sample is short and free-flowing, so it says nothing yet
+- BigQuery ML boosted-tree model, retrained before submission, trained on N peak-hour rows ([fill at freeze])
+- A short peak-hour sample: it demonstrates the loop, it is not a deployed forecast
 - First step to a learning controller; clearance rate stays constant until observed
 
 </div>
@@ -242,7 +242,7 @@ The SignalAdapter seam is the point: today SimAdapter writes the junction phase 
 <p class="cite">Run reports (the with-vs-without report card per run) also land in BigQuery <code>run_reports</code>.</p>
 
 <!--
-Be explicit that the model is a proof of the pipeline: the logged sample is short and traffic was free-flowing, so the label has no variance and the model has learned nothing useful. What matters is that the collection, feature view and training steps run end to end and will say something once the logger has run through real congestion.
+Be explicit about scale: the logger now runs on Cloud Scheduler during Bengaluru peak hours (08-11 and 17-21 IST) and the model is retrained before submission, trained on N peak-hour rows (fill N at freeze). It is still a short sample, so we call it a demonstration of the loop, not a deployed forecast. Collection, feature view and training run end to end.
 -->
 
 ---
@@ -252,17 +252,19 @@ Be explicit that the model is a proof of the pipeline: the logged sample is shor
 <div class="stats">
 <div class="stat"><b>0.76 L/h</b><span>idle burn, small petrol car (low end of 0.2–0.5 gal/h)</span></div>
 <div class="stat"><b>2.35 kg</b><span>CO₂ per litre of petrol (diesel 2.69 kg/L)</span></div>
-<div class="stat"><b>0.6 kg</b><span>CO₂ avoided per cleared queue (assumed 20 vehicles, 60 s)</span></div>
+<div class="stat"><b>0.6 kg</b><span>CO₂ idled by one 20-vehicle queue in 60 s (illustration)</span></div>
 </div>
 
-`fuel_saved_L = queue_vehicles × idle_L_per_s × seconds_saved`
+Preemption also idles the cross traffic, so the claim is the **net** effect. We size the green to the queue, so cross-traffic idling is bounded by `clear_s`.
 
-**SDG 3.6** halve road traffic deaths and injuries · **SDG 11.2** sustainable transport.
+`net_fuel_L = (ambulance-lane idling avoided − cross-traffic idling added) × idle_L_per_s`
 
-<p class="cite">Idle burn: Argonne National Laboratory (Gaines, Rask, Keller), US DOE, 2014. CO₂: US EPA, GHG Equivalencies Calculator, 8,887 g/gal petrol and 10,180 g/gal diesel, 2024. The 20-vehicle, 60 s case is an illustration, not a measurement.</p>
+**SDG 3.8** emergency care access (universal health coverage) · **SDG 11.2** sustainable transport.
+
+<p class="cite">Idle burn: Argonne National Laboratory (Gaines, Rask, Keller), US DOE, 2014. CO₂: US EPA, GHG Equivalencies Calculator, 8,887 g/gal petrol and 10,180 g/gal diesel, 2024. The per-queue arithmetic (20 vehicles, 60 s) is an illustration, not a measurement or a net saving.</p>
 
 <!--
-The queue length comes from the same Routes spans the engine already reads, so the estimate costs nothing extra. Arithmetic: 20 vehicles x 0.76 L/h x 60 s / 3600 = 0.25 L; x 2.35 kg/L = 0.6 kg CO2. We use the low end of the Argonne passenger-car range as a conservative idle rate. Argonne tested US cars; we have not sourced an Indian auto-rickshaw or bus figure, so we do not claim one. Divide the gallon values by 3.785 for litres.
+The queue length comes from the same Routes spans the engine already reads, so the estimate costs nothing extra. Be honest that preemption makes cross traffic idle too: the net effect is what counts, and because the green is sized to the queue, the cross-traffic idling is bounded by clear_s. The per-queue figure below is an illustration of scale, not a net saving. Arithmetic for one queue: 20 vehicles x 0.76 L/h x 60 s / 3600 = 0.25 L; x 2.35 kg/L = 0.6 kg CO2. We use the low end of the Argonne passenger-car range as a conservative idle rate. Argonne tested US cars; we have not sourced an Indian auto-rickshaw or bus figure, so we do not claim one. Divide the gallon values by 3.785 for litres.
 -->
 
 ---
