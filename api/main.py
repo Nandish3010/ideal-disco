@@ -71,6 +71,15 @@ def deny_run(token: str, run: dict) -> JSONResponse | None:
     return deny(token, v.get("device_token_hash"))
 
 
+def deny_run_or_hospital(token: str, run: dict) -> JSONResponse | None:
+    """The run's vehicle token, or the token of any hospital desk that signed in (POST /hospital/duty)."""
+    if tokens.disabled():
+        return None
+    v = db.collection("vehicles").document(run.get("vehicle_plate") or "-").get().to_dict() or {}
+    desks = [d.to_dict().get("device_token_hash") for d in db.collection("hospital_duty").stream()]
+    return deny(token, v.get("device_token_hash"), *desks)
+
+
 def duty_hash(jid: str) -> str | None:
     """sha256 of the token the cop on duty at this junction (`blr_j3`) was given; None when off duty or never on."""
     d = db.collection("duty").document(jid).get().to_dict() or {}
@@ -392,10 +401,12 @@ class RouteReq(BaseModel):
 
 
 @app.post("/route")
-def route(r: RouteReq):
+def route(r: RouteReq, x_device_token: str = Header("")):
     ref = db.collection("runs").document(r.run_id)
-    if not ref.get().exists:
+    if not (snap := ref.get()).exists:
         return err(404, "unknown_run")
+    if bad := deny_run(x_device_token, snap.to_dict() or {}):
+        return bad
     return agent.apply(ref) or err(
         409, "not_routable", "needs a confirmed ambulance run on a corridor with a roster"
     )
@@ -421,11 +432,13 @@ class BriefReq(BaseModel):
 
 
 @app.post("/brief")
-def brief_endpoint(b: BriefReq):
+def brief_endpoint(b: BriefReq, x_device_token: str = Header("")):
     run_ref = db.collection("runs").document(b.run_id)
     run = run_ref.get()
     if not run.exists:
         return err(404, "unknown_run")
+    if b.regenerate and (bad := deny_run_or_hospital(x_device_token, run.to_dict() or {})):
+        return bad
     entries = log_entries(run_ref)
     if not entries:
         return err(422, "no_log_entries", "nothing to brief yet")
@@ -447,11 +460,13 @@ def brief_endpoint(b: BriefReq):
 
 
 @app.post("/runs/{run_id}/after-action")
-def after_action(run_id: str, regenerate: bool = False):
+def after_action(run_id: str, regenerate: bool = False, x_device_token: str = Header("")):
     run_ref = db.collection("runs").document(run_id)
     run = run_ref.get()
     if not run.exists:
         return err(404, "unknown_run")
+    if regenerate and (bad := deny_run_or_hospital(x_device_token, run.to_dict() or {})):
+        return bad
     r = run.to_dict()
     if r.get("state") not in ("ended", "arrived"):
         return err(409, "run_not_finished", "the report is written once the run has ended or arrived")
@@ -1122,3 +1137,19 @@ def cop_note(n: CopNoteReq, x_device_token: str = Header("")):
         log(event="cop_note_extraction_failed", junction_id=key)
         return err(422, "extraction_failed", fallback="text")
     return copnote.apply(db, key, note, datetime.now(UTC))
+
+
+class HospitalDuty(BaseModel):
+    hospital_id: str
+
+
+@app.post("/hospital/duty")
+def hospital_duty(d: HospitalDuty):
+    """A hospital desk signs in: hands out a token that may regenerate briefs and after-action reports. Rotates on each sign-in."""
+    if not by_id(d.hospital_id):
+        return err(404, "unknown_hospital")
+    token, h = tokens.mint()
+    db.collection("hospital_duty").document(d.hospital_id).set(
+        {"device_token_hash": h, "since": datetime.now(UTC)}
+    )
+    return {"hospital_id": d.hospital_id, "hospital_token": token}

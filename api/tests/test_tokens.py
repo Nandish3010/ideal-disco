@@ -195,6 +195,70 @@ def test_unknown_alert_is_404_before_the_token_check(
     assert_envelope(client.post("/ack", json=body), 404, "unknown_alert")
 
 
+# ---- paid endpoints: /route, regenerate -------------------------------------------------------------------------------
+
+
+def desk(client: TestClient, hospital: str = "blr_jayadeva") -> str:
+    r = client.post("/hospital/duty", json={"hospital_id": hospital})
+    assert r.status_code == 200, r.text
+    return r.json()["hospital_token"]
+
+
+def test_hospital_duty_stores_only_the_hash_and_rotates(
+    client: TestClient, seeded: FakeFirestore, enforced: None
+) -> None:
+    first = desk(client)
+    h = seeded.collection("hospital_duty").document("blr_jayadeva").get().to_dict()["device_token_hash"]
+    assert h == hashlib.sha256(first.encode()).hexdigest() and first not in str(h)
+    assert desk(client) != first
+    assert_envelope(client.post("/hospital/duty", json={"hospital_id": "nope"}), 404, "unknown_hospital")
+
+
+def test_route_needs_the_vehicle_token(client: TestClient, seeded: FakeFirestore, enforced: None) -> None:
+    t = bind(client)
+    rid = start(client, t)
+    client.post(f"/runs/{rid}/confirm", json={"tier": "urgent"}, headers=hdr(t))
+    assert_envelope(client.post("/route", json={"run_id": rid}), 401, "device_token_required")
+    assert_envelope(
+        client.post("/route", json={"run_id": rid}, headers=hdr("x")), 403, "device_token_mismatch"
+    )
+    assert_envelope(
+        client.post("/route", json={"run_id": rid}, headers=hdr(desk(client))), 403, "device_token_mismatch"
+    )  # a hospital desk cannot spend the routing agent
+    assert client.post("/route", json={"run_id": rid}, headers=hdr(t)).status_code == 200
+
+
+def test_brief_regenerate_needs_vehicle_or_hospital_token(
+    client: TestClient, seeded: FakeFirestore, enforced: None
+) -> None:
+    t = bind(client)
+    rid = start(client, t)
+    seeded.collection("runs").document(rid).collection("log").document("1").set({"t": 0, "fields": {}})
+    body = {"run_id": rid}
+    assert client.post("/brief", json=body).status_code == 200  # first generation stays open
+    assert_envelope(client.post("/brief", json={**body, "regenerate": True}), 401, "device_token_required")
+    bad = client.post("/brief", json={**body, "regenerate": True}, headers=hdr("x"))
+    assert_envelope(bad, 403, "device_token_mismatch")
+    for good in (t, desk(client)):
+        r = client.post("/brief", json={**body, "regenerate": True}, headers=hdr(good))
+        assert r.status_code == 200, r.text
+
+
+def test_after_action_regenerate_needs_vehicle_or_hospital_token(
+    client: TestClient, seeded: FakeFirestore, enforced: None
+) -> None:
+    t = bind(client)
+    rid = start(client, t)
+    seeded.collection("runs").document(rid).update({"state": "ended"})
+    url = f"/runs/{rid}/after-action"
+    assert client.post(url).status_code == 200  # first report stays open
+    assert client.post(url).status_code == 200
+    assert_envelope(client.post(url + "?regenerate=1"), 401, "device_token_required")
+    assert_envelope(client.post(url + "?regenerate=1", headers=hdr("x")), 403, "device_token_mismatch")
+    for good in (t, desk(client)):
+        assert client.post(url + "?regenerate=1", headers=hdr(good)).status_code == 200
+
+
 # ---- what stays open --------------------------------------------------------------------------------------------------
 
 
@@ -202,7 +266,8 @@ def test_open_endpoints_need_no_token(client: TestClient, seeded: FakeFirestore,
     assert client.get("/health").status_code == 200
     assert client.post("/incidents", json={"type": "cardiac"}).status_code == 200
     assert_envelope(client.post("/route", json={"run_id": "run-x"}), 404, "unknown_run")
-    assert_envelope(client.post("/brief", json={"run_id": "run-x"}), 404, "unknown_run")
+    assert_envelope(client.post("/brief", json={"run_id": "run-x", "regenerate": True}), 404, "unknown_run")
+    assert_envelope(client.post("/runs/run-x/after-action?regenerate=1"), 404, "unknown_run")
     assert client.post("/housekeeping").status_code == 404  # its own token, unset here
 
 
