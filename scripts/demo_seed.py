@@ -1,4 +1,4 @@
-"""Seed the named Firestore DB `corridor`: vehicles, junctions (both corridors), one incident.
+"""Seed the (default) Firestore database: vehicles, junctions (both corridors), one incident.
 Run from repo root with GOOGLE_APPLICATION_CREDENTIALS set: python3 scripts/demo_seed.py"""
 import json, os
 from datetime import datetime, timezone
@@ -6,7 +6,7 @@ from pathlib import Path
 
 from google.cloud import firestore
 
-db = firestore.Client(project=os.environ.get("GOOGLE_CLOUD_PROJECT", "amru-509214"), database="corridor")
+db = firestore.Client(project=os.environ.get("GOOGLE_CLOUD_PROJECT", "green-corridor-2026"))
 
 for plate, vtype, agency in [("KA01AB1234", "ambulance", "108 Karnataka"),
                              ("KA01FE5678", "fire", "Karnataka Fire & Emergency"),

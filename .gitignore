@@ -1,5 +1,6 @@
 # secrets
-amru-*.json
+corridor-deploy.json
+firebase-debug.log
 *-key.json
 keys/
 .env

@@ -29,7 +29,7 @@ the actual queue length and which way the vehicle turns, and sequencing several 
    (source field)            │        └─▶ SignalAdapter.request_green(J, approach, T)
                              │                 └─▶ SimAdapter → Firestore junctions/
                              ▼
-                        Firestore `corridor` (event bus; every screen subscribes)
+                        Firestore (default) (event bus; every screen subscribes)
                              │
    cop ◀─listener+TTS────────┼────────▶ hospital ◀─brief at ETA−5 (inside /location)
    control room ◀────────────┘          sim + with-vs-without replay
@@ -59,7 +59,7 @@ Pick a corridor with `?corridor=blr` or `?corridor=hyd`.
 
 ## Run
 
-Prerequisites: Python 3.12, Node 20+, a Google Cloud project with the named Firestore DB `corridor`.
+Prerequisites: Python 3.12, Node 20+, a Google Cloud project with the (default) Firestore database.
 
 ```
 # api/  (placeholder, fill in as the API lands)
@@ -80,6 +80,19 @@ python3 api/acuity.py && python3 api/priority.py && python3 api/leadtime.py
 # seed demo data
 python3 scripts/demo_seed.py
 ```
+
+## Configuration
+
+Project `green-corridor-2026`, Firestore `(default)` database, hosting https://green-corridor-2026.web.app, Cloud Run service `corridor-api` in asia-south1.
+
+| Env var | Value |
+|---|---|
+| `GEMINI_MODEL` | `gemini-3-flash-preview` |
+| `GEMINI_FALLBACK_MODEL` | `gemini-3.1-flash-lite` |
+| `GCP_PROJECT` | `green-corridor-2026` |
+| `GEMINI_LOCATION` | `global` |
+| `MAPS_SERVER_KEY` | from Secret Manager `corridor-maps-server-key` |
+| `MEDIA_BUCKET` | `green-corridor-2026-media` |
 
 ## Layout
 

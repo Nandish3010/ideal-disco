@@ -10,7 +10,7 @@ class SignalAdapter(ABC):
 
 
 class SimAdapter(SignalAdapter):
-    def __init__(self, db):  # db: google.cloud.firestore.Client on the named DB `corridor`
+    def __init__(self, db):  # db: google.cloud.firestore.Client on the (default) database
         self.db = db
 
     def request_green(self, junction_id, approach, duration_s, run_ids):

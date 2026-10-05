@@ -1,6 +1,6 @@
 # Contracts
 
-Firestore named database **`corridor`** (never `(default)`). Timestamps are Firestore Timestamps, shown here as ISO 8601.
+Firestore **(default)** database in project `green-corridor-2026`. Timestamps are Firestore Timestamps, shown here as ISO 8601.
 Clients read; only the Cloud Run service account writes. Every server log line carries `run_id` and `junction_id`.
 
 ## Firestore collections
@@ -44,7 +44,7 @@ Clients read; only the Cloud Run service account writes. Every server log line c
   "junction_id": "blr_j3", "approach": "NE", "stage": "PREPARE", "jam_m": 520, "eta_s": 240,
   "exit_move": "left",
   "text": "AMBULANCE CRITICAL · 520 m queue on your NE approach · turning LEFT · arrives in 4 min",
-  "audio_url": "gs://amru-509214-corridor-media/alerts/blr_j3_run1_prepare.mp3",
+  "audio_url": "gs://green-corridor-2026-media/alerts/blr_j3_run1_prepare.mp3",
   "acked_at": null, "escalated": false
 }
 ```
