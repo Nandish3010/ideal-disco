@@ -10,8 +10,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "api"))
 from leadtime import jam_metres
 
 ROOT = Path(__file__).resolve().parent.parent
-PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "green-corridor-2026")
-KEY = os.environ["MAPS_SERVER_KEY"]  # injected from Secret Manager corridor-maps-server-key
+PROJECT = os.environ.get("GCP_PROJECT", "green-corridor-2026")
+KEY = os.environ["MAPS_SERVER_KEY"].strip()  # injected from Secret Manager corridor-maps-server-key
 URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
 MASK = "routes.polyline,routes.duration,routes.travelAdvisory.speedReadingIntervals"
 TABLE = f"{PROJECT}.corridor.traffic_spans"

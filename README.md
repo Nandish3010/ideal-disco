@@ -85,6 +85,8 @@ python3 scripts/demo_seed.py
 
 Project `green-corridor-2026`, Firestore `(default)` database, hosting https://green-corridor-2026.web.app, Cloud Run service `corridor-api` in asia-south1.
 
+Traffic logger: Cloud Run Job `corridor-traffic-logger` (`jobs/traffic_logger.py`, `Dockerfile.job`) writes Routes traffic spans to BigQuery `corridor.traffic_spans` every 10 minutes via Cloud Scheduler `corridor-traffic-logger-10m`.
+
 | Env var | Value |
 |---|---|
 | `GEMINI_MODEL` | `gemini-3-flash-preview` |

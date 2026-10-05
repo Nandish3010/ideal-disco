@@ -1,7 +1,8 @@
 # build from repo root: docker build -f Dockerfile.job .
 FROM python:3.12-slim
 WORKDIR /app
-RUN pip install --no-cache-dir httpx google-cloud-bigquery
+COPY jobs/requirements.txt jobs/requirements.txt
+RUN pip install --no-cache-dir -r jobs/requirements.txt
 COPY api/leadtime.py api/leadtime.py
 COPY jobs jobs
 COPY data/corridors data/corridors
