@@ -1,6 +1,8 @@
 import { createRoot } from "react-dom/client";
 import "./styles.css";
+import Cop from "./pages/Cop.jsx";
 import Dispatch from "./pages/Dispatch.jsx";
+import Hospital from "./pages/Hospital.jsx";
 import Sim from "./pages/Sim.jsx";
 import Vehicle from "./pages/Vehicle.jsx";
 
@@ -8,8 +10,8 @@ import Vehicle from "./pages/Vehicle.jsx";
 const stub = () => <p className="muted">placeholder</p>;
 const routes = {
   "/vehicle": ["Vehicle", Vehicle],
-  "/cop": ["Cop", stub],
-  "/hospital": ["Hospital", stub],
+  "/cop": ["Cop", Cop],
+  "/hospital": ["Hospital", Hospital],
   "/control": ["Control room", stub],
   "/sim": ["Sim", Sim],
   "/dispatch": ["Dispatch", Dispatch],

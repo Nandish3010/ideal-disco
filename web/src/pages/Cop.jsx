@@ -1,0 +1,201 @@
+import { useEffect, useState } from "react";
+import { collection, collectionGroup, onSnapshot, query, where } from "firebase/firestore";
+import { db } from "../firebase.js";
+import { api } from "../api.js";
+import { corridors } from "../data.js";
+import { store, useDoc, when } from "../ui.jsx";
+import "../cop.css";
+
+export const ms = (v) => v?.toMillis?.() ?? (v ? Date.parse(v) : null);
+
+export function useNow(step = 1000) {
+  const [n, setN] = useState(Date.now());
+  useEffect(() => { const id = setInterval(() => setN(Date.now()), step); return () => clearInterval(id); }, [step]);
+  return n;
+}
+
+// Live en_route runs (shared with the hospital page). Single-field filter, no index needed.
+export function useEnRoute() {
+  const [s, setS] = useState({ runs: [] });
+  useEffect(() => onSnapshot(
+    query(collection(db, "runs"), where("state", "==", "en_route")),
+    (q) => setS({ runs: q.docs.map((d) => ({ id: d.id, ...d.data() })) }),
+    (e) => setS({ runs: [], error: e.message }),
+  ), []);
+  return s;
+}
+
+// ---- audio: unlocked in the on-duty tap (iOS needs a gesture), one shared element reused for every alert
+const SILENT = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+const audio = typeof Audio !== "undefined" ? new Audio() : null;
+function unlock() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const c = new Ctx(); const src = c.createBufferSource();
+    src.buffer = c.createBuffer(1, 1, 22050); src.connect(c.destination); src.start(0); c.resume?.();
+  } catch { /* ignore */ }
+  try { audio.src = SILENT; audio.play().catch(() => {}); } catch { /* ignore */ }
+  try { speechSynthesis.speak(Object.assign(new SpeechSynthesisUtterance(" "), { volume: 0 })); } catch { /* ignore */ }
+}
+let lock;
+async function wake() { try { lock = await navigator.wakeLock.request("screen"); } catch { /* unsupported or denied */ } }
+
+function speak(a, onBlocked) {
+  const tts = () => { try { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(a.text)); } catch { /* ignore */ } };
+  if (!a.audio_url) return tts();
+  // gs:// is not fetchable by a browser; the media bucket is served over https
+  audio.src = a.audio_url.replace(/^gs:\/\//, "https://storage.googleapis.com/");
+  audio.play().catch((e) => (e.name === "NotAllowedError" ? onBlocked() : tts()));
+}
+
+// ---- alerts for one junction. Try collectionGroup first; it needs a collection-group index on
+// alerts.junction_id. Without it Firestore errors, so fall back to en_route runs + each run's alerts.
+function useAlerts(jid) {
+  const [s, setS] = useState({ alerts: [], mode: "collectionGroup" });
+  useEffect(() => {
+    let subs = [];
+    const row = (d) => { const run_id = d.ref.parent.parent.id; return { ...d.data(), run_id, n: d.id, key: `${run_id}/${d.id}` }; };
+    const fallback = (reason) => {
+      const byRun = {}, inner = {};
+      const push = () => setS({ mode: "active runs (collectionGroup failed: " + reason + ")", alerts: Object.values(byRun).flat() });
+      push();
+      subs.push(onSnapshot(query(collection(db, "runs"), where("state", "==", "en_route")), (q) => {
+        const ids = new Set(q.docs.map((d) => d.id));
+        for (const id of ids) if (!inner[id]) {
+          inner[id] = onSnapshot(collection(db, "runs", id, "alerts"),
+            (a) => { byRun[id] = a.docs.map(row).filter((x) => x.junction_id === jid); push(); }, () => {});
+        }
+        for (const id of Object.keys(inner)) if (!ids.has(id)) { inner[id](); delete inner[id]; delete byRun[id]; push(); }
+      }, (e) => setS({ alerts: [], mode: "active runs", error: e.message })), () => Object.values(inner).forEach((f) => f()));
+    };
+    subs.push(onSnapshot(query(collectionGroup(db, "alerts"), where("junction_id", "==", jid)),
+      (q) => setS({ mode: "collectionGroup", alerts: q.docs.map(row) }),
+      (e) => { subs.forEach((f) => f()); subs = []; fallback(e.code || "error"); }));
+    return () => subs.forEach((f) => f());
+  }, [jid]);
+  return s;
+}
+
+const ARROW = { left: "←", straight: "↑", right: "→" };
+const left = (s) => (s >= 60 ? `in ${Math.ceil(s / 60)} min` : s > 0 ? `in ${Math.ceil(s)} s` : "now");
+const STALE_MS = 10 * 60 * 1000; // an unacked alert older than this is history, not a live call
+
+function Current({ a, t0, now, onAck }) {
+  const run = useDoc(`runs/${a.run_id}`).data;
+  const tier = run?.confirmed_tier ?? run?.acuity_tier;
+  const rem = Math.max(0, (a.eta_s ?? 0) - (now - t0) / 1000);
+  return (
+    <section className={`alert-full ${a.stage}`}>
+      <div>
+        <h2 className="stage">{a.stage}</h2>
+        <p className="alert-text">{a.text}</p>
+        <p className="muted">{run?.vehicle_type ?? "vehicle"}{tier ? ` · ${tier}` : ""}{a.approach ? ` · ${a.approach} approach` : ""}{a.jam_m ? ` · ${a.jam_m} m queue` : ""}</p>
+        <p className="eta">arrives {left(rem)}</p>
+        {a.exit_move && <p className="move">{ARROW[a.exit_move]} turning {a.exit_move.toUpperCase()}</p>}
+      </div>
+      <button className="ack" onClick={() => onAck(a)}>ACK</button>
+    </section>
+  );
+}
+
+function Duty({ corridor, junction, onOff }) {
+  const jid = `${corridor}_${junction.id}`;
+  const { alerts, mode, error } = useAlerts(jid);
+  const { runs } = useEnRoute();
+  const now = useNow();
+  const [local, setLocal] = useState({});
+  const [blocked, setBlocked] = useState(false);
+  const [seen] = useState({}); // first-seen time for alerts whose created_at has not resolved yet
+
+  useEffect(() => {
+    wake();
+    const vis = () => document.visibilityState === "visible" && wake();
+    document.addEventListener("visibilitychange", vis);
+    return () => { document.removeEventListener("visibilitychange", vis); lock?.release().catch(() => {}); };
+  }, []);
+
+  const t0 = (a) => ms(a.created_at) ?? (seen[a.key] ??= Date.now());
+  const sorted = [...alerts].sort((x, y) => t0(y) - t0(x) || Number(y.n) - Number(x.n));
+  const acked = (a) => a.acked_at || local[a.key];
+  const cur = sorted.find((a) => !acked(a) && now - t0(a) < STALE_MS);
+
+  useEffect(() => {
+    if (!cur) return;
+    const say = () => speak(cur, () => setBlocked(true));
+    say();
+    const id = setInterval(say, 20000); // repeat until acked
+    return () => { clearInterval(id); try { speechSynthesis.cancel(); audio.pause(); } catch { /* ignore */ } };
+  }, [cur?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function ack(a) {
+    setLocal((l) => ({ ...l, [a.key]: { s: "sent" } })); // optimistic: the cop sees it done at once
+    try {
+      const r = await api("/ack", { run_id: a.run_id, alert_n: Number(a.n), junction_id: jid });
+      setLocal((l) => ({ ...l, [a.key]: { s: "ok", latency: r.latency_s } }));
+    } catch { /* 501 or offline: stays "sent"; server-side ack lands later */ }
+  }
+  const state = (a) => a.acked_at ? `ACKED ${when(a.acked_at)}` : local[a.key]?.s === "ok" ? `ACKED${local[a.key].latency != null ? ` ${local[a.key].latency} s` : ""}`
+    : local[a.key] ? "sent" : now - t0(a) < STALE_MS ? "waiting" : "no ACK";
+  const n = runs.filter((r) => (r.corridor ?? corridor) === corridor).length;
+
+  return (
+    <>
+      {blocked && <button className="primary" onClick={() => { unlock(); setBlocked(false); }}>Sound is blocked. Tap to enable.</button>}
+      {cur ? <Current a={cur} t0={t0(cur)} now={now} onAck={ack} /> : (
+        <section className="card idle">
+          <p className="big">On duty at {junction.name} · no vehicles approaching</p>
+          <p className="eta">{n} en route on {corridors[corridor].name}</p>
+        </section>
+      )}
+      {error && <p className="card bad">Feed error: {error}</p>}
+      <h2>Last alerts here</h2>
+      {sorted.length === 0 && <p className="muted">None yet.</p>}
+      <ul className="list">
+        {sorted.slice(0, 10).map((a) => (
+          <li key={a.key}><span className={`pill stage-${a.stage}`}>{a.stage}</span> {a.approach} {a.exit_move && ARROW[a.exit_move]}
+            <b style={{ float: "right" }}>{state(a)}</b><div className="muted">{when(a.created_at)} · {a.run_id}</div></li>
+        ))}
+      </ul>
+      <p className="muted">Feed: {mode}</p>
+      <a className="duty-off" href="#" onClick={(e) => { e.preventDefault(); onOff(); }}>Off duty</a>
+    </>
+  );
+}
+
+export default function Cop() {
+  const q = new URLSearchParams(location.search).get("corridor");
+  let saved = null;
+  try { saved = JSON.parse(store.get("cop_duty")); } catch { /* ignore */ }
+  const find = (c, j) => corridors[c]?.junctions.find((x) => x.id === j);
+  const [duty, setDuty] = useState(saved && find(saved.corridor, saved.junction) && (!q || q === saved.corridor) ? saved : null);
+  const [corridor, setCorridor] = useState(corridors[q] ? q : corridors[saved?.corridor] ? saved.corridor : "blr");
+  const [jn, setJn] = useState(saved?.junction);
+  const js = corridors[corridor].junctions;
+  const j = js.find((x) => x.id === jn) ?? js[0];
+
+  if (duty) {
+    return <Duty corridor={duty.corridor} junction={find(duty.corridor, duty.junction)}
+      onOff={() => { store.set("cop_duty", null); setDuty(null); }} />;
+  }
+  const go = () => {
+    unlock(); wake(); // inside the tap: audio unlock and wake lock need the gesture
+    const d = { corridor, junction: j.id };
+    store.set("cop_duty", JSON.stringify(d));
+    setDuty(d);
+  };
+  return (
+    <>
+      <label>Corridor
+        <select value={corridor} onChange={(e) => setCorridor(e.target.value)}>
+          {Object.entries(corridors).map(([k, c]) => <option key={k} value={k}>{c.name}</option>)}
+        </select>
+      </label>
+      <label>Junction
+        <select value={j.id} onChange={(e) => setJn(e.target.value)}>
+          {js.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+        </select>
+      </label>
+      <button className="primary giant" onClick={go}>GO ON DUTY at {j.name}<small>Turns on sound and keeps the screen awake</small></button>
+    </>
+  );
+}
