@@ -1,0 +1,47 @@
+VOICEOVER, Emergency Green Corridor, 3:00 video
+Record one paragraph per shot. Read at an easy pace. Where it says (silence), the speaker's own audio plays and the voiceover stays quiet.
+About 250 words.
+
+0:00 (shot 1)
+On the left, an ambulance across Bengaluru today, stopping at every red. On the right, the same ambulance in the same traffic with a green corridor, and the minutes saved are counting up.
+
+0:20 (shot 2)
+Only registered vehicles can start. An unknown plate is turned away.
+
+0:30 (shot 3)
+Dispatch opens an incident, and the crew starts a run against it.
+
+0:38 (shot 4)
+(silence while the crew member speaks)
+We turn the speech into fields, a lookup table sets the tier, and one tap from the crew confirms it.
+
+0:58 (shot 5)
+A routing agent then picks the hospital, and you can see exactly which tools it called.
+
+1:08 (shot 6)
+(silence while the alert is spoken)
+The officer hears it, not just reads it, and taps ACK.
+
+1:28 (shot 7)
+A long queue means an early alert. A short queue means a late one, so nobody is called out sooner than they need to be.
+
+1:42 (shot 8)
+A fire engine joins from the cross street. Rules set the order, so the fire engine goes first and the ambulance gets its green twelve seconds later.
+
+1:54 (shot 9)
+Gemini only explains the order in one line. It never decides it.
+
+2:04 (shot 10)
+The hospital sees the live log, and the brief lands before the ambulance does, for a clinician to confirm.
+
+2:24 (shot 11)
+The control room sees every junction. If nobody acknowledges within twenty seconds, it is flagged.
+
+2:38 (shot 12)
+A corridor is just configuration, so this is Hyderabad, one click later.
+
+2:44 (shot 13)
+Signals here are simulated. Cop alerts can be deployed today; real signal data plugs into an adapter next, then a controller that learns from our junction data.
+
+2:56 (shot 14)
+Try it at green-corridor-2026 dot web dot app.
