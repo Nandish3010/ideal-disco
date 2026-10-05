@@ -416,3 +416,37 @@ body:has(.offline) .bar {
   display: block;
   color: var(--muted);
 }
+
+/* keyboard focus must be visible on every control */
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.landing .steps li,
+.landing .screens a {
+  margin-bottom: 8px;
+}
+.landing .screens {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+.landing .screens a {
+  display: block;
+  color: var(--fg);
+  text-decoration: none;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 0;
+}
+.landing .screens b {
+  color: var(--accent);
+}
+.landing .lede {
+  font-size: 22px;
+}
+.landing a.inline {
+  color: var(--accent);
+}

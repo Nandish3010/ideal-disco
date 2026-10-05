@@ -347,11 +347,6 @@ function Live({ scn, setScn }) {
                 </p>
               );
             })}
-            {seen.some((x) => progs[x.plate].status !== 200) && (
-              <p className="muted">
-                501 is expected until /location is implemented; the feed keeps going.
-              </p>
-            )}
             <h2>Runs for this scenario</h2>
             <label className="row">
               <input
@@ -505,7 +500,7 @@ function Replay({ scn, setScn }) {
     <div className="replay">
       <section className="card saved">
         <div className="muted">Minutes saved</div>
-        <div className="bignum" aria-live="off">
+        <div className="bignum" role="status" aria-live={playing ? "off" : "polite"}>
           {(saved / 60).toFixed(1)}
           <small> min</small>
         </div>

@@ -3,9 +3,20 @@ import { api } from "../api.js";
 import { corridors } from "../data.js";
 import { TraceCard } from "../trace.jsx";
 import { Err, deviceId, store, useDoc, useLog, when } from "../ui.jsx";
+import { LastRouting } from "../samples.jsx";
+import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
+import { db } from "../firebase.js";
+import { latestOpen } from "../pick.js";
+
+// Demo vehicles seeded in the registry (see the sim scenarios).
+const DEMO_PLATES = [
+  ["KA01AB1234", "ambulance, critical"],
+  ["KA01AB4321", "ambulance, urgent"],
+  ["KA01FE5678", "fire engine"],
+];
 
 function Bind({ bound, setBound }) {
-  const [plate, setPlate] = useState(store.get("plate") ?? "");
+  const [plate, setPlate] = useState(store.get("plate") ?? DEMO_PLATES[0][0]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -41,6 +52,19 @@ function Bind({ bound, setBound }) {
             required
           />
         </label>
+        <div className="chips" role="group" aria-label="Demo plates">
+          {DEMO_PLATES.map(([p, what]) => (
+            <button
+              type="button"
+              key={p}
+              className="chip"
+              aria-label={`Use plate ${p}, ${what}`}
+              onClick={() => setPlate(p)}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
         <button className="primary" disabled={busy}>
           {busy ? "Binding…" : "Bind"}
         </button>
@@ -67,7 +91,7 @@ function Bind({ bound, setBound }) {
   );
 }
 
-// Posts position to /location at most every 5 s while a run is active. The 501 stub is logged, not shown.
+// Posts position to /location at most every 5 s while a run is active.
 function useGps(runId, active) {
   const [note, setNote] = useState("");
   const last = useRef(0);
@@ -95,11 +119,8 @@ function useGps(runId, active) {
           });
           setNote("GPS sent " + new Date().toLocaleTimeString());
         } catch (e) {
-          if (e.status === 501) console.log("/location not implemented yet (501)");
-          else {
-            console.log("/location failed", e);
-            setNote("GPS send failed: " + e.message);
-          }
+          console.log("/location failed", e);
+          setNote("GPS send failed: " + e.message);
         }
       },
       (e) => setNote("GPS error: " + e.message),
@@ -337,8 +358,8 @@ function Triage({ runId, vehicleType, confirmed, setDone }) {
     send({ audio_b64: await b64(blob), mime: blob.type.split(";")[0] || "audio/webm" }, "voice");
   });
   const failed = err?.body?.error === "extraction_failed";
-  // 422 = unreadable; 400/501 = backend without image support yet
-  const unread = shot && [400, 422, 501].includes(err?.status);
+  // 400/422 = the image could not be read
+  const unread = shot && [400, 422].includes(err?.status);
   useEffect(() => {
     if (failed || unread || hold.mic) area.current?.focus();
   }, [failed, unread, hold.mic]);
@@ -540,12 +561,25 @@ function Run({ bound }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [ended, setEnded] = useState(null);
+  const [noOpen, setNoOpen] = useState(false);
   const [done, setDone] = useState(null); // confirm response, so the tier shows even if the run listener is down
   const run = useDoc(runId ? `runs/${runId}` : null);
   const hospital = corridors[corridor].hospital;
   const active = !!runId && run.data?.state !== "ended";
   const gps = useGps(runId, active);
 
+  async function useLatest() {
+    setNoOpen(false);
+    try {
+      const q = await getDocs(
+        query(collection(db, "incidents"), orderBy("created_at", "desc"), limit(10)),
+      );
+      const i = latestOpen(q.docs.map((d) => ({ id: d.id, ...d.data() })));
+      i ? setIncident(i.id) : setNoOpen(true);
+    } catch (x) {
+      setErr(x);
+    }
+  }
   async function start(e) {
     e.preventDefault();
     setBusy(true);
@@ -632,6 +666,10 @@ function Run({ bound }) {
                 required
               />
             </label>
+            <button type="button" onClick={useLatest} disabled={busy}>
+              Use latest open incident
+            </button>
+            {noOpen && <p className="muted">No open incident. Issue one on /dispatch.</p>}
             <label>
               Corridor
               <select value={corridor} onChange={(e) => setCorridor(e.target.value)}>
@@ -685,6 +723,7 @@ export default function Vehicle() {
     <>
       <Bind bound={bound} setBound={setBound} />
       <Run bound={bound} />
+      <LastRouting />
     </>
   );
 }

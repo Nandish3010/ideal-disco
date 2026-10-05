@@ -6,6 +6,7 @@ import { corridors } from "../data.js";
 import { ErrCard, useDoc, when } from "../ui.jsx";
 import { ms, useEnRoute, useNow } from "./Cop.jsx";
 import { Chips, Thumb } from "./Vehicle.jsx";
+import { LastHandover } from "../samples.jsx";
 import "../cop.css";
 
 const eta = (r, now) =>
@@ -97,11 +98,7 @@ function Brief({ runId }) {
     try {
       setFresh(await api("/brief", { run_id: runId }));
     } catch (e) {
-      setNote(
-        e.message === "not_implemented"
-          ? "Brief generation is not live yet (501)."
-          : `Could not generate: ${e.message}`,
-      );
+      setNote(`Could not generate: ${e.message}`);
     }
     setBusy(false);
   }
@@ -273,6 +270,7 @@ export default function Hospital() {
         ))}
       </div>
       {sel && <Selected key={sel.id} run={sel} />}
+      <LastHandover Chips={Chips} />
     </>
   );
 }
