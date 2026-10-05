@@ -5,6 +5,7 @@ import { corridors } from "../data.js";
 import { LIVE, useActiveRuns, useJunctions } from "../live.js";
 import CorridorMap from "../map.jsx";
 import { Rationale, TraceCard } from "../trace.jsx";
+import { AfterAction } from "./Hospital.jsx";
 import { ErrCard, Offline, StateBadge, useListen, useNow } from "../ui.jsx";
 import "../control.css";
 
@@ -257,6 +258,7 @@ export default function Control() {
                 <dd>{s.patient_on_board ? "yes" : "no"}</dd>
               </dl>
             )}
+            {s && ["ended", "arrived"].includes(s.state) && <AfterAction runId={s.id} />}
             {s && (
               <TraceCard
                 routing={s.routing}

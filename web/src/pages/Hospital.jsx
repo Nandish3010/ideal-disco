@@ -3,7 +3,7 @@ import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase.js";
 import { api } from "../api.js";
 import { corridors } from "../data.js";
-import { useDoc, when } from "../ui.jsx";
+import { ErrCard, useDoc, when } from "../ui.jsx";
 import { ms, useEnRoute, useNow } from "./Cop.jsx";
 import { Chips, Thumb } from "./Vehicle.jsx";
 import "../cop.css";
@@ -151,6 +151,57 @@ function Brief({ runId }) {
   );
 }
 
+// Button + report for a finished run; the server stores the first one and returns it again.
+export function AfterAction({ runId }) {
+  const [doc, setDoc] = useState(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function go() {
+    setBusy(true);
+    setError("");
+    try {
+      setDoc(await api(`/runs/${runId}/after-action`));
+    } catch (e) {
+      setError(e.message);
+    }
+    setBusy(false);
+  }
+  return (
+    <section className="card">
+      <h2 style={{ marginTop: 0 }}>After-action report</h2>
+      <button onClick={go} disabled={busy}>
+        {busy ? "Working…" : "Generate after-action report"}
+      </button>
+      <ErrCard what="the after-action report" error={error} retry={go} />
+      {doc && (
+        <>
+          <p className="summary">{doc.summary}</p>
+          <ol className="timeline">
+            {(doc.timeline ?? []).map((e, i) => (
+              <li key={i}>
+                <span className="muted">{when(e.t)}</span> {e.event}
+              </li>
+            ))}
+          </ol>
+          <h3>Issues</h3>
+          <ul>
+            {(doc.issues ?? []).map((x, i) => (
+              <li key={i}>{x}</li>
+            ))}
+          </ul>
+          <h3>Recommendations</h3>
+          <ul>
+            {(doc.recommendations ?? []).map((x, i) => (
+              <li key={i}>{x}</li>
+            ))}
+          </ul>
+          <p className="banner">{doc.disclaimer}</p>
+        </>
+      )}
+    </section>
+  );
+}
+
 function Selected({ run }) {
   const log = useLog(run.id);
   return (
@@ -184,6 +235,7 @@ function Selected({ run }) {
         ))}
       </ol>
       <Brief runId={run.id} />
+      {["ended", "arrived"].includes(run.state) && <AfterAction runId={run.id} />}
     </>
   );
 }

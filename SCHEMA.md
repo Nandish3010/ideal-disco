@@ -110,6 +110,19 @@ Written by `/duty` when a cop goes on or off duty at a junction (doc id like `bl
 ```
 Written by `POST /brief` (and the `/location` trigger). `atmist` keys are lowercase; every value is a string, and anything the log does not say reads `unknown` or `unconfirmed`. `checklist` has 3 to 8 short imperative items. One doc per run, overwritten on regenerate.
 
+### `after_action/{run_id}`
+```json
+{
+  "summary": "The ambulance reached the hospital after clearing 5 junctions ...",
+  "timeline": [{"t": "2026-10-05T09:00:00Z", "event": "Run created (ambulance KA01AB1234)"}],
+  "issues": ["PREPARE alert at blr_j3 escalated with no acknowledgement"],
+  "recommendations": ["Confirm the on-duty constable at blr_j3 before the next run"],
+  "disclaimer": "Drafted from the recorded run data. A person reviews it before it is filed.",
+  "generated_at": "2026-10-05T09:12:00Z", "model": "gemini-3-flash-preview"
+}
+```
+Written by `POST /runs/{id}/after-action`. `timeline` is built in code, not by Gemini, from the run's `started_at` and `first_tick_at`, its log entries, each alert's `created_at` / `acked_at` / `escalated_at` and the run end (report `ended_at`, else the last tick), sorted by time, `t` as an ISO 8601 string. Gemini writes only `summary`, `issues` and `recommendations`, from the run, report, routing (without `trace`), alert summary and timeline. One doc per run, overwritten on regenerate.
+
 ### `audit/{n}`
 ```json
 { "run_id": "run-amb-1", "junction_id": "blr_j3", "action": "preempt_requested", "stage": "PREPARE", "approach": "NE",
@@ -230,6 +243,10 @@ The `/log` response schema is the `/triage` one (including `photo_url` for an im
 Generates from the run's log entries (Gemini on `GEMINI_TEXT_MODEL`, default `gemini-3-flash-preview`, then `GEMINI_MODEL`; 15 s per attempt), writes `briefs/{run_id}` and sets `runs/{id}.brief_fired: true` (`brief_due: false`). Also what the hospital's Regenerate button calls.
 200 the stored doc: `{ "atmist": { "...": "..." }, "checklist": ["..."], "summary": "...", "disclaimer": "Synthetic patient. Clinician confirms.", "generated_at": "2026-10-05T09:03:00Z", "model": "gemini-3-flash-preview" }`. 404 `{ "error": "unknown_run" }`, 422 `{ "error": "no_log_entries" }`, 502 `{ "error": "brief_failed" }` (hospital page offers "regenerate brief").
 
+### `POST /runs/{run_id}/after-action`
+No body. Generates the after-action report for a finished run (Gemini on `GEMINI_TEXT_MODEL`, default `gemini-3-flash-preview`, then `GEMINI_MODEL`; 15 s per attempt), writes `after_action/{run_id}` and returns it. A second call returns the stored doc without calling Gemini; `?regenerate=1` generates and overwrites it.
+200 the stored doc (see `after_action/{run_id}`). 404 `{ "error": "unknown_run" }`, 409 `{ "error": "run_not_finished" }` (state is not `ended` or `arrived`), 502 `{ "error": "after_action_failed" }`.
+
 ### `POST /location`
 ```json
 { "run_id": "run-amb-1", "lat": 12.9197, "lng": 77.6204, "speed_mps": 13.2, "heading": 231, "t": "2026-10-05T09:02:30Z", "source": "sim" }
@@ -264,4 +281,4 @@ Side effect: any `/location` call marks other `en_route` runs with no tick for 3
 
 ## Dev-only: `OFFLINE_AI=1`
 
-Local testing without any paid Google call (never set in a deploy workflow; the API logs `{"event": "offline_ai"}` once at startup when it is on). Firestore is still used. With it set: `tts.localize_alert` returns the English text, `tts.speak` returns `(None, text)` so alerts are text only (no Translation, TTS or Storage), `brief.generate` returns a fixed stub (`model: "offline"`), the routing agent returns its rule-based fallback at once (`trace: [{"fallback": "offline_ai"}]`, straight-line ETAs, no Routes call), the preemption `rationale` is skipped, and `/triage` and `/log` answer 422 `extraction_failed` (set tiers through `/runs/{id}/confirm`). `api/offline_replay.py` replays a scenario against a local API in this mode.
+Local testing without any paid Google call (never set in a deploy workflow; the API logs `{"event": "offline_ai"}` once at startup when it is on). Firestore is still used. With it set: `tts.localize_alert` returns the English text, `tts.speak` returns `(None, text)` so alerts are text only (no Translation, TTS or Storage), `brief.generate` returns a fixed stub (`model: "offline"`), `aar.generate` a fixed summary, issues and recommendations (`model: "offline"`, the timeline is still built from the record), the routing agent returns its rule-based fallback at once (`trace: [{"fallback": "offline_ai"}]`, straight-line ETAs, no Routes call), the preemption `rationale` is skipped, and `/triage` and `/log` answer 422 `extraction_failed` (set tiers through `/runs/{id}/confirm`). `api/offline_replay.py` replays a scenario against a local API in this mode.
