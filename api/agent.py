@@ -90,7 +90,7 @@ def eta_to(lat: float, lng: float, dest_lat: float, dest_lng: float) -> dict:
 
 def check_diversion(hospital_id: str, tool_context=None) -> dict:
     """Whether a hospital is on diversion right now (not accepting ambulance arrivals). Mock live feed: Apollo is on
-    diversion for about 30 % of incidents, the same answer every time for one incident.
+    diversion for about 30 % of runs (keyed by run id), the same answer every time for one run.
 
     Args:
         hospital_id: id from list_hospitals.

@@ -7,7 +7,7 @@ import zlib
 CAPS = {"cath_lab", "stroke_unit", "trauma", "burns", "paediatrics", "icu", "dialysis", "obstetrics"}
 DIVERSION_PCT = {
     "blr_apollo_bg": 30
-}  # mock live feed: this hospital is on diversion for this share of incident ids
+}  # mock live feed: this hospital is on diversion for this share of run ids
 
 
 def _h(id, name, lat, lng, caps, beds, *, trauma_level=None, d2b=None, diversion=False):
@@ -94,8 +94,8 @@ def by_id(hospital_id):
     return next((h for hs in HOSPITALS.values() for h in hs if h["id"] == hospital_id), None)
 
 
-def on_diversion(h, incident_id):
-    """True when the hospital is on diversion for this incident: the roster flag, or the mock feed (a fixed share of
-    incident ids by CRC32, so the same incident always gets the same answer). No incident id: the roster flag only."""
+def on_diversion(h, run_id):
+    """True when the hospital is on diversion for this run: the roster flag, or the mock feed (a fixed share of run ids
+    by CRC32, so the same run always gets the same answer). No run id: the roster flag only."""
     pct = DIVERSION_PCT.get(h["id"], 0)
-    return bool(h["diversion"] or (incident_id and zlib.crc32(str(incident_id).encode()) % 100 < pct))
+    return bool(h["diversion"] or (run_id and zlib.crc32(str(run_id).encode()) % 100 < pct))

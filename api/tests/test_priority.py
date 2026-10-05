@@ -1,4 +1,12 @@
-from priority import GAP_S, PLATOON_S, sequence, spread_s
+from priority import (
+    GAP_S,
+    PLATOON_S,
+    rationale_facts,
+    sequence,
+    spread_s,
+    template_rationale,
+    valid_rationale,
+)
 
 FIRE = {"run_id": "f", "vehicle_type": "fire", "tier": "fire_with_trapped", "eta_s": 90}
 AMB = {"run_id": "a", "vehicle_type": "ambulance", "tier": "critical", "eta_s": 30}
@@ -72,3 +80,60 @@ def test_spread_is_within_the_last_slot_only() -> None:
     a2 = {**AMB, "run_id": "a2", "approach": "E", "eta_s": 35}
     assert spread_s(sequence([f, a1, a2])) == 25
     assert spread_s(sequence([AMB])) == 0
+
+
+# ---- grounded rationale -----------------------------------------------------------------------------------------------
+
+
+def test_facts_attach_meaning_to_the_order() -> None:
+    near = {**AMB, "run_id": "n", "eta_s": 10}
+    facts = rationale_facts(sequence([AMB, FIRE]))
+    assert [f["reason_code"] for f in facts] == ["higher_tier", "higher_tier"]
+    assert facts[0] == {
+        "vehicle_type": "fire",
+        "tier": "fire_with_trapped",
+        "approach": None,
+        "eta_s": 90,
+        "offset_s": 0,
+        "reason_code": "higher_tier",
+        "offset_s_is_gap_assigned_by_rules": True,
+    }
+    assert [f["reason_code"] for f in rationale_facts(sequence([AMB, near]))] == ["earlier_eta_same_tier"] * 2
+    a1 = {**AMB, "run_id": "a1", "approach": "E", "eta_s": 17}
+    a2 = {**AMB, "run_id": "a2", "approach": "E", "eta_s": 44}
+    assert [f["reason_code"] for f in rationale_facts(sequence([a1, a2]))] == ["platoon_shared_approach"] * 2
+    assert (
+        rationale_facts(sequence([AMB]))[0]["reason_code"] == "earlier_eta_same_tier"
+    )  # alone: nothing to compare
+
+
+def test_validator_needs_the_first_vehicle_and_only_given_numbers() -> None:
+    facts = rationale_facts(sequence([AMB, FIRE]))  # fire first, offsets 0 and 12, etas 90 and 30
+    assert valid_rationale("The fire engine goes first because its tier is higher.", facts)
+    assert valid_rationale("The fire engine goes first; the ambulance follows 12 s later.", facts)
+    assert not valid_rationale("The ambulance goes first.", facts)  # first vehicle not named
+    assert not valid_rationale(
+        "The fire engine goes first because it arrives 12 seconds earlier than 7 others.", facts
+    )
+    assert not valid_rationale("The fire engine goes first, 60 seconds ahead.", facts)  # a number nobody gave
+    assert not valid_rationale(
+        "The fire engine goes first because it arrives 12 seconds earlier.", facts
+    )  # false cause
+    assert not valid_rationale("  ", facts)
+    near = {**AMB, "run_id": "n", "eta_s": 10}
+    same = rationale_facts(sequence([AMB, near]))  # equal tiers: arrival time is the real reason here
+    assert valid_rationale("The ambulance with the earlier arrival goes first.", same)
+
+
+def test_template_sentence_is_deterministic() -> None:
+    facts = rationale_facts(sequence([AMB, FIRE]))
+    want = "Fire engine with trapped persons goes first: higher priority tier. Ambulance follows 12 s later."
+    assert template_rationale(facts) == want and valid_rationale(want, facts)
+    a1 = {**AMB, "run_id": "a1", "approach": "E", "eta_s": 17}
+    a2 = {**AMB, "run_id": "a2", "approach": "E", "eta_s": 44}
+    pol = {"run_id": "p", "vehicle_type": "police", "tier": "police_with_incident", "eta_s": 80}
+    got = template_rationale(rationale_facts(sequence([a1, a2, pol])))
+    assert (
+        got
+        == "Ambulance goes first: same approach, shared green. Ambulance shares the green. Police vehicle follows 12 s later."
+    )
