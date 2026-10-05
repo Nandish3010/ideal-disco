@@ -14,6 +14,7 @@ from google.genai import errors as genai_errors
 from pydantic import BaseModel, Field
 
 import acuity
+import brief
 import gemini
 import leadtime
 import priority
@@ -129,7 +130,7 @@ def runs(r: RunReq):
     return {"run_id": run_id}
 
 
-def _extract_and_log(t: Triage):
+def _extract_and_log(t: Triage, interventions=False):
     """Returns (run, fields, entry_ref) or a JSONResponse error."""
     run_ref = db.collection("runs").document(t.run_id)
     run = run_ref.get()
@@ -140,16 +141,18 @@ def _extract_and_log(t: Triage):
     if not (audio or t.text):
         return err(400, "bad_request", detail="audio_b64 or text required")
     try:
-        fields = extract(audio, t.mime, t.text, t.vehicle_type or run["vehicle_type"], t.lang_hint, run_id=t.run_id)
+        fields = extract(audio, t.mime, t.text, t.vehicle_type or run["vehicle_type"], t.lang_hint, run_id=t.run_id,
+                        interventions=interventions)
     except ExtractionFailed:
         log(event="extraction_failed", run_id=t.run_id)
         return err(422, "extraction_failed", fallback="form")
+    given = fields.pop("interventions", [])  # kept on the entry, not inside fields
     coll = run_ref.collection("log")
     n = len(list(coll.stream()))  # ponytail: count-based index, racy under concurrent writers
     coll.document(str(n)).set({
         "t": datetime.now(timezone.utc), "kind": t.kind or ("voice" if audio else "form"),
-        "transcript_en": fields["transcript_en"], "fields": fields, "confirmed": False})
-    return run, fields, run_ref, n
+        "transcript_en": fields["transcript_en"], "fields": fields, "interventions": given, "confirmed": False})
+    return run, fields, run_ref, n, given
 
 
 @app.post("/triage")
@@ -157,7 +160,7 @@ def triage(t: Triage):
     out = _extract_and_log(t)
     if isinstance(out, JSONResponse):
         return out
-    run, fields, run_ref, _ = out
+    run, fields, run_ref, _, _ = out
     vtype = t.vehicle_type or run["vehicle_type"]
     tier = acuity.tier({**fields, "incident_id": run.get("incident_id")}, vtype)
     run_ref.update({"acuity_tier": tier})
@@ -167,11 +170,11 @@ def triage(t: Triage):
 
 @app.post("/log")
 def log_entry(t: Triage):
-    out = _extract_and_log(t)
+    out = _extract_and_log(t, interventions=True)
     if isinstance(out, JSONResponse):
         return out
-    _, fields, _, n = out
-    return {"n": n, "transcript_en": fields["transcript_en"], "fields": fields, "confirmed": False}
+    _, fields, _, n, given = out
+    return {"n": n, "transcript_en": fields["transcript_en"], "fields": fields, "interventions": given, "confirmed": False}
 
 
 @app.post("/runs/{run_id}/confirm")
@@ -186,9 +189,38 @@ def confirm(run_id: str, c: Confirm):
     return {"run_id": run_id, "confirmed_tier": c.tier, "patient_on_board": True}
 
 
+def write_brief(run_id, run_ref, run, entries):
+    """Generate from the log and store briefs/{run_id}; marks the run's brief as fired. Raises ExtractionFailed."""
+    b, model = brief.generate(run, entries, run_id=run_id)
+    doc = {**b, "disclaimer": brief.DISCLAIMER, "generated_at": datetime.now(timezone.utc), "model": model}
+    db.collection("briefs").document(run_id).set(doc)
+    run_ref.update({"brief_fired": True, "brief_due": False})
+    log(event="brief_written", run_id=run_id, model=model)
+    return doc
+
+
+def log_entries(run_ref):
+    return [d.to_dict() for d in sorted(run_ref.collection("log").stream(), key=lambda d: int(d.id))]
+
+
+class BriefReq(BaseModel):
+    run_id: str
+
+
 @app.post("/brief")
-def brief():
-    return todo("brief")
+def brief_endpoint(b: BriefReq):
+    run_ref = db.collection("runs").document(b.run_id)
+    run = run_ref.get()
+    if not run.exists:
+        return err(404, "unknown_run")
+    entries = log_entries(run_ref)
+    if not entries:
+        return err(422, "no_log_entries", detail="nothing to brief yet")
+    try:
+        return write_brief(b.run_id, run_ref, run.to_dict(), entries)
+    except ExtractionFailed:
+        log(event="brief_error", run_id=b.run_id, via="endpoint")
+        return err(502, "brief_failed")
 
 
 class Loc(BaseModel):
@@ -417,10 +449,20 @@ def location(l: Loc):
                         "stage": stage, "exit_move": move, "traffic": traffic})
     upd["last_eval"] = {k: out[k] for k in ("next_junction", "approach", "jam_m", "eta_s", "stage", "exit_move", "traffic")}
 
+    # brief: once per run at ETA <= 300 s (also the first tick of a short run). Needs log entries, else retried next tick;
+    # on Gemini failure brief_due stays true and the hospital's Regenerate button (POST /brief) takes over.
+    entries = []
     if eta_h is not None and eta_h <= BRIEF_ETA_S and not run.get("brief_fired") and not run.get("brief_due"):
-        upd["brief_due"] = out["brief_due"] = True  # /brief picks this up
+        entries = log_entries(ref)
+        upd["brief_due"] = out["brief_due"] = bool(entries)
     upd["contenders"] = sorted(contenders - {l.run_id})
     ref.update(upd)
+    if entries:
+        try:
+            write_brief(l.run_id, ref, run, entries)
+            out["brief_due"] = False
+        except ExtractionFailed:
+            log(event="brief_error", run_id=l.run_id, via="location")
     mark_stale(now, l.run_id)
     escalate(now, [l.run_id], upd["contenders"])
     return out
