@@ -6,6 +6,8 @@ import { LIVE, useActiveRuns, useJunctions } from "../live.js";
 import CorridorMap from "../map.jsx";
 import { Rationale, TraceCard } from "../trace.jsx";
 import { AfterAction } from "./Hospital.jsx";
+import { RunLabel } from "../samples.jsx";
+import { withMethod } from "../pick.js";
 import { ErrCard, Offline, StateBadge, useListen, useNow } from "../ui.jsx";
 import "../control.css";
 
@@ -100,7 +102,7 @@ export default function Control() {
   const dq = useCol("duty", `${cid}_`);
   const duty = Object.fromEntries(dq.data.map((d) => [d.id, d]));
   const pq = useCol("reports");
-  const reports = pq.data
+  const reports = withMethod(pq.data)
     .filter((r) => !r.corridor || r.corridor === cid)
     .sort((a, b) => ms(b.generated_at ?? b.created_at) - ms(a.generated_at ?? a.created_at));
   const [sel, setSel] = useState(null);
@@ -151,9 +153,7 @@ export default function Control() {
                   : {dash(a.stage)} alert unacked {dur(age(a))}
                   {r ? ` · ${r.vehicle_type} ${dash(tierOf(r), (t) => t.toUpperCase())}` : ""}
                 </span>
-                <button title="Placeholder, does nothing yet" onClick={() => {}}>
-                  Call junction (placeholder)
-                </button>
+                <Badge cls="esc-b">Escalate to control room</Badge>
               </div>
             );
           })}
@@ -326,7 +326,7 @@ export default function Control() {
             ) : (
               reports.map((r) => (
                 <div key={r.id} className="rep">
-                  <b>{r.id}</b>
+                  <RunLabel id={r.id} tier={r.confirmed_tier} />
                   <span>{dash(r.minutes_saved, (m) => `${m} min saved`)}</span>
                   <span className="muted">
                     {dash(r.baseline_s)} s baseline → {dash(r.actual_s)} s actual ·{" "}

@@ -11,6 +11,7 @@ import {
 import { db } from "../firebase.js";
 import { api } from "../api.js";
 import { corridors } from "../data.js";
+import { SampleAlert } from "../samples.jsx";
 import { ErrCard, Offline, StateBadge, deviceId, store, useDoc, useNow, when } from "../ui.jsx";
 import "../cop.css";
 
@@ -171,7 +172,7 @@ function useAlerts(jid) {
   return { ...s, retry: () => setN((x) => x + 1) };
 }
 
-// Fire and forget: until the endpoint exists (501) or offline, duty stays a local-only state.
+// Fire and forget: when offline, duty stays a local-only state.
 const duty_ = (corridor, junction_id, on) =>
   api("/duty", { corridor, junction_id, device_id: deviceId(), on }).catch(() => {});
 
@@ -188,7 +189,7 @@ function Current({ a, t0, now, onAck }) {
   const tier = run?.confirmed_tier ?? run?.acuity_tier;
   const rem = Math.max(0, (a.eta_s ?? 0) - (now - t0) / 1000);
   return (
-    <section className={`alert-full ${a.stage}`}>
+    <section className={`alert-full ${a.stage}`} aria-live="assertive">
       <div>
         <h2 className="stage">{a.stage}</h2>
         {now - t0 > 20000 || a.escalated ? <span className="pill escalated">ESCALATED</span> : null}
@@ -206,14 +207,16 @@ function Current({ a, t0, now, onAck }) {
           {a.approach ? ` · ${a.approach} approach` : ""}
           {a.jam_m ? ` · ${a.jam_m} m queue` : ""}
         </p>
-        <p className="eta">arrives {left(rem)}</p>
+        <p className="eta" aria-live="off">
+          arrives {left(rem)}
+        </p>
         {a.exit_move && (
           <p className="move">
             {ARROW[a.exit_move]} turning {a.exit_move.toUpperCase()}
           </p>
         )}
       </div>
-      <button className="ack" onClick={() => onAck(a)}>
+      <button className="ack" onClick={() => onAck(a)} aria-label={`Acknowledge ${a.stage} alert`}>
         ACK
       </button>
     </section>
@@ -298,7 +301,7 @@ function Duty({ corridor, junction, onOff }) {
       });
       setLocal((l) => ({ ...l, [a.key]: { s: "ok", latency: r.ack_latency_s } }));
     } catch {
-      /* 501 or offline: stays "sent"; server-side ack lands later */
+      /* offline: stays "sent" */
     }
   }
   const state = (a) =>
@@ -332,17 +335,20 @@ function Duty({ corridor, junction, onOff }) {
           Sound is blocked. Tap to enable.
         </button>
       )}
-      {cur ? (
-        <Current a={cur} t0={t0(cur)} now={now} onAck={ack} />
-      ) : (
-        <section className="card idle">
-          <p className="big">On duty at {junction.name} · no vehicles approaching</p>
-          <p className="eta">
-            {runsLoading ? "Loading…" : `${n} en route on ${corridors[corridor].name}`}
-          </p>
-        </section>
-      )}
+      <div aria-live="assertive">
+        {cur ? (
+          <Current a={cur} t0={t0(cur)} now={now} onAck={ack} />
+        ) : (
+          <section className="card idle" aria-live="off">
+            <p className="big">On duty at {junction.name} · no vehicles approaching</p>
+            <p className="eta" role="status">
+              {runsLoading ? "Loading…" : `${n} en route on ${corridors[corridor].name}`}
+            </p>
+          </section>
+        )}
+      </div>
       <ErrCard what="alerts" error={error} retry={retry} />
+      <SampleAlert play={speak} />
       <h2>Last alerts here</h2>
       {loading && <p className="muted">Loading…</p>}
       {!loading && !error && sorted.length === 0 && (
@@ -356,7 +362,11 @@ function Duty({ corridor, junction, onOff }) {
             <b style={{ float: "right" }}>{state(a)}</b>
             <div className="muted">
               {when(a.created_at)} · {a.run_id}
-              <button className="replay" onClick={() => speak(a, () => setBlocked(true))}>
+              <button
+                className="replay"
+                aria-label={`Replay ${a.stage} alert`}
+                onClick={() => speak(a, () => setBlocked(true))}
+              >
                 ▶ Replay
               </button>
             </div>
@@ -452,6 +462,7 @@ export default function Cop() {
         GO ON DUTY at {j.name}
         <small>Turns on sound and keeps the screen awake</small>
       </button>
+      <SampleAlert play={speak} />
     </>
   );
 }

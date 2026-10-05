@@ -41,7 +41,7 @@ export async function startRun({ vehicle: x, scenarioName, corridor, destination
 // start_offset_s is ignored here: one vehicle is fed on its own clock (startFeedAll applies the offsets).
 // With `begin` (async, returns {runId, warn}) the run is started right before the first tick and the clock starts after it;
 // onRun(runId, warn) reports the new id, a failed begin is reported through onTick and ends that vehicle's feed.
-// Errors (incl. the 501 stub) are reported through onTick and never stop the feed.
+// Errors are reported through onTick and never stop the feed.
 export function startFeed({ vehicle, runId, begin, speed, onTick, onDone, onRun }) {
   let stopped = false;
   let timer;

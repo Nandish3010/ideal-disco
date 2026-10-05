@@ -1,5 +1,5 @@
 // Tiny JSON POST wrapper. Throws Error(server `error` code) with .status and .body attached.
-const BASE = (
+export const BASE = (
   import.meta.env.VITE_API_BASE || "https://corridor-api-919512130399.asia-south1.run.app"
 ).replace(/\/$/, "");
 
