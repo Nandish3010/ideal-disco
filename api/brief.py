@@ -4,7 +4,7 @@ import json
 from google.genai import types
 from pydantic import BaseModel, Field
 
-from gemini import LONG_TIMEOUT_MS, generate_json, text_models
+from gemini import LONG_TIMEOUT_MS, NO_THINKING, generate_json, text_models
 
 DISCLAIMER = "Synthetic patient. Clinician confirms."
 SYSTEM = ("You help clinicians by turning an ambulance crew's transit log into a handover brief; this is transcription "
@@ -38,7 +38,8 @@ def generate(run, log_entries, lang="en", run_id=None):
     keep = ("vehicle_type", "acuity_tier", "confirmed_tier", "destination", "eta_hospital_s")
     ctx = {"run": {k: run.get(k) for k in keep}, "log": log_entries}
     cfg = types.GenerateContentConfig(system_instruction=SYSTEM + f" Write in language code '{lang}'.",
-                                      response_mime_type="application/json", response_schema=Brief)
+                                      response_mime_type="application/json", response_schema=Brief,
+                                      thinking_config=NO_THINKING)
     # ponytail: one try per model, 15 s each, since this runs inline in /location (the preview text model often takes > 8 s)
     return generate_json(text_models(), json.dumps(ctx, default=str),
                          cfg, Brief, run_id, LONG_TIMEOUT_MS, what="brief")

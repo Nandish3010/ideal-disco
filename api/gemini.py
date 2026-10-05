@@ -19,6 +19,9 @@ LOG_SYSTEM = (" List each drug, procedure or observation the crew says was done 
               "route and time exactly as spoken; leave a part null if it was not said. Never infer an intervention.")
 
 
+NO_THINKING = types.ThinkingConfig(thinking_budget=0)  # extraction and the brief restate input; thinking only adds latency
+
+
 class ExtractionFailed(Exception):
     pass
 
@@ -97,7 +100,7 @@ def extract(audio_bytes, mime, text, vehicle_type, lang_hint, run_id=None, inter
     schema = LogExtraction if interventions else Extraction
     cfg = types.GenerateContentConfig(
         system_instruction=SYSTEM + (IMAGE_SYSTEM if image_bytes else "") + (LOG_SYSTEM if interventions else "") + ctx,
-        response_mime_type="application/json", response_schema=schema)
+        response_mime_type="application/json", response_schema=schema, thinking_config=NO_THINKING)
     # ponytail: first model twice, then the fallback once
     return generate_json([os.environ["GEMINI_MODEL"]] * 2 + [os.environ["GEMINI_FALLBACK_MODEL"]], parts, cfg, schema, run_id,
                          LONG_TIMEOUT_MS if audio_bytes or image_bytes else TIMEOUT_MS)[0]
