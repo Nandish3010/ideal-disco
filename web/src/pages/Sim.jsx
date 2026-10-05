@@ -97,6 +97,8 @@ function Live({ scn, setScn }) {
           const { incident_id } = await api("/incidents", { type: x.type === "fire" ? "fire" : "medical", severity_note: `Scenario ${scn} (synthetic)` });
           const { run_id } = await api("/runs", { action: "start", plate: x.plate, incident_id, corridor: sc.corridor, destination: corridors[sc.corridor]?.hospital, source: "sim" });
           m[x.plate] = run_id;
+          // the crew's one tap: priority only reads confirmed_tier (fire vehicles carry their tier on the run, no confirm)
+          if (x.type !== "fire" && x.tier) await api(`/runs/${run_id}/confirm`, { tier: x.tier });
         } catch (e) {
           throw Object.assign(e, { plate: x.plate });
         }
