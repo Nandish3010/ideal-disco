@@ -50,9 +50,9 @@ Every Bengaluru commuter has seen this on Hosur Road. The missing piece is not a
 
 **Today:** stops at every red.
 **With corridor:** cop warned early, queue cleared.
-Silk Board → Jayadeva Hospital, same recorded GPS trace and recorded traffic in both lanes.
+Silk Board → Jayadeva Hospital, same recorded GPS trace and recorded traffic in both lanes. The 3 vehicles run as one scenario: a critical ambulance, an ambulance following it as a platoon, and a fire engine.
 
-<div class="stats two"><div class="stat"><b>11.8 min</b><span>saved across 3 vehicles</span></div><div class="stat"><b>3</b><span>critical ambulance, fire engine, urgent ambulance</span></div></div>
+<div class="stats two"><div class="stat"><b>12.3 min</b><span>saved across 3 vehicles (738.8 s)</span></div><div class="stat"><b>3</b><span>critical ambulance, platoon ambulance, fire engine</span></div></div>
 
 </div>
 <div>
@@ -62,10 +62,10 @@ Silk Board → Jayadeva Hospital, same recorded GPS trace and recorded traffic i
 </div>
 </div>
 
-<p class="cite">A simulated baseline on recorded traffic, not a field measurement.</p>
+<p class="cite">Simulated baseline on recorded traffic, not a field measurement. Figure from the scenario replay (<code>blr-two-vehicles</code>).</p>
 
 <!--
-The /sim?corridor=blr screen replays the same trace twice. On the left the vehicle stops at each junction for the remaining red of a fixed signal cycle, on the right the corridor is cleared and only sequencing gaps remain. The number is an estimate from a simulation, and the slide says so.
+The /sim?corridor=blr screen replays the same trace twice. On the left the vehicle stops at each junction for the remaining red of a fixed signal cycle, on the right the corridor is cleared and only sequencing gaps remain. The replay on the current scenario saves 738.8 s, about 12.3 minutes, summed across the critical ambulance, the platoon ambulance behind it and the fire engine. That is the number the counter on screen reaches, computed in the browser from the scenario file and asserted by a unit test. It is a simulated baseline on recorded traffic, not a field measurement, and the slide says so. The first 20 seconds of the video show this replay sped up.
 -->
 
 ---
@@ -210,10 +210,10 @@ The trace on the left is the contract example from SCHEMA.md; the screenshot on 
 
 ![w:1100](img/architecture.svg)
 
-<p class="cite">Wired on main only. Day 9 items (BigQuery ML forecast, Gen AI Evaluation) are on the roadmap.</p>
+<p class="cite">Wired on main only. The BigQuery ML jam forecast is a pipeline proof on a small sample, not a deployed forecast.</p>
 
 <!--
-The SignalAdapter seam is the point: today SimAdapter writes the junction phase to Firestore, tomorrow a real controller adapter implements the same one method. Firestore is the single event bus and the accepted single point of failure for the demo. Only products wired on main are shown. Update at freeze if BigQuery ML or Gen AI Evaluation land.
+The SignalAdapter seam is the point: today SimAdapter writes the junction phase to Firestore, tomorrow a real controller adapter implements the same one method. Firestore is the single event bus and the accepted single point of failure for the demo. Only products wired on main are shown. The BigQuery ML model exists but is trained on a small, free-flowing sample.
 -->
 
 ---
@@ -231,8 +231,9 @@ The SignalAdapter seam is the point: today SimAdapter writes the junction phase 
 </div>
 <div>
 
-### Roadmap, not built
-- BigQuery ML forecast of queue length by junction and hour
+### Proof of pipeline, not a forecast
+- BigQuery ML boosted-tree model on the logged spans
+- Current sample is short and free-flowing, so it says nothing yet
 - First step to a learning controller; clearance rate stays constant until observed
 
 </div>
@@ -241,7 +242,7 @@ The SignalAdapter seam is the point: today SimAdapter writes the junction phase 
 <p class="cite">Run reports (the with-vs-without report card per run) also land in BigQuery <code>run_reports</code>.</p>
 
 <!--
-Be explicit that the forecast is not built yet at the time of writing. What exists is the data collection that makes it possible. Update this slide if BQML lands before export.
+Be explicit that the model is a proof of the pipeline: the logged sample is short and traffic was free-flowing, so the label has no variance and the model has learned nothing useful. What matters is that the collection, feature view and training steps run end to end and will say something once the logger has run through real congestion.
 -->
 
 ---
