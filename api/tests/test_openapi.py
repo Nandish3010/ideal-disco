@@ -46,7 +46,7 @@ def test_every_endpoint_has_a_tag_a_summary_and_the_shared_error_responses(clien
     doc = schema(client)
     tags = {t["name"] for t in doc["tags"]}
     ops = operations(doc)
-    assert len(ops) == 16
+    assert len(ops) == 18
     for method, path, op in ops:
         assert op["tags"] and set(op["tags"]) <= tags, f"{method} {path}"
         assert op["summary"], f"{method} {path}"
@@ -69,6 +69,7 @@ def test_every_request_and_200_response_has_an_example(client: TestClient) -> No
     doc = schema(client)
     for method, path, op in operations(doc):
         ok = op["responses"]["200"]["content"]["application/json"]["schema"]
+        ok = ok.get("items", ok)  # a list response documents its item
         assert component(doc, ok["$ref"]).get("examples"), f"{method} {path} response"
         body = op.get("requestBody")
         if body:

@@ -149,8 +149,8 @@ For repository workflow and contribution conventions, see CONTRIBUTING.md.
 
 `make loadtest` (needs `pip install -r api/loadtest/requirements.txt`) replays the scenario's three vehicles at 20x for 60 s against one
 uvicorn worker on an in-memory Firestore, with a client polling `/health`; nothing leaves the machine and no paid call is made.
-On an Apple M4 laptop, `/location` answered in 14 ms at p50 and 26 ms at p95 (717 requests at about 12 a second, no failures)
-and `/health` in 4 ms and 9 ms. That is the application code alone: a deployed instance adds the Firestore round trips and the
+On an Apple M4 laptop, `/location` answered in 17 ms at p50 and 37 ms at p95 (720 requests at about 12 a second, no failures)
+and `/health` in 4 ms and 21 ms (a quieter run gave 14 / 26 ms and 4 / 9 ms). That is the application code alone: a deployed instance adds the Firestore round trips and the
 network. The table and caveats are in [api/loadtest/RESULTS.md](api/loadtest/RESULTS.md).
 
 ## Deploy

@@ -49,7 +49,14 @@ fake.collection("runs").document("run-amb-1").set(
     }
 )
 fake.collection("runs").document("run-amb-1").collection("log").document("1").set(
-    {"t": now, "kind": "form", "transcript_en": "chest pain", "fields": {"complaint": "chest pain"}}
+    {
+        "t": now,
+        "kind": "form",
+        "transcript_en": "chest pain",
+        "fields": {"complaint": "chest pain"},
+        "interventions": [],
+        "confirmed": False,
+    }
 )
 fake.collection("runs").document("run-amb-1").collection("alerts").document("0").set(
     {"junction_id": "blr_j3", "stage": "PREPARE", "created_at": now, "acked_at": None, "escalated": False}

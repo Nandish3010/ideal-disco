@@ -77,9 +77,7 @@ def errs(*codes: int) -> dict[int | str, dict[str, Any]]:
     return {c: {"model": ErrorEnvelope, "description": ERRORS[c]} for c in codes}
 
 
-def meta(
-    tag: str, summary: str, ok: type[BaseModel], *codes: int, headers: dict | None = None
-) -> dict[str, Any]:
+def meta(tag: str, summary: str, ok: Any, *codes: int, headers: dict | None = None) -> dict[str, Any]:
     """Route keyword arguments: tag, summary, the 200 model and the error codes this route can answer beyond the shared
     429 / 500 / 503."""
     return {
@@ -164,6 +162,30 @@ class LogOut(BaseModel):
                 {"kind": "drug", "name": "oxygen", "dose": "4 litres", "route": None, "time_note": None}
             ],
             "confirmed": False,
+        }
+    )
+
+
+class RunLogEntryOut(BaseModel):
+    """One `runs/{id}/log/{n}` entry as GET /runs/{run_id}/log returns it, oldest first."""
+
+    n: int
+    t: str
+    kind: str
+    transcript_en: str
+    fields: dict
+    interventions: list[dict]
+    confirmed: bool
+    photo_url: str | None = None
+    model_config = ex(
+        {
+            "n": 1,
+            "t": "2026-10-05T09:02:00+00:00",
+            "kind": "voice",
+            "transcript_en": "Patient has chest pain, BP 85 over 50",
+            "fields": {"complaint": "chest pain", "vitals": {"sbp": 85, "dbp": 50}},
+            "interventions": [],
+            "confirmed": True,
         }
     )
 

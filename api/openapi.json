@@ -621,6 +621,18 @@
             "title": "Device Id",
             "type": "string"
           },
+          "fcm_token": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fcm Token"
+          },
           "junction_id": {
             "title": "Junction Id",
             "type": "string"
@@ -1225,6 +1237,83 @@
         "title": "RoutingOut",
         "type": "object"
       },
+      "RunLogEntryOut": {
+        "description": "One `runs/{id}/log/{n}` entry as GET /runs/{run_id}/log returns it, oldest first.",
+        "examples": [
+          {
+            "confirmed": true,
+            "fields": {
+              "complaint": "chest pain",
+              "vitals": {
+                "dbp": 50,
+                "sbp": 85
+              }
+            },
+            "interventions": [],
+            "kind": "voice",
+            "n": 1,
+            "t": "2026-10-05T09:02:00+00:00",
+            "transcript_en": "Patient has chest pain, BP 85 over 50"
+          }
+        ],
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "fields": {
+            "additionalProperties": true,
+            "title": "Fields",
+            "type": "object"
+          },
+          "interventions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Interventions",
+            "type": "array"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Url"
+          },
+          "t": {
+            "title": "T",
+            "type": "string"
+          },
+          "transcript_en": {
+            "title": "Transcript En",
+            "type": "string"
+          }
+        },
+        "required": [
+          "n",
+          "t",
+          "kind",
+          "transcript_en",
+          "fields",
+          "interventions",
+          "confirmed"
+        ],
+        "title": "RunLogEntryOut",
+        "type": "object"
+      },
       "RunOut": {
         "description": "`start`: just `run_id`. `end`: also `state` and the report card (null when the corridor is unknown).",
         "examples": [
@@ -1815,6 +1904,98 @@
         "summary": "Generate the hospital brief",
         "tags": [
           "triage"
+        ]
+      }
+    },
+    "/briefs/{run_id}": {
+      "get": {
+        "description": "The stored ATMIST brief (SCHEMA.md, briefs/{run_id}). Same tokens as the log; 404 `no_brief` until one is written.",
+        "operationId": "get_brief_briefs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-device-token",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Device-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "A device token is required (`device_token_required`)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed (`device_token_mismatch`, `unregistered_vehicle`, `run_not_active`, `forbidden`)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found (`unknown_run`, `unknown_alert`, `unknown_junction`, `not_found`)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Validation failed (`validation_error`) or the extraction could not read the input (`extraction_failed`)."
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The stored hospital brief of a run",
+        "tags": [
+          "runs"
         ]
       }
     },
@@ -2947,6 +3128,102 @@
           }
         },
         "summary": "Confirm the tier (the crew's one tap)",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/runs/{run_id}/log": {
+      "get": {
+        "description": "The transit log, oldest first: [{n, t, kind, transcript_en, fields, interventions, confirmed, photo_url?}]. Needs the\nrun's vehicle token or a hospital desk token.",
+        "operationId": "run_log_runs__run_id__log_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-device-token",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Device-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RunLogEntryOut"
+                  },
+                  "title": "Response 200 Run Log Runs  Run Id  Log Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "A device token is required (`device_token_required`)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed (`device_token_mismatch`, `unregistered_vehicle`, `run_not_active`, `forbidden`)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found (`unknown_run`, `unknown_alert`, `unknown_junction`, `not_found`)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Validation failed (`validation_error`) or the extraction could not read the input (`extraction_failed`)."
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The transit log of a run",
         "tags": [
           "runs"
         ]
