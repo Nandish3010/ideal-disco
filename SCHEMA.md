@@ -174,18 +174,27 @@ There are no accounts. Instead a device holds a random token (32 bytes, urlsafe)
 |---|---|---|
 | vehicle token | `POST /vehicles/bind` (`device_token` in the response) | the next bind of that plate, from any device: the previous device's calls then get 403 |
 | junction token | `POST /duty` with `on: true` (`device_token` in the response) | the next go-on-duty at that junction; removed by go-off-duty |
+| hospital desk token | `POST /hospital/duty` `{hospital_id}` (`hospital_token` in the response; 404 `unknown_hospital` for an id outside the roster) | the next sign-in of that hospital desk; stored hashed on `hospital_duty/{hospital_id}` |
 
 Which token each protected call needs:
 
 | Call | Token that must match |
 |---|---|
 | `POST /runs` (start and end), `POST /triage`, `POST /log`, `POST /location`, `POST /runs/{id}/confirm` | the vehicle token of the run's plate (for a start, of the `plate` in the body) |
+| `POST /route`, `POST /runs/{id}/after-action?regenerate=1` | the vehicle token of the run's plate; the after-action regenerate also accepts any hospital desk token (`/route` does not) |
+| `POST /brief` with `"regenerate": true` | the vehicle token of the run's plate, or any hospital desk token |
 | `POST /ack` | the token of the cop on duty at the alert's junction, or the vehicle token of the run's plate |
 | `POST /duty` with `on: false` | the junction token of that junction (going on duty needs none) |
 
-Errors: 401 `{ "error": "device_token_required" }` (no header), 403 `{ "error": "device_token_mismatch" }` (not a token that call accepts, including a vehicle that was never bound, or a cop who is off duty). A missing run or alert is still 404 first. Left open on purpose: `/health`, every read, `POST /incidents` (the dispatch console; per-IP rate limited), `POST /route`, `POST /brief` (the hospital's Regenerate), `POST /runs/{id}/after-action`, and `POST /housekeeping` (its own `X-Housekeeping-Token`).
+Errors: 401 `{ "error": "device_token_required" }` (no header), 403 `{ "error": "device_token_mismatch" }` (not a token that call accepts, including a vehicle that was never bound, or a cop who is off duty). A missing run or alert is still 404 first. Left open on purpose: `/health`, every read, `POST /incidents` (the dispatch console; per-IP rate limited), the first `POST /brief` of a run, a `POST /runs/{id}/after-action` without `regenerate` (returns the stored report, or writes the first one), `POST /hospital/duty` (stands in for a hospital roster, like `/duty`), and `POST /housekeeping` (its own `X-Housekeeping-Token`).
 This is a demo-grade control, not authentication: `/vehicles/bind` stands in for the agency registry and `/duty` for a roster, and both are open, so anyone who knows a registered plate or a junction can take its token over (which also locks the previous holder out). Real binding would sit behind agency sign-in. The web sim feeder binds each scenario vehicle itself (`device_id: "sim-<plate>"`) and uses that token, which rotates the token of a real phone bound to the same plate: the phone must bind again.
 Env `DEVICE_TOKENS_DISABLED=1` turns the check off (for `api/offline_replay.py` only); unset, the default, it is enforced.
+
+### `hospital_duty/{hospital_id}`
+```json
+{ "device_token_hash": "5e8848...", "since": "2026-10-06T09:00:00Z" }
+```
+Written by `POST /hospital/duty` (doc id from the roster, like `blr_jayadeva`). Only the sha256 of the desk token is kept. The web hospital page keeps the token in `localStorage` as `hospital_token_<hospital_id>`.
 
 ### Rate limits and caps
 The endpoints are unauthenticated apart from the device tokens above, so they are limited per client. Per client IP (the last `X-Forwarded-For` entry, else the socket address), an in-memory token bucket per Cloud Run instance, refilled continuously:
