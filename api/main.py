@@ -517,6 +517,8 @@ def route(r: RouteReq, x_device_token: str = Header("", description=apidoc.TOKEN
         return err(404, "unknown_run")
     if bad := deny_run(x_device_token, snap.to_dict() or {}):
         return bad
+    if (snap.to_dict() or {}).get("state") in ("arrived", "ended"):
+        return err(409, "run_not_en_route", "the run has arrived or ended; its hospital is already decided")
     return agent.apply(ref) or err(
         409, "not_routable", "needs a confirmed ambulance run on a corridor with a roster"
     )
@@ -755,8 +757,12 @@ def brief_from_tick(run_id, run_ref, run, entries):
 def rationale(jid, seq, lang):
     """The phase's 'why this order' line, English plus the junction language. The stored text is the deterministic
     template; Gemini only paraphrases it, and its rewrite replaces the template only if valid_paraphrase accepts it.
-    Always rewritten (deleted when fewer than 2 vehicles) so a stale line never outlives its sequence."""
-    out: dict[str, Any] = {"phase.rationale": DELETE_FIELD, "phase.rationale_local": DELETE_FIELD}
+    Always rewritten (deleted when fewer than 2 vehicles) so a stale line never outlives its sequence; with 2 or more it
+    is written to `last_sequence` too, which a later single-vehicle phase leaves in place."""
+    keys = ["phase"] + (
+        ["last_sequence"] if len(seq) >= 2 else []
+    )  # last_sequence follows the newest multi-vehicle phase
+    out: dict[str, Any] = {f"{k}.{f}": DELETE_FIELD for k in keys for f in ("rationale", "rationale_local")}
     if len(seq) >= 2 and not offline():
         facts = priority.rationale_facts(seq)
         en = priority.template_rationale(facts)
@@ -768,9 +774,12 @@ def rationale(jid, seq, lang):
                 log(event="rationale_template", junction_id=jid, rejected=alt[:200])
         except (genai_errors.APIError, GoogleAPIError, httpx.TimeoutException) as e:
             log(event="rationale_error", junction_id=jid, error=type(e).__name__, detail=str(e)[:200])
-        out["phase.rationale"] = en
+        for k in keys:
+            out[f"{k}.rationale"] = en
         try:
-            out["phase.rationale_local"] = translate(en, lang)
+            local = translate(en, lang)
+            for k in keys:
+                out[f"{k}.rationale_local"] = local
         except (genai_errors.APIError, GoogleAPIError) as e:
             log(event="rationale_error", junction_id=jid, error=type(e).__name__, detail=str(e)[:200])
     db.collection("junctions").document(jid).update(out)

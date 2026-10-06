@@ -308,7 +308,11 @@ export default function Control() {
                         ? t("control.green", { approach: ph.approach, until: clock(ph.until) })
                         : t("control.normal")}
                     </div>
-                    {green && <Rationale phase={ph} runs={runs} />}
+                    <Rationale
+                      phase={green ? ph : null}
+                      runs={runs}
+                      last={junctions[key]?.last_sequence}
+                    />
                     <div className={pres.on ? "" : "muted"}>{pres.text}</div>
                     {a ? (
                       <div className="ja">

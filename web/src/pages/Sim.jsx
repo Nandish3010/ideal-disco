@@ -199,8 +199,11 @@ function Live({ scn, setScn }) {
   const seen = sc.vehicles.filter((x) => progs[x.plate]);
   const ms = (v) => (v?.toMillis ? v.toMillis() : v ? new Date(v).getTime() : 0);
   const seqs = corridor.junctions
-    .map((j) => ({ j, ph: junctions[`${cid}_${j.id}`]?.phase }))
-    .filter(({ ph }) => ms(ph?.until) > now && ph.sequence?.length >= 2);
+    .map((j) => {
+      const jd = junctions[`${cid}_${j.id}`];
+      return { j, ph: ms(jd?.phase?.until) > now ? jd.phase : null, last: jd?.last_sequence };
+    })
+    .filter(({ ph, last }) => ph?.sequence?.length >= 2 || last?.sequence?.length >= 2);
 
   return (
     <>
@@ -258,10 +261,10 @@ function Live({ scn, setScn }) {
           {seqs.length > 0 && (
             <section className="card">
               <h2>Junction sequencing</h2>
-              {seqs.map(({ j, ph }) => (
+              {seqs.map(({ j, ph, last }) => (
                 <div key={j.id}>
                   <b>{j.id.toUpperCase()}</b>
-                  <Rationale phase={ph} runs={runs} />
+                  <Rationale phase={ph} runs={runs} last={last} />
                 </div>
               ))}
             </section>

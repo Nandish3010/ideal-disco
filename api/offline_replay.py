@@ -16,6 +16,7 @@ from firestore_client import db
 API = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8080"
 NAME = "blr-two-vehicles"
 SC, C = SCENARIOS[NAME], CORRIDORS["blr"]
+ROLE = {"KA01AB1234": "critical", "KA01AB4321": "stroke", "KA01FE5678": "fire_with_trapped"}
 ORDER = [f"blr_{j['id']}" for j in C["junctions"]]
 http = httpx.Client(base_url=API, timeout=60)
 checks: list[bool] = []
@@ -66,7 +67,7 @@ for v in SC["vehicles"]:
     runs[v["plate"]] = {
         "id": rid,
         "type": v["type"],
-        "tier": v["tier"],
+        "tier": ROLE[v["plate"]],  # a role, not the acuity tier: both ambulances are critical
         "offset": v["start_offset_s"],
         "next": [],
         "ok": [],
@@ -138,7 +139,7 @@ check(
 check("alerts are text only offline", all(a["audio_url"] is None for r in runs.values() for a in r["alerts"]))
 
 # 2 + 6 brief timing; fire has no brief and no routing
-crit, urg, fire = by_tier["critical"], by_tier["urgent"], by_tier["fire_with_trapped"]
+crit, urg, fire = by_tier["critical"], by_tier["stroke"], by_tier["fire_with_trapped"]
 b = crit["brief_at"]
 check(
     "critical brief only once under way (junction passed or 500 m driven)",
@@ -174,7 +175,7 @@ for r in (crit, urg):
         f"routing -> {rt.get('destination')}",
     )
 
-# 5 platoon: critical and urgent on the same approach within 45 s share the j3 slot; the fire (other approach) goes first
+# 5 platoon: critical and stroke on the same approach within 45 s share the j3 slot; the fire (other approach) goes first
 j3 = [
     d.to_dict()
     for d in db.collection("audit").where(filter=FieldFilter("junction_id", "==", "blr_j3")).stream()
@@ -184,10 +185,10 @@ seqs = [
     for a in j3
     if a.get("action") == "preempt_requested"
 ]
-pair = [s for s in seqs if {"critical", "urgent"} <= set(s)]
+pair = [s for s in seqs if {"critical", "stroke"} <= set(s)]
 check(
-    "critical and urgent share a j3 slot",
-    pair and all(s["critical"] == s["urgent"] for s in pair),
+    "critical and stroke share a j3 slot",
+    pair and all(s["critical"] == s["stroke"] for s in pair),
     str(pair[:2]),
 )
 check(

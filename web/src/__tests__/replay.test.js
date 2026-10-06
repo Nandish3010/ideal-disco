@@ -53,6 +53,12 @@ describe("simulate()", () => {
     expect(a.saved_s).toBeCloseTo(988, 6);
     expect(a.vehicles.map((v) => Math.round(v.saved_s))).toEqual([473, 30, 485]);
   });
+
+  it("the stroke ambulance (KA01AB4321) is critical, and the totals do not depend on it", () => {
+    const stroke = scenario.vehicles.find((v) => v.plate === "KA01AB4321");
+    expect([stroke.type, stroke.tier]).toEqual(["ambulance", "critical"]);
+    expect(lead(simulate(scenario, blr)).plate).toBe("KA01AB1234"); // the first critical ambulance still leads
+  });
 });
 
 describe("headline numbers", () => {
