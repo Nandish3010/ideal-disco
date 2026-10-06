@@ -1,37 +1,33 @@
-VOICEOVER, Emergency Green Corridor, 3:00 video (nine beats, target 2:55)
-Record one paragraph per beat. Read at an easy pace. Where it says (silence), the speaker's own audio plays and the voiceover stays quiet. English only.
-About 215 words.
+L00: Can an ambulance cross Bengaluru without stopping at every red? Watch the counter. Same ambulance, same traffic, with a green corridor. Almost eight minutes saved, in this simulation.
 
-0:00 (beat 1, statistic card)
-(silence, or none)
+L01: We're Green Corridor. Our entry warns the constable at the next junction, before the siren arrives.
 
-0:03 (beat 2)
-On the left, an ambulance across Bengaluru today, stopping at every red. On the right, the same ambulance in the same traffic with a green corridor, and the minutes saved are counting up.
+L02: In Karnataka, more than sixty percent of serious emergency calls missed the ten-minute target, says a state audit. And the officer at the junction is never told.
 
-0:23 (beat 3)
-An unknown plate is turned away.
-(silence while the crew member speaks)
-Gemini turns the speech into fields, a lookup table sets the tier, and one tap from the crew confirms it.
+L03: Here's the replay. On the left, today: it stops at every red. On the right, the cop is warned early, sized to the queue. The traffic here is a scripted scenario, and signals are simulated.
 
-0:50 (beat 4)
-(silence, the monitor photo fills the fields)
+L04: Now the crew. They describe the patient, and Gemini, on Vertex AI, pulls out the fields. A lookup table, not the model, sets the tier. One tap confirms it.
 
-0:54 (beat 5)
-(silence while the alert is spoken)
-The officer hears it, not just reads it, and taps ACK.
+L05: A routing agent, built on the Agent Development Kit, picks the hospital. It calls four tools, a guardrail in code checks its choice, and the whole trace is on screen.
 
-(optional 3 s, after beat 5: Kannada toggle with English subtitle, silent)
+L06: Next, the cop. About four minutes out, with a four hundred metre queue, so: prepare. The phone speaks the alert aloud.
 
-1:14 (beat 6)
-A spoken report from the junction fills a fixed form, and plain rules extend the green.
+L06b: One tap to acknowledge.
 
-1:34 (beat 7)
-A fire engine joins from the cross street. Rules set the order, so it goes first and the ambulance gets its green twelve seconds later.
-(read the sentence on the Junction sequencing card as it appears)
-Rules decide. Gemini explains.
+L07: The officer can report back, too. Gemini fills a fixed form, and plain rules decide what happens to the green.
 
-1:58 (beat 8)
-A routing agent picks the hospital, and the trace shows every tool it called. The brief lands before the ambulance does, for a clinician to confirm.
+L08: With three vehicles at one junction, rules set the order: both ambulances first, then the fire engine twelve seconds later. Gemini only words the sentence, and the server validates it.
 
-2:20 (beat 9)
-Here is the whole run as a timeline. Signals here are simulated; cop alerts can be deployed today, and real signal data plugs into an adapter next. From constable to controller. Try it at green-corridor-2026 dot web dot app.
+L09: At the hospital, the handover lands before the ambulance does. A clinician confirms every value. The patients are synthetic.
+
+L10: The control room sees every junction and every acknowledgement. If nobody answers in twenty seconds, it escalates.
+
+L11: And here's the whole run, as a timeline.
+
+L12: We evaluated it. On twelve synthetic voice clips: ninety percent field accuracy, and a hundred percent tier accuracy. Those aren't field results. Hundreds of automated tests back it up.
+
+L12b: Sizing the green to the queue also limits idling. The fuel and carbon figures are a sourced illustration, not a measurement.
+
+L13: Signals are simulated behind an adapter, and patients are synthetic. Cop alerts are deployable today. Real signal controllers plug in next.
+
+L14: Try it at green-corridor-2026 dot web dot app. The code is public on GitHub. We're Green Corridor. Thank you.
