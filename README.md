@@ -9,7 +9,7 @@
 
 - Live app: https://green-corridor-2026.web.app (try `/sim?mode=replay&scenario=blr-two-vehicles` first, no sign-in)
 - API health: https://corridor-api-919512130399.asia-south1.run.app/health
-- Submission deck: [deck/Green-Corridor-Deck.pdf](deck/Green-Corridor-Deck.pdf) (own-design deck, built by `deck/build_deck.py`); template-based fallback: [deck/Green-Corridor-Submission.pdf](deck/Green-Corridor-Submission.pdf); longer Marp notes: [deck/slides.md](deck/slides.md) (appendix)
+- Submission deck: [green-corridor-2026.web.app/deck.pdf](https://green-corridor-2026.web.app/deck.pdf) (own-design deck, built by `deck/build_deck.py`; repo copy: [deck/Green-Corridor-Deck.pdf](deck/Green-Corridor-Deck.pdf)); template-based fallback: [deck/Green-Corridor-Submission.pdf](deck/Green-Corridor-Submission.pdf); longer Marp notes: [deck/slides.md](deck/slides.md) (appendix)
 - Video plan: [deck/VIDEO.md](deck/VIDEO.md) · Contracts: [SCHEMA.md](SCHEMA.md)
 
 ## The problem

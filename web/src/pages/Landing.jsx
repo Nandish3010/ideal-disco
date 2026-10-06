@@ -93,7 +93,18 @@ export default function Landing() {
         ·{" "}
         <a className="inline" href={`${BASE}/health`}>
           {t("landing.health")}
-        </a>
+        </a>{" "}
+        ·{" "}
+        <a className="inline" href="/deck.pdf" target="_blank" rel="noreferrer">
+          Submission deck (PDF)
+        </a>{" "}
+        <small>
+          (
+          <a className="inline" href="/deck.pptx">
+            PowerPoint
+          </a>
+          )
+        </small>
       </p>
     </div>
   );

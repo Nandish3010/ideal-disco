@@ -16,6 +16,8 @@ venv/
 *.pyc
 .DS_Store
 web/.firebase/
+web/public/deck.pdf
+web/public/deck.pptx
 
 # python tooling
 .pytest_cache/

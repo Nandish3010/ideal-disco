@@ -45,6 +45,7 @@ def load_shared():
 
 DATA, EV = load_shared()
 DATA["cover_stat"] = "of Karnataka 108 cardiac, stroke, respiratory calls missed the 10-minute target"
+DATA["links"]["deck"] = ("Submission deck", "green-corridor-2026.web.app/deck.pdf", "https://green-corridor-2026.web.app/deck.pdf")
 DATA["cover_cite"] = "Source: CAG audit of Karnataka 108 EMS, 2014–19"
 
 # ---------- palette and type ----------
@@ -477,20 +478,20 @@ shape_text(lim, [[("Signals simulated, patients synthetic, minutes saved estimat
 
 # 15 links
 s = content_slide("Links", DATA["headlines"][14])
-tw_, th_ = (CW - 0.6) / 3, 4.4
-for i, key in enumerate(("github", "video", "app")):
+tw_, th_ = (CW - 0.9) / 4, 4.4
+for i, key in enumerate(("github", "video", "app", "deck")):
     label, shown, url = DATA["links"][key]
     x = MX + i * (tw_ + 0.3)
     box(s, x, TOP + 0.05, tw_, th_, dash=(url is None), line=BORDER if url else rgb("9CA3AF"), radius=0.14, name="Link tile")
     text(s, x + 0.3, TOP + 0.3, tw_ - 0.6, 0.3, label, size=12, bold=True, color=GREY, caps=True, spc=80)
     if url:
-        q = 2.6
+        q = 2.2
         qp = s.shapes.add_picture(qr_png(url), Inches(x + (tw_ - q) / 2), Inches(TOP + 0.8), Inches(q), Inches(q))
         qp.name = "QR"
         qp.click_action.hyperlink.address = url
-        text(s, x + 0.2, TOP + 3.65, tw_ - 0.4, 0.4, shown, size=14, bold=True, align=PP_ALIGN.CENTER)
+        text(s, x + 0.15, TOP + 3.3, tw_ - 0.3, 0.8, shown, size=12, bold=True, align=PP_ALIGN.CENTER)
     else:
-        text(s, x + 0.3, TOP + 1.4, tw_ - 0.6, 1.4, "[link + QR at submission]", size=28, bold=True, color=GREY, align=PP_ALIGN.CENTER)
+        text(s, x + 0.3, TOP + 1.4, tw_ - 0.6, 1.4, "[link + QR at submission]", size=22, bold=True, color=GREY, align=PP_ALIGN.CENTER)
 
 # 16 closing (dark)
 s = new_slide(dark=True)
