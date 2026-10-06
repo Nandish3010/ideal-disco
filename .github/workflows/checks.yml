@@ -19,6 +19,8 @@ jobs:
       - run: cd web && npm run lint
       - run: cd web && npm run format:check
       - run: cd web && npm test
+      - name: accessibility (axe, contrast, language parity)
+        run: cd web && npx vitest run src/__tests__/a11y.test.jsx src/__tests__/contrast.test.js src/__tests__/i18n.test.js
       - run: cd web && npm run build
   python:
     runs-on: ubuntu-latest
