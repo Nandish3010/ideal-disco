@@ -52,9 +52,9 @@ A 400 m queue alerts earlier than a 100 m queue, so nobody is called out sooner 
 Nothing a language model says sets a tier or a signal.
 
 1. **Acuity.** Gemini extracts fields (complaint, vitals) into a fixed schema. `api/acuity.py` maps them to critical, urgent or stable with a deterministic lookup, and the crew confirms with one tap. Preemption needs a confirmed tier.
-2. **Sequencing.** `api/priority.py` orders vehicles by (tier, ETA). It is a sequence, not a hold: fire first, ambulance a fixed 12 s later, and everyone passes.
+2. **Sequencing.** `api/priority.py` orders vehicles by (tier, ETA). It is a sequence, not a hold: the order follows the tier ranks in `TIER_RANK`, a fixed 12 s gap separates vehicles, and everyone passes. A fire engine with trapped persons ranks above a critical ambulance; a fire engine without trapped persons ranks below one. In the recorded demo two critical ambulances pass first and the fire engine follows 12 s later, because that fire call had no trapped persons.
 3. **Platoon.** Vehicles on the same approach arriving within 45 s of a leader share the leader's green slot instead of queuing for their own.
-4. **Explanation.** The rules build a template sentence ("Fire engine first, ambulance 12 s later"); Gemini may reword it in the cop's language, the result is validated, and the template is used if it fails. The sentence is stored on the junction phase and never reorders anything.
+4. **Explanation.** The rules build a template sentence (for example "Fire engine first, ambulance 12 s later"); Gemini may reword it in the cop's language, the result is validated, and the template is used if it fails. The sentence is stored on the junction phase and never reorders anything.
 
 `acuity.py`, `priority.py`, `leadtime.py` and `report.py` carry assert-based self-checks and are exercised in CI.
 
@@ -69,8 +69,9 @@ All calls go through Vertex AI (`google-genai`, global endpoint). Each has a tem
 - **Cop voice notes to rule actions:** a spoken report from the junction fills a fixed schema, and plain rules act on it.
 - **After-action report:** a plain summary of each finished run, with the timeline built in code.
 - **Hospital routing agent:** built on Agent Development Kit, with four tools and a code guard that checks its choice before it is applied.
+- **Corridor re-planner:** an Agent Development Kit agent that reacts to a cop's delay note (a stalled bus, a blocked lane), calls four tools (junction state, alternative route, allowed resequences, notify control) to propose one action (reroute, resequence, hold, escalate or no change), and checks it with deterministic code guards; any failure escalates to control, and its reasoning trace is written to the junction card.
 
-The routing agent picks the destination hospital with four tools: `list_hospitals` (a mock capability and bed roster), `eta_to` (traffic-aware Routes ETA), `check_diversion` (a mock diversion feed), and `required_capabilities`, which is a keyword-table baseline used for validation, not an answer. It returns the chosen hospital with up to two rejected alternatives and a confidence. A code guard re-checks the choice (known hospital, no diversion, a bed, every required capability, no critical baseline capability dropped) and falls back to the nearest eligible hospital on any failure or 20 s timeout. The tool trace, including any guard that tripped, is shown on `/vehicle`; the alternatives and confidence come back in the `/route` response. The agent never changes acuity or signal priority.
+The routing agent picks the destination hospital with four tools: `list_hospitals` (a mock capability and bed roster), `eta_to` (traffic-aware Routes ETA), `check_diversion` (a mock diversion feed), and `required_capabilities`, which is a keyword-table baseline used for validation, not an answer. It returns the chosen hospital with up to two rejected alternatives and a confidence. A code guard re-checks the choice (known hospital, no diversion, a bed, every required capability, no critical baseline capability dropped) and falls back to the nearest eligible hospital on any failure or 40 s timeout. The tool trace, including any guard that tripped, is shown on `/vehicle`; the alternatives and confidence come back in the `/route` response. The agent never changes acuity or signal priority.
 
 ## Architecture
 
@@ -79,7 +80,7 @@ The routing agent picks the destination hospital with four tools: `list_hospital
 Google products actually wired:
 
 - **Vertex AI, Gemini:** extraction, ATMIST brief, alert and sequencing wording, cop voice notes, after-action report.
-- **Agent Development Kit:** hospital routing agent.
+- **Agent Development Kit:** hospital routing agent and corridor re-planner.
 - **Cloud Run:** `corridor-api` (FastAPI) and the traffic logger job.
 - **Firestore:** event bus and store; every screen subscribes.
 - **Firebase Hosting:** the React PWA.
@@ -144,7 +145,7 @@ For repository workflow and contribution conventions, see CONTRIBUTING.md.
 - **API:** pytest against a fake Firestore, so tests need no credentials and make no cloud calls; the agent tests run against a scripted runner in CI, so the routing agent's import path and guard are exercised without Vertex AI; the engines also self-check with `python3 api/acuity.py` and friends.
 - **Web:** vitest unit tests, including the replay maths and the scenario minutes-saved total; ESLint and Prettier checks.
 - **Contract and property tests:** `make contract` runs schemathesis (every check, 20 examples per operation) against the API on an in-memory Firestore, and hypothesis checks the engines' invariants for any input (`api/tests/test_properties.py`). `make openapi` rewrites `api/openapi.json`; CI fails if it is stale.
-- **Gate:** CI runs lint, format, tests and the production build, and enforces a minimum coverage threshold on the API. The latest green run on main: 349 Python tests (97.9% API coverage) and 147 web tests. Run the same commands locally before opening a PR.
+- **Gate:** CI runs lint, format, tests and the production build, and enforces a minimum coverage threshold on the API. The latest green run on main: 412 Python tests (98.2% API coverage) and 161 web tests. Run the same commands locally before opening a PR.
 
 ### Performance (offline, single instance)
 
@@ -223,7 +224,7 @@ To replace these with real clips, record 10 clips as described in [data/eval/REA
 ## Repository layout
 
 ```
-api/        FastAPI app; acuity.py, priority.py, leadtime.py, signal_adapter.py; agent.py + hospitals.py (routing agent)
+api/        FastAPI app; acuity.py, priority.py, leadtime.py, signal_adapter.py; agent.py + hospitals.py (routing agent); replanner.py (corridor re-planner)
 web/        Vite React PWA, eight routes, replay maths, vitest tests
 jobs/       traffic_logger.py (Cloud Run Job) and bqml/ (BigQuery ML jam forecast)
 data/       corridors/{blr,hyd}.json, scenarios/*.json, eval/ clips and labels

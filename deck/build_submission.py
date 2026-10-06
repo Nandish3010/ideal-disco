@@ -117,7 +117,7 @@ DATA = {
     "cost": [("Routes", "3 calls/min", 3 * 60 * 0.85), ("Gemini", "17 calls", 17 * 0.02), ("Text-to-Speech", "~1,000 chars", 1.0 * 1.3)],
     "cost_caption": "List prices; Routes is ~98 % of the bill.",
     # slide 12
-    "tests": "349 Python, 147 web tests; 98 % API coverage",
+    "tests": "412 Python, 161 web tests; 98 % API coverage",
     "load": ("17 / 37", "/location p50 / p95, offline single instance"),  # api/loadtest/RESULTS.md
     "perf_caption": "not field recordings.",
     # slide 13

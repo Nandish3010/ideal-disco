@@ -17,7 +17,7 @@ The build prints the body-word count per slide (target 35; slides 9 and 10 run a
 ## Fill before submitting
 
 - Slide 16: demo video link (the dashed "[link]" tile; add a QR for it with `qr_png` in `build_deck.py`).
-- Slide 13: re-check the load-test tile (17 / 37 ms), test counts (349 Python, 147 web, 98 % coverage, from the CI run on main) and the eval numbers (12 synthetic clips, 11 scored for tier, 1 intervention note) at freeze; slide 3 and 13: 16.5 min, 4 min vs 1 min.
+- Slide 13: re-check the load-test tile (17 / 37 ms), test counts (412 Python, 161 web, 98 % coverage, from the CI run on main) and the eval numbers (12 synthetic clips, 11 scored for tier, 1 intervention note) at freeze; slide 3 and 13: 16.5 min, 4 min vs 1 min.
 - Slide 10: rupee figures are list-price estimates; re-check against current price lists.
 
 ## Template-based fallback
@@ -43,7 +43,7 @@ The build prints the body-word count per slide (target 35); slide 5 (six screens
 ## Fill in the fallback deck
 
 - Slide 14: demo video link (the "[link]" tile; add a QR for it with `qr_png` in the script).
-- Slide 12: re-check the load-test tile (`DATA["load"]`, from `api/loadtest/RESULTS.md`: 17 / 37 ms), the test counts (`DATA["tests"]`: 349 Python, 147 web, 98% API coverage, from the CI run on main) and the rehearsal numbers (16.5 min saved, J3 4 min, J4 1 min) at freeze.
+- Slide 12: re-check the load-test tile (`DATA["load"]`, from `api/loadtest/RESULTS.md`: 17 / 37 ms), the test counts (`DATA["tests"]`: 412 Python, 161 web, 98% API coverage, from the CI run on main) and the rehearsal numbers (16.5 min saved, J3 4 min, J4 1 min) at freeze.
 - Slide 10: the rupee figures are list-price estimates, labelled as such; re-check against current price lists.
 
 ## Export (fallback deck)

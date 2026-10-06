@@ -453,7 +453,7 @@ for i, (num, lab, unit) in enumerate([
 text(s, MX, TOP + 2.1, CW, 0.5, f"{EV['clips'] + 1} synthetic clips, {EV['clips']} scored for tier, 1 intervention note; not field recordings. Before the fix: 87 % / 73 %.", size=12, color=GREY)
 stat_tile(s, MX, TOP + 2.65, 5.6, 1.8, DATA["load"][0], "/location p50 / p95, offline", unit="ms", num_size=48)
 t = box(s, MX + 5.9, TOP + 2.65, CW - 5.9, 1.8, fill=TILE, line=None, radius=0.14, name="Stat tile")
-shape_text(t, [[("349", {"bold": True, "size": 32, "color": AMBER}), (" Python · ", {"color": ON_DARK}), ("147", {"bold": True, "size": 32, "color": AMBER}), (" web tests", {"color": ON_DARK})],
+shape_text(t, [[("412", {"bold": True, "size": 32, "color": AMBER}), (" Python · ", {"color": ON_DARK}), ("161", {"bold": True, "size": 32, "color": AMBER}), (" web tests", {"color": ON_DARK})],
                [("98 %", {"bold": True, "size": 32, "color": AMBER}), (" coverage", {"color": ON_DARK})]], size=18, anchor=MSO_ANCHOR.MIDDLE, margins=(0.3, 0.1, 0.2, 0.1), after=6)
 
 # 14 additional details / future development

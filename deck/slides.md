@@ -141,7 +141,7 @@ A 500 m queue alerts earlier than a 100 m queue, because the cop needs the time 
 | 1. Extract | Gemini | speech or monitor photo → fixed JSON fields, never a score |
 | 2. Tier | `acuity.py` | deterministic lookup → critical / urgent / stable; crew confirms with one tap |
 | 3. Order | `priority.py` | sort by (tier, ETA): a **sequence, not a hold** |
-| 4. Explain | Gemini | rewords the rule-built sentence for the cop ("Fire engine first, ambulance 12 s later"); validated, template if it fails |
+| 4. Explain | Gemini | rewords the rule-built sentence for the cop (for example "Fire engine first, ambulance 12 s later"); validated, template if it fails |
 
 A language model must not decide who lives. Rules are auditable, testable and carry self-checks.
 
@@ -165,6 +165,7 @@ Hallucination risk is removed from the safety path by construction. The model si
 | Cop voice notes to rule actions | a spoken report from the junction fills a fixed schema, and plain rules act on it. |
 | After-action report | a plain summary of each finished run, with the timeline built in code. |
 | Hospital routing agent | built on Agent Development Kit, with four tools and a code guard that checks its choice before it is applied. |
+| Corridor re-planner | an Agent Development Kit agent that reacts to a cop's delay note (a stalled bus, a blocked lane), calls four tools, and proposes one action that code guards check; its reasoning trace is written to the junction card. |
 
 </div>
 <div>
@@ -203,7 +204,7 @@ Added to baseline: icu
 
 Destination Jayadeva, confidence 1.0. Alternatives: Apollo (diversion), Fortis (no cath lab).
 
-An ADK agent on Vertex AI picks the destination after the crew confirms the tier, with up to two rejected alternatives and a confidence. `required_capabilities` is a keyword baseline for validation. A code guard re-checks the choice; any failure or 20 s timeout falls back to the nearest eligible hospital.
+An ADK agent on Vertex AI picks the destination after the crew confirms the tier, with up to two rejected alternatives and a confidence. `required_capabilities` is a keyword baseline for validation. A code guard re-checks the choice; any failure or 40 s timeout falls back to the nearest eligible hospital.
 
 </div>
 <div>
