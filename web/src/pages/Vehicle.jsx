@@ -4,6 +4,7 @@ import { corridors } from "../data.js";
 import { TraceCard } from "../trace.jsx";
 import {
   Err,
+  Field,
   MAX_S,
   b64,
   deviceId,
@@ -19,6 +20,8 @@ import { collection, getDocs, limit, onSnapshot, orderBy, query } from "firebase
 import { copNoteText, currentAlert } from "../format.js";
 import { db } from "../firebase.js";
 import { latestOpen } from "../pick.js";
+import Coach from "../a11y/Coach.jsx";
+import { t } from "../i18n/index.js";
 
 // Demo vehicles seeded in the registry (see the sim scenarios).
 const DEMO_PLATES = [
@@ -26,15 +29,25 @@ const DEMO_PLATES = [
   ["KA01AB4321", "ambulance, urgent"],
   ["KA01FE5678", "fire engine"],
 ];
+// Indian plate: state code, 1-2 digit district, 1-3 letter series, up to 4 digits (KA01AB1234); incident: INC- + 6 hex.
+const PLATE_RE = /^[A-Z]{2}\d{1,2}[A-Z]{1,3}\d{1,4}$/;
+const INCIDENT_RE = /^INC-[0-9A-F]{6}$/;
 
 function Bind({ bound, setBound }) {
   const [plate, setPlate] = useState(store.get("plate") ?? DEMO_PLATES[0][0]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [bad, setBad] = useState(null); // inline problem with the plate field
+  const input = useRef(null);
 
   async function submit(e) {
     e.preventDefault();
-    const p = plate.trim().toUpperCase();
+    const p = plate.replace(/[\s-]/g, "").toUpperCase(); // KA 01-AB 1234 -> KA01AB1234
+    if (!PLATE_RE.test(p)) {
+      setBad(t("vehicle.plate_bad"));
+      return input.current?.focus();
+    }
+    setBad(null);
     setBusy(true);
     setErr(null);
     setBound(null);
@@ -58,25 +71,33 @@ function Bind({ bound, setBound }) {
 
   return (
     <section>
-      <h2>1. Bind this device</h2>
-      <form className="card" onSubmit={submit}>
-        <label>
-          Vehicle plate
+      <h2>{t("vehicle.bind_h")}</h2>
+      <form className="card" onSubmit={submit} noValidate>
+        <Field
+          label={t("vehicle.plate")}
+          error={bad ?? (err?.status === 404 ? t("vehicle.unregistered_short") : null)}
+        >
           <input
+            ref={input}
             value={plate}
             onChange={(e) => setPlate(e.target.value)}
             placeholder="KA01AB1234"
             autoCapitalize="characters"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="go"
+            autoFocus={!bound}
             required
           />
-        </label>
-        <div className="chips" role="group" aria-label="Demo plates">
+        </Field>
+        <div className="chips" role="group" aria-label={t("vehicle.demo_plates")}>
           {DEMO_PLATES.map(([p, what]) => (
             <button
               type="button"
               key={p}
               className="chip"
-              aria-label={`Use plate ${p}, ${what}`}
+              aria-label={t("vehicle.use_plate", { plate: p, what })}
               onClick={() => setPlate(p)}
             >
               {p}
@@ -84,24 +105,22 @@ function Bind({ bound, setBound }) {
           ))}
         </div>
         <button className="primary" disabled={busy}>
-          {busy ? "Binding…" : "Bind"}
+          {busy ? t("vehicle.binding") : t("vehicle.bind")}
         </button>
       </form>
       {err?.status === 404 ? (
-        <div className="card reject">
-          <div className="big">Unregistered vehicle</div>
-          <p>
-            {plate.trim().toUpperCase()} is not in the registry, or is inactive. No run can start.
-          </p>
+        <div className="card reject" role="alert">
+          <div className="big">{t("vehicle.unregistered")}</div>
+          <p>{t("vehicle.unregistered_p", { plate: plate.trim().toUpperCase() })}</p>
         </div>
       ) : (
         <Err e={err} />
       )}
       {bound && (
-        <div className="card good">
-          <div className="big">{bound.plate} bound</div>
+        <div className="card good" role="status">
+          <div className="big">{t("vehicle.bound", { plate: bound.plate })}</div>
           <p>
-            Type: <b>{bound.type}</b> · Agency: <b>{bound.agency}</b>
+            {t("vehicle.type")}: <b>{bound.type}</b> · {t("vehicle.agency")}: <b>{bound.agency}</b>
           </p>
         </div>
       )}
@@ -116,10 +135,10 @@ function useGps(runId, active) {
   useEffect(() => {
     if (!active || !runId) return;
     if (!navigator.geolocation) {
-      setNote("GPS not available on this device.");
+      setNote(t("vehicle.gps_none"));
       return;
     }
-    setNote("Waiting for GPS…");
+    setNote(t("vehicle.gps_wait"));
     const id = navigator.geolocation.watchPosition(
       async (p) => {
         if (Date.now() - last.current < 5000) return;
@@ -135,13 +154,13 @@ function useGps(runId, active) {
             t: new Date(p.timestamp).toISOString(),
             source: "gps",
           });
-          setNote("GPS sent " + new Date().toLocaleTimeString());
+          setNote(t("vehicle.gps_sent", { at: new Date().toLocaleTimeString() }));
         } catch (e) {
           console.log("/location failed", e);
-          setNote("GPS send failed: " + e.message);
+          setNote(t("vehicle.gps_fail", { msg: e.message }));
         }
       },
-      (e) => setNote("GPS error: " + e.message),
+      (e) => setNote(t("vehicle.gps_err", { msg: e.message })),
       { enableHighAccuracy: true },
     );
     return () => navigator.geolocation.clearWatch(id);
@@ -202,13 +221,13 @@ export const Chips = ({ items }) =>
 export const Thumb = ({ url }) =>
   typeof url === "string" && url.startsWith("https://") ? (
     <a href={url} target="_blank" rel="noopener noreferrer">
-      <img className="thumb" src={url} alt="Monitor photo" loading="lazy" />
+      <img className="thumb" src={url} alt={t("vehicle.monitor_photo")} loading="lazy" />
     </a>
   ) : null;
 
 function Fields({ fields, transcript, photo }) {
   const rows = flat(fields);
-  if (!rows.length) return <p className="muted">No fields extracted.</p>;
+  if (!rows.length) return <p className="muted">{t("vehicle.no_fields")}</p>;
   return (
     <dl className="kv">
       {rows.map(([k, v]) => {
@@ -219,7 +238,11 @@ function Fields({ fields, transcript, photo }) {
             <dd>
               {show(v)}
               <small className={ok ? "src" : "inf"}>
-                {photo ? "from photo" : ok ? "in transcript" : "inferred"}
+                {photo
+                  ? t("vehicle.from_photo")
+                  : ok
+                    ? t("vehicle.in_transcript")
+                    : t("vehicle.inferred")}
               </small>
             </dd>
           </div>
@@ -291,12 +314,12 @@ function Triage({ runId, vehicleType, confirmed, setDone }) {
     } catch {
       setBusy(false);
       setShot(null);
-      return setNote("Couldn't open that photo, type it instead.");
+      return setNote(t("vehicle.photo_fail"));
     }
     send({ image_b64: r.b64, mime: "image/jpeg" }, "photo", r.url);
   }
   const hold = useHold(async (blob) => {
-    if (!blob) return setNote("Too short. Hold the button while you speak.");
+    if (!blob) return setNote(t("vehicle.too_short"));
     setBusy(true);
     send({ audio_b64: await b64(blob), mime: blob.type.split(";")[0] || "audio/webm" }, "voice");
   });
@@ -311,11 +334,11 @@ function Triage({ runId, vehicleType, confirmed, setDone }) {
   const up = String(tier).toUpperCase();
   return (
     <section>
-      <h2>3. Patient</h2>
-      <div className="row" role="group" aria-label="Note type">
+      <h2>{t("vehicle.patient_h")}</h2>
+      <div className="row" role="group" aria-label={t("vehicle.note_type")}>
         {[
-          ["triage", "Triage"],
-          ["log", "Log note"],
+          ["triage", t("vehicle.triage")],
+          ["log", t("vehicle.log_note")],
         ].map(([m, l]) => (
           <button
             key={m}
@@ -328,25 +351,33 @@ function Triage({ runId, vehicleType, confirmed, setDone }) {
           </button>
         ))}
       </div>
-      <button className={"giant" + (hold.on ? " live" : "")} disabled={busy} {...holdProps(hold)}>
+      <button
+        className={"giant" + (hold.on ? " live" : "")}
+        disabled={busy}
+        aria-describedby="speak-hint"
+        {...holdProps(hold)}
+      >
         {busy
           ? shot
-            ? "Reading the monitor…"
-            : "Thinking…"
+            ? t("vehicle.reading")
+            : t("vehicle.thinking")
           : hold.on
-            ? `Listening ${clock(hold.s)}`
-            : "Hold to speak"}
+            ? t("vehicle.listening", { clock: clock(hold.s) })
+            : t("vehicle.hold")}
         {hold.on && (
           <small>
-            {Math.max(0, Math.ceil(MAX_S - hold.s))} s left
+            {t("vehicle.s_left", { n: Math.max(0, Math.ceil(MAX_S - hold.s)) })}
             <span className="meter">
               <i style={{ width: Math.min(100, (hold.s / MAX_S) * 100) + "%" }} />
             </span>
           </small>
         )}
       </button>
+      <p id="speak-hint" className="sr-only">
+        {t("vehicle.hold_hint")}
+      </p>
       <label className={"btn photo" + (busy ? " off" : "")}>
-        {busy && shot ? "Reading the monitor…" : "📷 Monitor photo"}
+        {busy && shot ? t("vehicle.reading") : `📷 ${t("vehicle.photo")}`}
         <input
           type="file"
           accept="image/*"
@@ -356,13 +387,15 @@ function Triage({ runId, vehicleType, confirmed, setDone }) {
           className="sr-only"
         />
       </label>
-      {note && <p className="muted">{note}</p>}
+      {note && (
+        <p className="muted" role="status">
+          {note}
+        </p>
+      )}
       {hold.mic && (
-        <p className="card bad">
-          {hold.mic === "denied"
-            ? "Microphone is blocked for this site."
-            : "Voice recording is not available on this device."}{" "}
-          Type it below instead.
+        <p className="card bad" role="alert">
+          {hold.mic === "denied" ? t("cop.mic_denied") : t("cop.mic_unavailable")}{" "}
+          {t("cop.type_instead")}
         </p>
       )}
       <form
@@ -372,29 +405,32 @@ function Triage({ runId, vehicleType, confirmed, setDone }) {
           send({ text }, "form");
         }}
       >
-        <label>
-          Type instead
+        <Field label={t("vehicle.type_instead")}>
           <textarea
             ref={area}
             rows="3"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="chest pain, BP 85 over 50"
+            placeholder={t("vehicle.type_ph")}
             required
           />
-        </label>
+        </Field>
         <button className="primary" disabled={busy}>
-          {busy ? "Thinking…" : mode === "log" ? "Add note" : "Send"}
+          {busy ? t("vehicle.thinking") : mode === "log" ? t("vehicle.add_note") : t("cop.send")}
         </button>
       </form>
       {unread ? (
-        <p className="card bad">Couldn&apos;t read the screen, type it instead.</p>
+        <p className="card bad" role="alert">
+          {t("vehicle.unread")}
+        </p>
       ) : failed ? (
-        <p className="card bad">
-          Couldn&apos;t understand, type it. Add more detail in the box above.
+        <p className="card bad" role="alert">
+          {t("vehicle.failed")}
         </p>
       ) : err?.status === 503 ? (
-        <p className="card bad">Service busy, try again.</p>
+        <p className="card bad" role="alert">
+          {t("vehicle.busy")}
+        </p>
       ) : (
         <Err e={err} />
       )}
@@ -402,38 +438,38 @@ function Triage({ runId, vehicleType, confirmed, setDone }) {
         <div className="card">
           {shot ? (
             <div className="photo-res">
-              <img className="thumb" src={shot} alt="Monitor photo" />
+              <img className="thumb" src={shot} alt={t("vehicle.monitor_photo")} />
               <div>
-                <div className="muted">Read from the monitor</div>
+                <div className="muted">{t("vehicle.read_from_monitor")}</div>
                 <Fields fields={res.fields} photo />
               </div>
             </div>
           ) : (
             <>
-              <div className="muted">Transcript (English)</div>
+              <div className="muted">{t("vehicle.transcript")}</div>
               <p className="quote">{res.transcript_en ?? "—"}</p>
-              <div className="muted">Extracted from the transcript</div>
+              <div className="muted">{t("vehicle.extracted")}</div>
               <Fields fields={res.fields} transcript={res.transcript_en} />
             </>
           )}
           <Chips items={res.interventions} />
           {res.log ? (
-            <p className="muted">Added to the transit log.</p>
+            <p className="muted">{t("vehicle.added")}</p>
           ) : (
             <>
-              <div className="muted">Suggested tier</div>
+              <div className="muted">{t("vehicle.suggested")}</div>
               <div className={"big tier-" + tier}>{up}</div>
-              <div className="muted">Crew confirms</div>
+              <div className="muted">{t("vehicle.crew_confirms")}</div>
               <button
                 className={"primary t-" + tier}
                 disabled={confirming || confirmed === tier}
                 onClick={confirm}
               >
                 {confirming
-                  ? "Confirming…"
+                  ? t("vehicle.confirming")
                   : confirmed === tier
-                    ? `Confirmed ${up}`
-                    : `Confirm ${up}`}
+                    ? t("vehicle.confirmed", { tier: up })
+                    : t("vehicle.confirm", { tier: up })}
               </button>
               <Err e={cerr} />
             </>
@@ -448,19 +484,21 @@ function Log({ runId }) {
   const { rows, error } = useLog(runId);
   return (
     <section>
-      <h2>4. Transit log</h2>
+      <h2>{t("vehicle.log_h")}</h2>
       {error ? (
-        <p className="card bad">Could not load log: {error}</p>
+        <p className="card bad" role="alert">
+          {t("common.load_failed", { what: t("what.log"), error })}
+        </p>
       ) : !rows ? (
-        <p className="muted">Loading…</p>
+        <p className="muted">{t("common.loading")}</p>
       ) : !rows.length ? (
-        <p className="muted">No notes yet</p>
+        <p className="muted">{t("vehicle.no_notes")}</p>
       ) : (
         <ul className="list">
           {rows.map((e) => (
             <li key={e.id}>
               <span className="muted">{when(e.t)}</span>
-              <span className="pill">{e.kind === "form" ? "text" : e.kind}</span>
+              <span className="pill">{e.kind === "form" ? t("vehicle.k_text") : e.kind}</span>
               <Thumb url={e.photo_url} />
               <div>{e.transcript_en ?? "—"}</div>
               <Chips items={e.interventions} />
@@ -507,14 +545,21 @@ function Run({ bound }) {
   const [err, setErr] = useState(null);
   const [ended, setEnded] = useState(null);
   const [noOpen, setNoOpen] = useState(false);
+  const [badInc, setBadInc] = useState(null); // inline problem with the incident field
+  const incRef = useRef(null);
   const [done, setDone] = useState(null); // confirm response, so the tier shows even if the run listener is down
   const run = useDoc(runId ? `runs/${runId}` : null);
   const hospital = corridors[corridor].hospital;
   const active = !!runId && run.data?.state !== "ended";
   const gps = useGps(runId, active);
+  // focus order: plate (autofocus) -> bind -> incident ID, as soon as a vehicle is bound and no run is going
+  useEffect(() => {
+    if (bound && !runId) incRef.current?.focus();
+  }, [bound?.plate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function useLatest() {
     setNoOpen(false);
+    setBadInc(null);
     try {
       const q = await getDocs(
         query(collection(db, "incidents"), orderBy("created_at", "desc"), limit(10)),
@@ -527,11 +572,16 @@ function Run({ bound }) {
   }
   async function start(e) {
     e.preventDefault();
+    const id = incident.trim().toUpperCase();
+    if (!INCIDENT_RE.test(id)) {
+      setBadInc(t("vehicle.incident_bad"));
+      return incRef.current?.focus();
+    }
+    setBadInc(null);
     setBusy(true);
     setErr(null);
     setEnded(null);
     setDone(null);
-    const id = incident.trim().toUpperCase();
     store.set("incident_id", id);
     store.set("corridor", corridor);
     try {
@@ -569,30 +619,38 @@ function Run({ bound }) {
   return (
     <>
       <section>
-        <h2>2. Start run</h2>
+        <h2>{t("vehicle.run_h")}</h2>
         {!bound ? (
-          <p className="muted">Bind a registered vehicle first.</p>
+          <p className="muted">{t("vehicle.bind_first")}</p>
         ) : runId ? (
           <>
             <div className="card">
               <div className={"tierpill " + (confirmed ? "t-" + confirmed : "")}>
-                {confirmed ? confirmed.toUpperCase() : "Tier not confirmed"}
+                {confirmed ? confirmed.toUpperCase() : t("vehicle.tier_unconfirmed")}
               </div>
-              <div className="muted">Run {runId}</div>
-              {run.loading && <p>Loading run…</p>}
-              {run.error && <p className="bad">Could not load run: {run.error}</p>}
-              {run.missing && <p>Run document not found yet.</p>}
+              <div className="muted">{t("vehicle.run", { id: runId })}</div>
+              {run.loading && <p>{t("vehicle.loading_run")}</p>}
+              {run.error && (
+                <p className="bad" role="alert">
+                  {t("common.load_failed", { what: t("what.run"), error: run.error })}
+                </p>
+              )}
+              {run.missing && <p>{t("vehicle.run_missing")}</p>}
               {r && (
                 <>
                   <div className="big">{r.state}</div>
                   <p>
-                    {r.vehicle_plate} · incident {r.incident_id} · to {r.destination?.name ?? "—"}
+                    {t("vehicle.run_line", {
+                      plate: r.vehicle_plate,
+                      incident: r.incident_id,
+                      dest: r.destination?.name ?? "—",
+                    })}
                   </p>
                   {r.state === "arrived" ? (
-                    <p>Hospital ETA: arrived</p>
+                    <p>{t("vehicle.eta_arrived")}</p>
                   ) : (
                     r.eta_hospital_s != null && (
-                      <p>Hospital ETA: {Math.round(r.eta_hospital_s / 60)} min</p>
+                      <p>{t("vehicle.eta", { n: Math.round(r.eta_hospital_s / 60) })}</p>
                     )
                   )}
                 </>
@@ -600,28 +658,34 @@ function Run({ bound }) {
               <CopNote runId={runId} />
               <p className="muted">{gps}</p>
               <button className="danger" disabled={busy} onClick={end}>
-                {busy ? "Ending…" : "End run"}
+                {busy ? t("vehicle.ending") : t("vehicle.end")}
               </button>
             </div>
             <TraceCard routing={r?.routing} pending={!!confirmed && bound?.type === "ambulance"} />
           </>
         ) : (
-          <form className="card" onSubmit={start}>
-            <label>
-              Incident ID
+          <form className="card" onSubmit={start} noValidate>
+            <Field
+              label={t("vehicle.incident")}
+              error={badInc ?? (noOpen ? t("vehicle.no_open") : null)}
+            >
               <input
+                ref={incRef}
                 value={incident}
                 onChange={(e) => setIncident(e.target.value)}
                 placeholder="INC-4BC6E7"
+                autoCapitalize="characters"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                enterKeyHint="go"
                 required
               />
-            </label>
+            </Field>
             <button type="button" onClick={useLatest} disabled={busy}>
-              Use latest open incident
+              {t("vehicle.use_latest")}
             </button>
-            {noOpen && <p className="muted">No open incident. Issue one on /dispatch.</p>}
-            <label>
-              Corridor
+            <Field label={t("cop.corridor")}>
               <select value={corridor} onChange={(e) => setCorridor(e.target.value)}>
                 {Object.values(corridors).map((c) => (
                   <option key={c.id} value={c.id}>
@@ -629,21 +693,25 @@ function Run({ bound }) {
                   </option>
                 ))}
               </select>
-            </label>
-            <p className="muted">Destination: {hospital.name}</p>
+            </Field>
+            <p className="muted">{t("vehicle.destination", { name: hospital.name })}</p>
             <button className="primary" disabled={busy}>
-              {busy ? "Starting…" : "Start run"}
+              {busy ? t("vehicle.starting") : t("vehicle.start")}
             </button>
           </form>
         )}
-        {ended && <p className="card good">Run {ended} ended.</p>}
+        {ended && (
+          <p className="card good" role="status">
+            {t("vehicle.ended", { id: ended })}
+          </p>
+        )}
         {err?.status === 403 || err?.status === 401 ? (
-          <p className="card reject">
+          <p className="card reject" role="alert">
             {err.message === "no_active_incident"
-              ? "No active incident: that incident ID is unknown or not open."
+              ? t("vehicle.err_incident")
               : err.message.startsWith("device_token")
-                ? "This device is no longer bound to the vehicle (another device took it over). Bind again."
-                : "Unregistered vehicle: run refused."}
+                ? t("vehicle.err_token")
+                : t("vehicle.err_unreg")}
           </p>
         ) : (
           <Err e={err} />
@@ -673,6 +741,7 @@ export default function Vehicle() {
   });
   return (
     <>
+      <Coach role="vehicle" />
       <Bind bound={bound} setBound={setBound} />
       <Run bound={bound} />
       <LastRouting />

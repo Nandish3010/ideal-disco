@@ -1,13 +1,35 @@
+/*
+ * Palette, checked against WCAG 2.2 AA (text 4.5:1, large text and UI parts 3:1).
+ * src/__tests__/contrast.test.js recomputes every ratio below from these values, so change a token and CI tells you.
+ *
+ * token     value     role                                  worst pair (ratio)
+ * --bg      #0b0d10   page background                       --fg 18.1, --muted 9.2, --accent 10.9, --bad 6.4
+ * --card    #171b21   cards, list rows                      --fg 16.1, --muted 8.2, --accent 9.7, --bad 5.7, --info 6.6
+ * --field   #0f1318   inputs, code blocks                   --fg 17.4, --muted 8.8, --edge 5.1
+ * --btn     #2a313b   button and pill fill                  --fg 12.2, --muted 6.2, --edge 3.6
+ * --fg      #f5f7fa   body text
+ * --muted   #aab3bf   secondary text, placeholders
+ * --accent  #3ddc84   ok, primary action, focus ring        text on it: #000 10.9
+ * --bad     #ff5c5c   errors, critical, STOP                text on it: #000 6.4
+ * --warn    #ffb020   urgent, PREPARE, banners              text on it: #000 10.6
+ * --info    #4da3ff   UPDATE stage, info badges             text on it: #000 7.4
+ * --edge    #7d8794   borders of controls (inputs, buttons) vs --bg 5.3, --card 4.7 (needs 3:1, WCAG 1.4.11)
+ * --line    #343b46   decorative dividers and card borders only (never the only cue for a control)
+ *
+ * Status is never colour alone: every badge also carries a word (STOP, ARRIVED, critical ...).
+ */
 :root {
   color-scheme: dark;
   --bg: #0b0d10;
   --card: #171b21;
   --line: #343b46;
+  --edge: #7d8794;
   --fg: #f5f7fa;
   --muted: #aab3bf;
   --accent: #3ddc84;
   --bad: #ff5c5c;
   --warn: #ffb020;
+  --info: #4da3ff;
 }
 * {
   box-sizing: border-box;
@@ -40,9 +62,9 @@ body {
 .bar a {
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
+  min-height: 48px;
   padding: 0 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--edge);
   border-radius: 8px;
   color: var(--fg);
   text-decoration: none;
@@ -112,8 +134,12 @@ textarea {
   font: inherit;
   color: var(--fg);
   background: #0f1318;
-  border: 2px solid var(--line);
+  border: 2px solid var(--edge);
   border-radius: 10px;
+}
+::placeholder {
+  color: var(--muted);
+  opacity: 1;
 }
 button {
   min-height: 56px;
@@ -122,7 +148,7 @@ button {
   font-weight: 700;
   color: var(--fg);
   background: #2a313b;
-  border: 2px solid var(--line);
+  border: 2px solid var(--edge);
   border-radius: 10px;
 }
 button.primary {
@@ -297,7 +323,7 @@ pre {
   margin: 0 0 12px;
   color: var(--fg);
   background: #2a313b;
-  border: 2px solid var(--line);
+  border: 2px solid var(--edge);
   border-radius: 10px;
   font-weight: 700;
 }
@@ -356,7 +382,7 @@ pre {
 .chip {
   font-size: 16px;
   background: #2a313b;
-  border: 1px solid var(--line);
+  border: 1px solid var(--edge);
   border-radius: 99px;
   padding: 2px 10px;
 }
@@ -392,7 +418,7 @@ body:has(.offline) .bar {
   overflow-wrap: anywhere;
 }
 .card.bad button {
-  min-height: 44px;
+  min-height: 48px;
   margin-left: 8px;
 }
 .cb {
@@ -512,4 +538,113 @@ body:has(.offline) .bar {
 }
 .landing .gem li {
   margin-bottom: 8px;
+}
+
+/* ---- accessibility helpers ---- */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.skip {
+  position: absolute;
+  left: 8px;
+  top: -80px;
+  z-index: 20;
+  padding: 12px 16px;
+  background: var(--accent);
+  color: #000;
+  font-weight: 700;
+  border-radius: 8px;
+}
+.skip:focus {
+  top: 8px;
+}
+main:focus {
+  outline: none; /* the skip link lands here; it is not a control */
+}
+.field {
+  margin-bottom: 12px;
+}
+.field label {
+  margin-bottom: 0;
+}
+.field-hint {
+  margin: 4px 0 0;
+  font-size: 16px;
+}
+.field-err {
+  margin: 6px 0 0;
+  color: var(--bad);
+  font-weight: 700;
+  font-size: 18px;
+}
+.field [aria-invalid="true"] {
+  border-color: var(--bad);
+}
+.lang {
+  display: flex;
+  gap: 6px;
+}
+.lang button {
+  min-height: 48px;
+  padding: 0 12px;
+  font-size: 18px;
+}
+.lang button[aria-pressed="true"] {
+  background: var(--fg);
+  color: #000;
+  border-color: var(--fg);
+}
+@media (min-width: 900px) {
+  .lang {
+    margin-left: auto;
+  }
+  .lang button {
+    min-height: 40px;
+  }
+}
+.bar nav {
+  margin-bottom: 6px;
+}
+@media (min-width: 900px) {
+  .bar nav {
+    margin-bottom: 0;
+  }
+}
+.coach {
+  background: var(--card);
+  border: 2px solid var(--info);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 0 0 12px;
+}
+.coach ol {
+  margin: 6px 0 12px;
+  padding-left: 24px;
+  font-size: 18px;
+}
+.coach li {
+  margin-bottom: 4px;
+}
+:lang(kn),
+:lang(te) {
+  line-height: 1.6; /* Indic scripts need more leading than Latin */
+}
+
+/* reduced motion: nothing animates or transitions, smooth scrolling is off */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }

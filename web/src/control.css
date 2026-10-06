@@ -23,7 +23,7 @@ main:has(.control) {
   color: #fff;
 }
 .esc button {
-  min-height: 44px;
+  min-height: 48px;
   font-size: 16px;
 }
 .cgrid {
@@ -92,12 +92,12 @@ main:has(.control) {
   color: #000;
 }
 .cb.s-UPDATE {
-  background: #3b82f6;
-  color: #fff;
+  background: var(--info);
+  color: #000;
 }
 .cb.esc-b {
   background: var(--bad);
-  color: #fff;
+  color: #000;
   font-size: 14px;
 }
 .detail {

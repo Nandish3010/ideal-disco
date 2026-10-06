@@ -4,10 +4,12 @@ import { db } from "../firebase.js";
 import { api } from "../api.js";
 import { corridors } from "../data.js";
 import { HOSPITALS } from "../hospitals.js";
-import { ErrCard, store, useDoc, when } from "../ui.jsx";
+import { ErrCard, Field, store, useDoc, when } from "../ui.jsx";
 import { ms, useEnRoute, useNow } from "./Cop.jsx";
 import { Chips, Thumb } from "./Vehicle.jsx";
 import { LastHandover } from "../samples.jsx";
+import Coach from "../a11y/Coach.jsx";
+import { t } from "../i18n/index.js";
 import "../cop.css";
 
 // The hospital desk token (POST /hospital/duty) lets this page regenerate briefs and reports; the roster id is the server's.
@@ -20,6 +22,20 @@ const deskId = () => {
   return picked?.id ?? HOSPITAL_ID[p.get("corridor")] ?? HOSPITAL_ID.blr; // ?hospital= wins, else the corridor's own
 };
 const deskToken = () => store.get(`hospital_token_${deskId()}`) || undefined; // undefined: api() falls back to the vehicle token
+
+// Up/Down/Home/End move focus along the run list (every run is also a normal tab stop).
+function arrows(e) {
+  const keys = { ArrowDown: 1, ArrowUp: -1, Home: "first", End: "last" };
+  if (!(e.key in keys)) return;
+  const all = [...e.currentTarget.querySelectorAll("button")];
+  const i = all.indexOf(document.activeElement);
+  const k = keys[e.key];
+  const next = k === "first" ? all[0] : k === "last" ? all.at(-1) : all[i + k];
+  if (next) {
+    e.preventDefault();
+    next.focus();
+  }
+}
 
 const eta = (r, now) =>
   r.eta_hospital_s == null
@@ -63,7 +79,7 @@ function Treatment({ log }) {
     .map((t) => t[0].toUpperCase() + t.slice(1));
   return items.length ? (
     <p>
-      <b>Treatment so far:</b> {items.join(" · ")}
+      <b>{t("hospital.treatment_so_far")}</b> {items.join(" · ")}
     </p>
   ) : null;
 }
@@ -74,7 +90,7 @@ function Vitals({ log }) {
   return (
     <div className="vitals">
       {[
-        ["sbp", "SBP"],
+        ["sbp", "SBP"], // clinical abbreviations stay in Latin script
         ["hr", "HR"],
         ["spo2", "SpO2"],
       ].map(([k, label]) => {
@@ -110,29 +126,22 @@ function Brief({ runId }) {
     try {
       setFresh(await api("/brief", { run_id: runId, regenerate: true }, deskToken()));
     } catch (e) {
-      setNote(`Could not generate: ${e.message}`);
+      setNote(t("hospital.gen_failed", { msg: e.message }));
     }
     setBusy(false);
   }
   const b = fresh ?? data;
   return (
     <section className="card">
-      <h2 style={{ marginTop: 0 }}>Brief</h2>
+      <h2 style={{ marginTop: 0 }}>{t("hospital.brief")}</h2>
       {!b ? (
-        <p className="muted">Brief arrives when the ambulance is 5 minutes out</p>
+        <p className="muted">{t("hospital.brief_wait")}</p>
       ) : (
         <>
           <dl className="atmist">
-            {[
-              ["age", "Age"],
-              ["time", "Time"],
-              ["mechanism", "Mechanism"],
-              ["injuries", "Injuries"],
-              ["signs", "Signs"],
-              ["treatment", "Treatment"],
-            ].map(([k, l]) => (
+            {["age", "time", "mechanism", "injuries", "signs", "treatment"].map((k) => (
               <div key={k} style={{ display: "contents" }}>
-                <dt>{l}</dt>
+                <dt>{t(`hospital.a_${k}`)}</dt>
                 <dd>{b.atmist?.[k] ?? "—"}</dd>
               </div>
             ))}
@@ -148,12 +157,12 @@ function Brief({ runId }) {
               {c}
             </label>
           ))}
-          <p className="banner">{b.disclaimer ?? "A clinician confirms these values."}</p>
-          <p className="muted">Generated {when(b.generated_at)}.</p>
+          <p className="banner">{b.disclaimer ?? t("hospital.disclaimer")}</p>
+          <p className="muted">{t("hospital.generated", { at: when(b.generated_at) })}</p>
         </>
       )}
       <button onClick={regen} disabled={busy}>
-        {busy ? "Working…" : "Regenerate brief"}
+        {busy ? t("common.working") : t("hospital.regen")}
       </button>
       {note && <p className="muted">{note}</p>}
     </section>
@@ -177,11 +186,11 @@ export function AfterAction({ runId }) {
   }
   return (
     <section className="card">
-      <h2 style={{ marginTop: 0 }}>After-action report</h2>
+      <h2 style={{ marginTop: 0 }}>{t("hospital.aar")}</h2>
       <button onClick={go} disabled={busy}>
-        {busy ? "Working…" : "Generate after-action report"}
+        {busy ? t("common.working") : t("hospital.aar_gen")}
       </button>
-      <ErrCard what="the after-action report" error={error} retry={go} />
+      <ErrCard what={t("what.aar")} error={error} retry={go} />
       {doc && (
         <>
           <p className="summary">{doc.summary}</p>
@@ -192,13 +201,13 @@ export function AfterAction({ runId }) {
               </li>
             ))}
           </ol>
-          <h3>Issues</h3>
+          <h3>{t("hospital.issues")}</h3>
           <ul>
             {(doc.issues ?? []).map((x, i) => (
               <li key={i}>{x}</li>
             ))}
           </ul>
-          <h3>Recommendations</h3>
+          <h3>{t("hospital.recs")}</h3>
           <ul>
             {(doc.recommendations ?? []).map((x, i) => (
               <li key={i}>{x}</li>
@@ -215,19 +224,19 @@ function Selected({ run }) {
   const log = useLog(run.id);
   return (
     <>
-      <h2>Vitals</h2>
+      <h2>{t("hospital.vitals")}</h2>
       <Vitals log={log} />
       <Treatment log={log} />
-      <h2>Transit log</h2>
-      {log.length === 0 && <p className="muted">No log entries yet.</p>}
+      <h2>{t("hospital.log")}</h2>
+      {log.length === 0 && <p className="muted">{t("hospital.log_none")}</p>}
       <ol className="timeline">
         {log.map((e) => (
           <li key={e.n}>
             <span className="muted">{when(e.t)}</span> <span className="pill">{e.kind}</span>
             {e.confirmed ? (
-              <b className="tier-stable"> ✓ crew confirmed</b>
+              <b className="tier-stable"> ✓ {t("hospital.confirmed")}</b>
             ) : (
-              <span className="muted"> unconfirmed</span>
+              <span className="muted"> {t("hospital.unconfirmed")}</span>
             )}
             <Thumb url={e.photo_url} />
             <div>{e.transcript_en}</div>
@@ -297,9 +306,9 @@ export default function Hospital() {
   const sel = inbound.find((r) => r.id === pick) ?? inbound[0];
   return (
     <>
-      <p className="banner">Demo: synthetic patients only</p>
-      <label>
-        Hospital
+      <p className="banner">{t("hospital.demo")}</p>
+      <Coach role="hospital" />
+      <Field label={t("hospital.hospital")}>
         <select value={hid} onChange={(e) => choose(e.target.value)}>
           {roster.map((h) => (
             <option key={h.id} value={h.id}>
@@ -307,14 +316,18 @@ export default function Hospital() {
             </option>
           ))}
         </select>
-      </label>
+      </Field>
       <h2>{hospital}</h2>
       <button onClick={signIn} disabled={desk}>
-        {desk ? "Signed in to this hospital desk" : "Sign in to this hospital desk"}
+        {desk ? t("hospital.desk_in") : t("hospital.desk_sign")}
       </button>
-      {error && <p className="card bad">Could not load runs: {error}</p>}
-      {inbound.length === 0 && <p className="muted">No inbound ambulances.</p>}
-      <div className="runs">
+      {error && (
+        <p className="card bad" role="alert">
+          {t("common.load_failed", { what: t("what.runs"), error })}
+        </p>
+      )}
+      {inbound.length === 0 && <p className="muted">{t("hospital.none")}</p>}
+      <div className="runlist" role="group" aria-label={t("hospital.inbound")} onKeyDown={arrows}>
         {inbound.map((r) => (
           <button key={r.id} aria-pressed={r.id === sel?.id} onClick={() => setPick(r.id)}>
             <span className="countdown">{mmss(eta(r, now))}</span>

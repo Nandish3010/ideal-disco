@@ -1,9 +1,12 @@
 /* Cop + hospital pages. Reuses tokens from styles.css. */
-:root {
-  --info: #4da3ff;
+.alert-full {
+  --bt: 1; /* big-type multiplier: the Big type toggle sets .bigtype */
+}
+.alert-full.bigtype {
+  --bt: 1.3;
 }
 .stage {
-  font-size: 14vw;
+  font-size: calc(14vw * var(--bt, 1));
   line-height: 1;
   font-weight: 900;
   letter-spacing: -0.02em;
@@ -12,7 +15,7 @@
 }
 @media (min-width: 640px) {
   .stage {
-    font-size: 120px;
+    font-size: calc(120px * var(--bt, 1));
   }
 }
 .alert-full {
@@ -41,12 +44,16 @@
   color: var(--info);
 }
 .alert-text {
-  font-size: 22px;
+  font-size: calc(22px * var(--bt, 1));
   font-weight: 700;
   margin: 6px 0;
 }
+.alert-full .muted,
+.alert-full .pill {
+  font-size: calc(18px * var(--bt, 1));
+}
 .alert-en {
-  font-size: 16px;
+  font-size: calc(16px * var(--bt, 1));
   color: var(--muted);
   margin: 0 0 8px;
 }
@@ -56,12 +63,12 @@
   font-weight: 800;
 }
 .eta {
-  font-size: 32px;
+  font-size: calc(32px * var(--bt, 1));
   font-weight: 800;
   margin: 4px 0;
 }
 .move {
-  font-size: 28px;
+  font-size: calc(28px * var(--bt, 1));
   font-weight: 800;
   margin: 4px 0;
 }
@@ -103,10 +110,22 @@ button.giant.report {
   word-break: normal;
 }
 .duty-off {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   margin: 16px 0;
+  min-height: 48px;
+  padding: 0 4px;
   color: var(--muted);
-  font-size: 16px;
+  background: none;
+  border: 0;
+  font-size: 18px;
+  font-weight: 400;
+  text-decoration: underline;
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .pill.stage-PREPARE {
   background: var(--warn);
@@ -129,7 +148,7 @@ button.giant.report {
   padding: 8px;
   margin: 0 0 10px;
 }
-.runs button {
+.runlist button {
   display: block;
   width: 100%;
   text-align: left;
@@ -137,7 +156,7 @@ button.giant.report {
   padding: 10px 12px;
   background: var(--card);
 }
-.runs button[aria-pressed="true"] {
+.runlist button[aria-pressed="true"] {
   border-color: var(--accent);
 }
 .countdown {
@@ -210,9 +229,9 @@ button.giant.report {
   margin: 0;
 }
 .mute {
-  min-height: 40px;
+  min-height: 48px;
   padding: 4px 14px;
-  font-size: 16px;
+  font-size: 18px;
   margin: 0 0 8px;
 }
 .banner.pulse {
@@ -230,7 +249,7 @@ button.giant.report {
 }
 button.replay {
   float: right;
-  min-height: 0;
-  padding: 2px 10px;
-  font-size: 13px;
+  min-height: 44px;
+  padding: 2px 12px;
+  font-size: 16px;
 }

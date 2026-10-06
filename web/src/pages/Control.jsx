@@ -8,9 +8,10 @@ import { Rationale, TraceCard } from "../trace.jsx";
 import { AfterAction } from "./Hospital.jsx";
 import { RunLabel } from "../samples.jsx";
 import { withMethod } from "../pick.js";
-import { mmss, plural } from "../format.js";
+import { mmss } from "../format.js";
 import { presence } from "../story.js";
 import { ErrCard, Offline, StateBadge, useListen, useNow } from "../ui.jsx";
+import { t } from "../i18n/index.js";
 import "../control.css";
 
 const ESCALATE_S = 20;
@@ -22,7 +23,8 @@ const ms = (v) => (v?.toMillis ? v.toMillis() : v ? new Date(v).getTime() : 0);
 const clock = (v) => new Date(ms(v)).toLocaleTimeString([], { hour12: false });
 const dash = (v, f = (x) => x) => (v == null || v === "" ? "—" : f(v));
 const tierOf = (r) => r.confirmed_tier ?? r.acuity_tier;
-const ago = (v, now) => (v ? `${Math.max(0, Math.round((now - ms(v)) / 60000))} min ago` : "—");
+const ago = (v, now) =>
+  v ? t("control.min_ago", { n: Math.max(0, Math.round((now - ms(v)) / 60000)) }) : "—";
 
 // Whole (small) collection, optionally keyed by doc id prefix -> {data: rows, loading, error, retry}. ponytail: no query, filter client-side.
 function useCol(name, prefix = "") {
@@ -132,14 +134,12 @@ export default function Control() {
   return (
     <div className="control">
       <Offline />
-      <ErrCard what="active runs" error={rq.error} retry={rq.retry} />
-      <ErrCard what="alerts" error={aq.error} retry={aq.retry} />
-      <ErrCard what="junction state" error={jq.error} retry={jq.retry} />
+      <ErrCard what={t("what.active_runs")} error={rq.error} retry={rq.retry} />
+      <ErrCard what={t("what.alerts")} error={aq.error} retry={aq.retry} />
+      <ErrCard what={t("what.junctions")} error={jq.error} retry={jq.retry} />
       {esc.length > 0 && (
         <section className="escs" role="alert">
-          <b>
-            {esc.length} ESCALATED, no ACK in {ESCALATE_S} s
-          </b>
+          <b>{t("control.escalated", { n: esc.length, s: ESCALATE_S })}</b>
           {esc.map((a) => {
             const r = runOf(a.run_id);
             return (
@@ -148,10 +148,10 @@ export default function Control() {
                   <b>
                     {a.junction_id?.split("_").pop().toUpperCase()} {jname(a.junction_id)}
                   </b>
-                  : {dash(a.stage)} alert unacked {dur(age(a))}
+                  : {t("control.alert_unacked", { stage: dash(a.stage), age: dur(age(a)) })}
                   {r ? ` · ${r.vehicle_type} ${dash(tierOf(r), (t) => t.toUpperCase())}` : ""}
                 </span>
-                <Badge cls="esc-b">Escalate to control room</Badge>
+                <Badge cls="esc-b">{t("control.escalate")}</Badge>
               </div>
             );
           })}
@@ -159,13 +159,13 @@ export default function Control() {
       )}
       {older.length > 0 && (
         <details className="older">
-          <summary>Older unacked alerts ({older.length})</summary>
+          <summary>{t("control.older", { n: older.length })}</summary>
           {older.map((a) => (
             <div key={`${a.run_id}/${a.id}`} className="esc muted">
               <b>
                 {a.junction_id?.split("_").pop().toUpperCase()} {jname(a.junction_id)}
               </b>
-              : {dash(a.stage)} · unacked {dur(age(a))}
+              : {dash(a.stage)} · {t("control.unacked", { age: dur(age(a)) })}
             </div>
           ))}
         </details>
@@ -182,7 +182,7 @@ export default function Control() {
         <div className="cpanel">
           <section className="card">
             <label>
-              Corridor
+              {t("cop.corridor")}
               <select value={cid} onChange={(e) => pick(e.target.value)}>
                 {Object.values(corridors).map((c) => (
                   <option key={c.id} value={c.id}>
@@ -191,25 +191,27 @@ export default function Control() {
                 ))}
               </select>
             </label>
-            <h2>Active runs ({runs.length})</h2>
+            <h2>{t("control.active", { n: runs.length })}</h2>
             {rq.loading ? (
-              <p className="muted">Loading…</p>
+              <p className="muted">{t("common.loading")}</p>
             ) : rq.error ? null : runs.length === 0 ? (
-              <p className="muted">No vehicles on the corridor right now</p>
+              <p className="muted">{t("control.no_vehicles")}</p>
             ) : (
               <div className="tscroll">
                 <table className="runs">
                   <thead>
                     <tr>
-                      <th></th>
-                      <th>Plate</th>
-                      <th>Tier</th>
-                      <th>State</th>
-                      <th>Next</th>
+                      <th>
+                        <span className="sr-only">{t("control.th_type")}</span>
+                      </th>
+                      <th>{t("control.th_plate")}</th>
+                      <th>{t("control.th_tier")}</th>
+                      <th>{t("control.th_state")}</th>
+                      <th>{t("control.th_next")}</th>
                       <th>ETA</th>
-                      <th>Stage</th>
-                      <th>Incident</th>
-                      <th>Started</th>
+                      <th>{t("control.th_stage")}</th>
+                      <th>{t("control.th_incident")}</th>
+                      <th>{t("control.th_started")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -217,7 +219,15 @@ export default function Control() {
                       <tr
                         key={r.id}
                         className={`${r.id === sel ? "sel " : ""}st-${r.state}`}
+                        tabIndex={0}
+                        aria-selected={r.id === sel}
                         onClick={() => setSel(r.id === sel ? null : r.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setSel(r.id === sel ? null : r.id);
+                          }
+                        }}
                       >
                         <td>{ICON[r.vehicle_type] ?? "?"}</td>
                         <td>
@@ -242,18 +252,18 @@ export default function Control() {
             )}
             {s && (
               <dl className="detail">
-                <dt>Run</dt>
+                <dt>{t("control.d_run")}</dt>
                 <dd>{s.id}</dd>
-                <dt>Destination</dt>
+                <dt>{t("control.d_dest")}</dt>
                 <dd>{dash(s.destination?.name)}</dd>
-                <dt>Hospital ETA</dt>
+                <dt>{t("control.d_eta")}</dt>
                 <dd>{dash(s.eta_hospital_s, (x) => `${x} s`)}</dd>
-                <dt>Source</dt>
+                <dt>{t("control.d_source")}</dt>
                 <dd>{dash(s.source)}</dd>
-                <dt>Last tick</dt>
+                <dt>{t("control.d_tick")}</dt>
                 <dd>{dash(s.last_tick_at, (x) => clock(x))}</dd>
-                <dt>Patient on board</dt>
-                <dd>{s.patient_on_board ? "yes" : "no"}</dd>
+                <dt>{t("control.d_patient")}</dt>
+                <dd>{s.patient_on_board ? t("common.yes") : t("common.no")}</dd>
               </dl>
             )}
             {s && ["ended", "arrived"].includes(s.state) && <AfterAction runId={s.id} />}
@@ -266,8 +276,8 @@ export default function Control() {
           </section>
 
           <section className="card">
-            <h2>Junction board</h2>
-            <ErrCard what="cop duty roster" error={dq.error} retry={dq.retry} />
+            <h2>{t("control.board")}</h2>
+            <ErrCard what={t("what.duty")} error={dq.error} retry={dq.retry} />
             <div className="jboard">
               {corridor.junctions.map((j) => {
                 const key = `${cid}_${j.id}`;
@@ -287,10 +297,12 @@ export default function Control() {
                       <b>
                         {j.id.toUpperCase()} {j.name}
                       </b>
-                      {hot && <Badge cls="esc-b">ESCALATED</Badge>}
+                      {hot && <Badge cls="esc-b">{t("cop.escalated")}</Badge>}
                     </div>
                     <div className={green ? "ph on" : "ph"}>
-                      {green ? `GREEN for ${ph.approach} until ${clock(ph.until)}` : "Normal cycle"}
+                      {green
+                        ? t("control.green", { approach: ph.approach, until: clock(ph.until) })
+                        : t("control.normal")}
                     </div>
                     {green && <Rationale phase={ph} runs={runs} />}
                     <div className={pres.on ? "" : "muted"}>{pres.text}</div>
@@ -298,15 +310,19 @@ export default function Control() {
                       <div className="ja">
                         <Badge cls={`s-${a.stage}`}>{dash(a.stage)}</Badge>{" "}
                         {a.acked_at ? (
-                          <>ACKed · {((ms(a.acked_at) - ms(a.created_at)) / 1000).toFixed(1)} s</>
+                          <>
+                            {t("control.acked", {
+                              s: ((ms(a.acked_at) - ms(a.created_at)) / 1000).toFixed(1),
+                            })}
+                          </>
                         ) : (
                           <span className={late(a) && age(a) <= RECENT_S ? "bad" : ""}>
-                            unacked {dur(age(a))}
+                            {t("control.unacked", { age: dur(age(a)) })}
                           </span>
                         )}
                       </div>
                     ) : (
-                      <div className="muted">no alerts</div>
+                      <div className="muted">{t("control.no_alerts")}</div>
                     )}
                   </div>
                 );
@@ -315,20 +331,26 @@ export default function Control() {
           </section>
 
           <section className="card">
-            <h2>Report cards</h2>
-            <ErrCard what="report cards" error={pq.error} retry={pq.retry} />
+            <h2>{t("control.reports")}</h2>
+            <ErrCard what={t("what.reports")} error={pq.error} retry={pq.retry} />
             {pq.loading ? (
-              <p className="muted">Loading…</p>
+              <p className="muted">{t("common.loading")}</p>
             ) : pq.error ? null : reports.length === 0 ? (
-              <p className="muted">No completed runs yet.</p>
+              <p className="muted">{t("control.no_reports")}</p>
             ) : (
               reports.map((r) => (
                 <div key={r.id} className="rep">
                   <RunLabel id={r.id} tier={r.confirmed_tier} type={r.vehicle_type} />
-                  <span>{dash(r.minutes_saved, (m) => `${m} min saved`)}</span>
+                  <span>{dash(r.minutes_saved, (m) => t("control.saved", { m }))}</span>
                   <span className="muted">
-                    {dash(r.baseline_s, mmss)} baseline → {dash(r.actual_s, mmss)} actual ·{" "}
-                    {dash(r.junctions_cleared, (n) => plural(n, "junction"))}
+                    {t("control.baseline_actual", {
+                      b: dash(r.baseline_s, mmss),
+                      a: dash(r.actual_s, mmss),
+                    })}{" "}
+                    ·{" "}
+                    {dash(r.junctions_cleared, (n) =>
+                      t(n === 1 ? "control.junction_1" : "control.junction_n", { n }),
+                    )}
                     {r.ack_latency_s?.length ? ` · ACK ${r.ack_latency_s.join(", ")} s` : ""}
                   </span>
                 </div>

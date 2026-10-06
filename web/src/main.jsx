@@ -9,6 +9,8 @@ import Control from "./pages/Control.jsx";
 import Vehicle from "./pages/Vehicle.jsx";
 import Story from "./pages/Story.jsx";
 import { registerSW } from "./pwa.jsx";
+import Shell from "./a11y/Shell.jsx";
+import { t } from "./i18n/index.js";
 
 // ponytail: path switch instead of react-router; the corridor is chosen by ?corridor=blr|hyd
 const routes = {
@@ -25,27 +27,11 @@ const routes = {
 const path = window.location.pathname.replace(/\/$/, "") || "/";
 const [title, Page] = routes[path] ?? [
   "Emergency Green Corridor",
-  () => <p className="muted">Pick a screen above.</p>,
+  () => <p className="muted">{t("app.pick")}</p>,
 ];
-if (path === "/") document.title = "Emergency Green Corridor";
-else document.title = `${title} · Emergency Green Corridor`;
 
 if (import.meta.env.PROD) registerSW();
 
 createRoot(document.getElementById("root")).render(
-  <>
-    <header className="bar">
-      <h1>{path === "/" ? "Emergency Green Corridor" : title}</h1>
-      <nav>
-        {Object.entries(routes).map(([p, [name]]) => (
-          <a key={p} href={p} aria-current={p === path ? "page" : undefined}>
-            {name}
-          </a>
-        ))}
-      </nav>
-    </header>
-    <main>
-      <Page />
-    </main>
-  </>,
+  <Shell routes={routes} path={path} title={title} Page={Page} />,
 );
