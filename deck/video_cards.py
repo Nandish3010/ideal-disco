@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 OUT = "deck/video-cards"
 W, H = 1920, 1080
-BG, INK, AMBER, MUTED, SOFT = "#0B0B0C", "#F5F5F4", "#F59E0B", "#9CA3AF", "#E5E7EB"
+BG, INK, AMBER, MUTED, SOFT = "#0B0D10", "#F5F5F4", "#F59E0B", "#9CA3AF", "#E5E7EB"
 PAD = 160
 
 TITLE = "Emergency Green Corridor"
