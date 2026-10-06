@@ -12,6 +12,7 @@ from google.genai import types
 
 from gemini import offline
 from logctx import log
+from telemetry import traced
 
 PROJECT = os.environ.get("GCP_PROJECT", "green-corridor-2026")
 BUCKET = os.environ.get("MEDIA_BUCKET", "green-corridor-2026-media")
@@ -237,6 +238,7 @@ def localize_alert(text_en: str, lang: str, parts: dict | None = None) -> str:
     return _loc_cache[key]
 
 
+@traced("tts")
 def speak(text: str, lang: str, path: str, parts: dict | None = None) -> tuple:
     """Returns (audio_url, text_local); (None, None) when synthesis fails.
     `path` is the object name, e.g. alerts/{run_id}/{junction}/{stage}-{n}.mp3."""
