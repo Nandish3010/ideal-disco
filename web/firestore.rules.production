@@ -1,0 +1,25 @@
+// Production variant of firestore.rules. Clinical documents are not readable from a browser at all: the transit log,
+// the brief and the after-action report are served by the API (GET /runs/{id}/log, GET /briefs/{id},
+// POST /runs/{id}/after-action) to a vehicle or hospital desk token. The collections the screens need to stay live
+// (runs, alerts, junctions, duty, incidents, reports, audit) stay public read. vehicles and hospital_duty (token hashes)
+// are not readable either. Writes are API-only, as in the demo rules.
+// Deploy: cp firestore.rules.production firestore.rules && firebase deploy --only firestore:rules (restore the demo file after).
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /runs/{run} {
+      allow read: if true;
+      match /alerts/{alert} {
+        allow read: if true;
+      }
+      // runs/{run}/log has no rule: denied
+    }
+    match /{path=**}/alerts/{alert} {
+      allow read: if true; // the cop page's collection-group query
+    }
+    match /{coll}/{id} {
+      allow read: if coll in ['incidents', 'junctions', 'duty', 'reports', 'audit'];
+    }
+    // briefs, after_action, vehicles, hospital_duty and everything else: denied; writes are denied everywhere
+  }
+}

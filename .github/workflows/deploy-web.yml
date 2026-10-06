@@ -52,6 +52,7 @@ jobs:
           VITE_FIREBASE_CONFIG: ${{ vars.VITE_FIREBASE_CONFIG }}
           VITE_MAPS_BROWSER_KEY: ${{ vars.VITE_MAPS_BROWSER_KEY }}
           VITE_API_BASE: ${{ vars.VITE_API_BASE }}
+          VITE_FIREBASE_VAPID_KEY: ${{ vars.VITE_FIREBASE_VAPID_KEY }}
       # Firestore rules are deployed manually with `firebase deploy --only firestore:rules`
       - name: Deploy to Firebase Hosting
         run: cd web && npx firebase-tools@latest deploy --only hosting --project green-corridor-2026 --non-interactive
