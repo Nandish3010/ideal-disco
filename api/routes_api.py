@@ -109,11 +109,13 @@ def exit_move(steps, junction) -> str:
     return "left" if "LEFT" in m else "right" if "RIGHT" in m else "straight"
 
 
-def traffic_to_point(origin, dest, key=None, ttl=20, steps=False, **ctx) -> dict:
+def traffic_to_point(origin, dest, key=None, ttl=20, steps=False, alt=0, **ctx) -> dict:
     """origin, dest = (lat, lng) -> {polyline_points, duration_s, intervals:[{from_m,to_m,speed}], steps, age_s, stale}.
     Result is cached under `key` for `ttl` s (throttle): in this instance's memory, else from the shared Firestore doc
     another instance wrote. On error: cached result <= 60 s old, else no spans (NORMAL), duration_s None, stale True.
-    ctx (run_id, junction_id) goes on every log line."""
+    alt=1 asks for alternatives too and returns the first one (a re-planned route); with fewer routes than that it fails
+    like any other error. Give it its own cache key: the shared doc is per run id. ctx (run_id, junction_id) goes on every
+    log line."""
     now, hit = time.monotonic(), None
     if key is not None:
         mem = _cache.get(key)
@@ -135,6 +137,7 @@ def traffic_to_point(origin, dest, key=None, ttl=20, steps=False, **ctx) -> dict
         "travelMode": "DRIVE",
         "routingPreference": "TRAFFIC_AWARE",
         "extraComputations": ["TRAFFIC_ON_POLYLINE"],
+        **({"computeAlternativeRoutes": True} if alt else {}),
     }
     try:
         r = httpx.post(
@@ -147,7 +150,7 @@ def traffic_to_point(origin, dest, key=None, ttl=20, steps=False, **ctx) -> dict
             },
         )
         r.raise_for_status()
-        res = parse(r.json()["routes"][0])
+        res = parse(r.json()["routes"][alt])
     except (httpx.HTTPError, LookupError) as e:  # timeout, 429, 5xx, ZERO_RESULTS
         log(
             event="routes_error",

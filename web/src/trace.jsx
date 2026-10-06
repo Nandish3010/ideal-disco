@@ -58,3 +58,28 @@ export function Rationale({ phase, runs, last }) {
     <LastSequence last={last} runs={runs} />
   );
 }
+
+// The re-planner's latest decision for a junction (junctions/{id}.replan): what it did and why, the tools it looked at, and the
+// safety check's note when its own plan was rejected and control was escalated instead.
+export function PlanCard({ replan }) {
+  const plan = replan?.plan;
+  if (!plan) return null;
+  const guard = replan.trace?.find((e) => e.guard);
+  return (
+    <div className="rat plan">
+      <div>
+        <b>Re-planner</b> · {replan.action_text ?? plan.action}
+        {hhmm(replan.decided_at) && <span className="muted"> · {hhmm(replan.decided_at)}</span>}
+      </div>
+      {plan.reason && <i>{plan.reason}</i>}
+      <ol className="muted">
+        {replan.trace
+          ?.filter((e) => !e.guard)
+          .map((e, i) => (
+            <li key={i}>{traceLine(e)}</li>
+          ))}
+      </ol>
+      {guard && <div className="bad">{traceLine(guard)}</div>}
+    </div>
+  );
+}

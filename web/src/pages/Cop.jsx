@@ -267,6 +267,7 @@ function Report({ corridor, junction }) {
   const [err, setErr] = useState(null);
   const [note, setNote] = useState("");
   const [text, setText] = useState("");
+  const replan = useDoc(res ? `junctions/${corridor}_${junction.id}` : null).data?.replan; // written a few seconds after the note
   async function send(extra) {
     setBusy(true);
     setErr(null);
@@ -346,6 +347,7 @@ function Report({ corridor, junction }) {
           <p>
             <b>{res.action_text}</b>
           </p>
+          {replan?.note_n === res.n && <p>Re-planner: {replan.action_text}</p>}
           {res.transcript_en && (
             <p className="muted">{t("cop.heard", { text: res.transcript_en })}</p>
           )}

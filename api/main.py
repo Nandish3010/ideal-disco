@@ -711,21 +711,6 @@ def alert_text(run, stage, jam_m, approach, exit_move, eta_s):
     return f"{head}{who} · {queue} on your {COMPASS.get(approach, approach)} approach · {move} · arrives in {arrives}"
 
 
-def contender(run_id, r, eta_s, approach):
-    """Priority-engine row if this run may preempt, else None. Ambulances need the crew's confirmed tier and a patient on
-    board; fire and police need an incident (always true for a started run)."""
-    vt = r["vehicle_type"]
-    if vt == "ambulance":
-        if not (r.get("confirmed_tier") and r.get("patient_on_board")):
-            return None
-        tier = r["confirmed_tier"]
-    elif r.get("incident_id"):
-        tier = r.get("confirmed_tier") or acuity.tier({"incident_id": r["incident_id"]}, vt)
-    else:
-        return None
-    return {"run_id": run_id, "vehicle_type": vt, "tier": tier, "eta_s": eta_s, "approach": approach}
-
-
 def defer(bg: BackgroundTasks, fn, *args) -> None:
     """Run fn after the response is sent (Cloud Run runs with --no-cpu-throttling, so the work continues). An error is
     logged, never raised: the tick it belongs to has already been answered."""
@@ -792,7 +777,7 @@ def cop_blocked(jid, now) -> bool:
 
 
 def preempt(run_id, run, jid, approach, eta_s, clear_s, stage, lang, bg, blocked=False):
-    me = contender(run_id, run, eta_s, approach)
+    me = priority.contender(run_id, run, eta_s, approach)
     if me is None:
         return None
     rows = [me]
@@ -801,7 +786,7 @@ def preempt(run_id, run, jid, approach, eta_s, clear_s, stage, lang, bg, blocked
     ):
         r = d.to_dict()
         if d.id != run_id and r.get("state") == "en_route" and jid in (r.get("ahead") or {}):
-            c = contender(d.id, r, r["ahead"][jid]["eta_s"], r["ahead"][jid]["approach"])
+            c = priority.contender(d.id, r, r["ahead"][jid]["eta_s"], r["ahead"][jid]["approach"])
             if c:
                 rows.append(c)
     seq = priority.sequence(rows)
@@ -998,23 +983,31 @@ def location(
         or run.get("destination")
         or corridor["hospital"]
     )
+    # route_override (set by the re-planner): a live run follows Routes' first alternative from now on, a replay's ETA moves
+    # by the alternative's recorded delta (the replay driver follows route_override.points)
+    ov = run.get("route_override") or {}
     if scenario:
         hosp = {
             "polyline_points": [],
             "steps": [],
             "age_s": 0,
-            "duration_s": distance_m(me, (dest["lat"], dest["lng"])) / max(observed, 3),
+            "duration_s": distance_m(me, (dest["lat"], dest["lng"])) / max(observed, 3)
+            + ov.get("eta_delta_s", 0),
         }
     else:
-        hosp = routes_api.traffic_to_point(
-            me,
-            (dest["lat"], dest["lng"]),
-            key=(loc.run_id, "route"),
-            ttl=1e9 if run["state"] == "off_route" else ROUTE_TTL_S,
-            steps=True,
-            run_id=loc.run_id,
-            junction_id=None,
-        )
+        for alt in (1, 0) if ov else (0,):  # no usable alternative any more: the plain route again
+            hosp = routes_api.traffic_to_point(
+                me,
+                (dest["lat"], dest["lng"]),
+                key=(f"{loc.run_id}-alt" if alt else loc.run_id, "route"),
+                ttl=1e9 if run["state"] == "off_route" else ROUTE_TTL_S,
+                steps=True,
+                alt=alt,  # ponytail: asked again from wherever the vehicle is, so it can drift to another alternative
+                run_id=loc.run_id,
+                junction_id=None,
+            )
+            if hosp["duration_s"] is not None:
+                break
     pts = hosp["polyline_points"]
     v_along, off = locate(pts, me) if pts else (0.0, 0)
     route_m = sum(distance_m(a, b) for a, b in zip(pts, pts[1:], strict=False))
@@ -1344,9 +1337,12 @@ class CopNoteReq(BaseModel):
     "/cop-note",
     **meta("corridor", "The cop's spoken or typed report to control", CopNoteOut, 400, 401, 403, 404, 422),
 )
-def cop_note(n: CopNoteReq, x_device_token: str = Header("", description=apidoc.TOKEN_DOC)):
+def cop_note(
+    n: CopNoteReq, bg: BackgroundTasks, x_device_token: str = Header("", description=apidoc.TOKEN_DOC)
+):
     """The on-duty cop's spoken or typed report. Gemini only fills the {kind, extra_seconds, reason} schema; what happens
-    next is copnote.apply, plain rules."""
+    next is copnote.apply, plain rules (a cannot_clear or a delay over 90 s then hands the junction to the re-planner agent in
+    the background)."""
     key = junction_key(n.corridor, n.junction_id)
     if isinstance(key, JSONResponse):
         return key
@@ -1363,7 +1359,7 @@ def cop_note(n: CopNoteReq, x_device_token: str = Header("", description=apidoc.
     except ExtractionFailed:
         log(event="cop_note_extraction_failed", junction_id=key)
         return err(422, "extraction_failed", fallback="text")
-    return copnote.apply(db, key, note, datetime.now(UTC))
+    return copnote.apply(db, key, note, datetime.now(UTC), bg)
 
 
 class HospitalDuty(BaseModel):

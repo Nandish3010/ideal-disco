@@ -4,9 +4,11 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from fastapi import BackgroundTasks
 from google.cloud.firestore import transactional
 from google.cloud.firestore_v1.base_query import FieldFilter
 
+import replanner
 from logctx import log
 
 KINDS = {"delay", "cleared", "cannot_clear", "other"}
@@ -71,8 +73,9 @@ def duration(s: int) -> str:
     return f"{s // 60} min" if s % 60 == 0 else f"{s} s"
 
 
-def apply(db, jid: str, raw: dict, now: datetime) -> dict[str, Any]:
-    """Store the note and act on it. jid is `blr_j3`. Returns what the cop page shows."""
+def apply(db, jid: str, raw: dict, now: datetime, bg: BackgroundTasks | None = None) -> dict[str, Any]:
+    """Store the note and act on it. jid is `blr_j3`. Returns what the cop page shows. A cannot_clear or a delay over 90 s
+    also schedules the re-planner on `bg` once the rule effects above are written (replanner.run, which never raises)."""
     note = normalise(raw)
     kind, extra = note["kind"], note["extra_seconds"]
     duty_ref = db.collection("duty").document(jid)
@@ -151,6 +154,10 @@ def apply(db, jid: str, raw: dict, now: datetime) -> dict[str, Any]:
     )
     duty_ref.collection("notes").document(str(n)).set({**note, "t": now, "device_id": device, "effects": fx})
     log(event="cop_note", junction_id=jid, kind=kind, extra_seconds=extra, **fx)
+    run_ids = sorted({a.reference.path.split("/")[1] for a in alerts})
+    trigger = kind == "cannot_clear" or (kind == "delay" and (extra or 0) > ESCALATE_OVER_S)
+    if bg and run_ids and trigger and not replanner.disabled():
+        bg.add_task(replanner.run, jid, n, note, run_ids)
     return {**note, "n": n, "effects": fx, "action_text": action_text(kind, extra, fx)}
 
 
