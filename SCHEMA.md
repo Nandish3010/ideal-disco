@@ -262,6 +262,9 @@ Gemini response schema:
   "age": 58,
   "sex": "male",
   "complaint": "chest pain",
+  "complaint_category": "chest_pain",
+  "burn_percent": null,
+  "bleeding_severity": null,
   "conscious": true,
   "breathing": true,
   "vitals": { "sbp": 85, "dbp": 50, "hr": 110, "spo2": 91, "rr": 22, "temp": 36.8 },
@@ -271,6 +274,17 @@ Gemini response schema:
 }
 ```
 Unknown values are `null` (`age` is an integer, `sex` free text as said). Gemini never returns a score.
+`complaint` stays free text as spoken. `complaint_category` is the clinically closest match for what was said, one of `chest_pain | stroke_signs | major_bleeding | moderate_bleeding | burns | breathing_difficulty | fracture | unconscious | seizure | allergic_reaction | abdominal_pain | minor_injury | other` (`other` when unsure; `null` is treated like `other`). `burn_percent` (integer, body surface area) and `bleeding_severity` (`minor | moderate | major`) are filled only when stated or plainly described, else `null`. Gemini never infers vitals and never returns a score.
+
+Tier lookup (`api/acuity.py`, deterministic; ambulance runs). Any vitals or consciousness rule below sets the tier on its own, whatever the category:
+
+| Tier | Rule |
+|------|------|
+| `critical` | `conscious` or `breathing` is `false`; SBP < 90; SpO2 < 90; trapped persons > 0; category `chest_pain`, `stroke_signs`, `major_bleeding`, `unconscious` or `seizure`; `bleeding_severity: major`; `allergic_reaction` with `breathing: false` or an airway word in `complaint` (breath, wheeze, throat, airway, swelling); `burns` with `burn_percent` >= 20 or face / airway / inhalation in `complaint` |
+| `urgent` | any vital outside its range (SBP 90-180, DBP 50-110, HR 50-110, SpO2 94-100, RR 10-24, temp 36.0-38.5); category `moderate_bleeding`, `breathing_difficulty` or `fracture`; `bleeding_severity: moderate`; `burns` below 20 % (or no percentage given); `abdominal_pain` with any abnormal vital |
+| `stable` | everything else (`minor_injury`, `abdominal_pain` with normal vitals, `allergic_reaction` without an airway sign, `other`) |
+
+When `complaint_category` is missing or `other`, the lookup falls back to matching fixed phrases in `complaint` (chest pain, stroke signs, major bleeding, burns > 20 % are `critical`; fracture, moderate bleeding, breathing difficulty are `urgent`). Fire runs are `fire_with_trapped` (trapped persons > 0) or `fire`; police runs `police_with_incident` (an incident is set) or `police`.
 For an image Gemini reads only values visible on the screen, returns `null` for anything not legible, never infers a diagnosis, and sets `transcript_en` to a one-line description of the monitor (`"Monitor: HR 112, SpO2 89%, NIBP 86/54"`); the vitals feed the same acuity lookup (SpO2 < 90 or SBP < 90 is `critical`).
 Models: all extraction (text, audio, image) uses `GEMINI_MODEL` (`gemini-3.1-flash-lite`, about 3x faster than `gemini-3-flash-preview` on the same clip with the same fields). Attempts per call: `GEMINI_MODEL` twice, then `GEMINI_FALLBACK_MODEL` (`gemini-3-flash-preview`) once. Per-attempt timeout is 15 s for audio and images, 8 s for text.
 
