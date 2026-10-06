@@ -44,6 +44,8 @@ def load_shared():
 
 
 DATA, EV = load_shared()
+DATA["cover_stat"] = "of Karnataka 108 cardiac, stroke, respiratory calls missed the 10-minute target"
+DATA["cover_cite"] = "Source: CAG audit of Karnataka 108 EMS, 2014–19"
 
 # ---------- palette and type ----------
 def rgb(h):
@@ -237,7 +239,7 @@ def word_count(slide):
     """Body words: all text except masthead, footer, lede, 'Figure*' shapes and display numerals (runs >= 30 pt)."""
     n = 0
     for sh in slide.shapes:
-        if sh.name in ("Masthead eyebrow", "Title", "Lede", "Footer", "Page") or sh.name.startswith("Figure") or not sh.has_text_frame:
+        if sh.name in ("Masthead eyebrow", "Cover eyebrow", "Title", "Lede", "Footer", "Page") or sh.name.startswith("Figure") or not sh.has_text_frame:
             continue
         for p in sh.text_frame.paragraphs:
             n += sum(len(re.findall(r"[A-Za-z0-9₹]+(?:[.,][0-9]+)*", r.text)) for r in p.runs if r.font.size is None or r.font.size.pt < 30)
@@ -251,8 +253,11 @@ text(s, MX, 1.9, 11.5, 0.3, DATA["eyebrow"], name="Cover eyebrow", size=12, bold
 line(s, MX, 2.4, MX + 0.9, 2.4, color=AMBER, w=3)
 text(s, MX, 2.75, 6.3, 1.9, "Emergency Green Corridor", name="Cover title", size=54, bold=True, color=rgb("F5F5F4"))
 text(s, MX, 4.75, 6.0, 0.9, DATA["tagline"], name="Cover tagline", size=22, color=ON_DARK)
-text(s, MX, 6.2, 6.2, 0.3, "Team Green Corridor · Nandish · green-corridor-2026.web.app", name="Cover byline", size=13, color=rgb("9CA3AF"))
-shot(s, "sim-split.png", 7.2, 2.95, 5.45, maxw=1500)
+text(s, MX, 6.2, 6.2, 0.3, "Nandish · green-corridor-2026.web.app", name="Cover byline", size=13, color=rgb("9CA3AF"))
+st = box(s, 7.45, 2.5, 5.2, 3.3, fill=TILE, line=None, radius=0.16, name="Cover stat")
+shape_text(st, [[("60 %+", {"size": 72, "bold": True, "color": AMBER})], [(DATA["cover_stat"], {"size": 17, "color": ON_DARK})]],
+           anchor=MSO_ANCHOR.MIDDLE, margins=(0.4, 0.2, 0.35, 0.2), after=6)
+text(s, 7.45, 5.95, 5.2, 0.6, DATA["cover_cite"], name="Cover citation", size=11, color=rgb("9CA3AF"))
 
 # 2 team details
 s = content_slide("Team details", "A solo entry, built end to end by one contributor.")
@@ -273,23 +278,28 @@ text(s, MX + 0.4, TOP + 3.1, CW - 0.8, 1.3, "Sustainability & Social Impact: eme
 # 3 brief
 s = content_slide("Brief about the idea", DATA["headlines"][3])
 tw3, th3 = (CW - 0.4) / 3, 3.4
-for i, (num, lab, unit) in enumerate([
-    (DATA["saved_min"], "saved on the scripted scenario", "min"),
-    (DATA["lead_long_min"], f"warning at a {DATA['queue_m']} m queue", "min"),
-    (str(EV["tier"]), f"tier accuracy on {EV['clips']} synthetic clips", "%"),
+for i, (num, lab, unit, amber) in enumerate([
+    ("≈ 7.9", "saved for the critical ambulance", "min", True),
+    (f"{DATA['lead_long_min']} vs {DATA['lead_short_min']}", f"warning at a {DATA['queue_m']} m queue vs a 100 m queue", "min", False),
+    (DATA["saved_min"], "three-vehicle total, simulated baseline", "min", False),
 ]):
-    stat_tile(s, MX + i * (tw3 + 0.2), TOP + 0.1, tw3, th3, num, lab, unit, num_size=64)
+    stat_tile(s, MX + i * (tw3 + 0.2), TOP + 0.1, tw3, th3, num, lab, unit, amber=amber, num_size=60)
 text(s, MX, TOP + th3 + 0.45, CW, 0.3, DATA["brief_caption"], size=13, color=GREY)
 
 # 4 opportunities
 s = content_slide("Opportunities", DATA["headlines"][4], sub="(how it differs / how it solves / USP)")
 cw3, ch3 = (CW - 0.4) / 3, 4.0
-for i, (g, label, ln) in enumerate(DATA["opp"]):
+OPP = [("≠", "How it differs", "Warning sized to the queue", "vs fixed-radius alerts"),
+       ("✓", "How it solves", "Queue cleared before the siren", "vs manual green corridors"),
+       ("★", "USP", "Rules decide, Gemini explains; no hardware", "vs IR/GPS preemption")]
+for i, (g, label, ln, vs) in enumerate(OPP):
     x, dark = MX + i * (cw3 + 0.2), i == 2
     box(s, x, TOP + 0.1, cw3, ch3, fill=TILE if dark else WHITE, line=None if dark else BORDER, radius=0.14, shadow=not dark, name="Card")
-    glyph_circle(s, x + 0.35, TOP + 0.45, 0.7, g, fill=AMBER if dark else TILE, color=INK if dark else AMBER, size=24)
-    text(s, x + 0.35, TOP + 1.4, cw3 - 0.7, 0.35, label, size=16, bold=True, color=AMBER if dark else AMBER_D, caps=True, spc=80)
-    text(s, x + 0.35, TOP + 1.95, cw3 - 0.7, 1.8, ln, size=24, bold=True, color=WHITE if dark else INK)
+    glyph_circle(s, x + 0.35, TOP + 0.4, 0.7, g, fill=AMBER if dark else TILE, color=INK if dark else AMBER, size=24)
+    text(s, x + 0.35, TOP + 1.3, cw3 - 0.7, 0.35, label, size=16, bold=True, color=AMBER if dark else AMBER_D, caps=True, spc=80)
+    text(s, x + 0.35, TOP + 1.8, cw3 - 0.7, 1.4, ln, size=24, bold=True, color=WHITE if dark else INK)
+    v = box(s, x + 0.35, TOP + 3.25, cw3 - 0.7, 0.45, fill=AMBER_PALE if not dark else rgb("2A2D33"), line=None, radius=0.22, name="Versus chip")
+    shape_text(v, [vs], size=14, bold=True, color=AMBER_D if not dark else AMBER, anchor=MSO_ANCHOR.MIDDLE, margins=(0.2, 0, 0.1, 0))
 
 # 5 features
 s = content_slide("List of features", DATA["headlines"][5])
@@ -340,14 +350,13 @@ ph_h, fy = 3.65, TOP + 0.05
 def phone(slide, fn, x):
     buf, (iw, ih) = prep(IMG + fn, maxw=900)
     pw = ph_h * iw / ih
-    f = box(slide, x, fy, pw + 0.2, ph_h + 0.2, fill=rgb("1B1C20"), line=rgb("3A3C42"), lw=1, radius=0.26, shadow=True, name="Phone frame")
-    p = slide.shapes.add_picture(buf, Inches(x + 0.1), Inches(fy + 0.1), Inches(pw), Inches(ph_h))
-    p.name = "Screenshot"
+    box(slide, x, fy, pw + 0.2, ph_h + 0.2, fill=rgb("1B1C20"), line=rgb("3A3C42"), lw=1, radius=0.26, shadow=True, name="Phone frame")
+    slide.shapes.add_picture(buf, Inches(x + 0.1), Inches(fy + 0.1), Inches(pw), Inches(ph_h)).name = "Screenshot"
     return pw + 0.2
 
 
 x = MX + 0.3
-for fn, cap in DATA["wire"][:2]:
+for fn, cap in (("triage-gemini.png", "Voice triage"), ("cop.png", "PREPARE alert")):
     wd = phone(s, fn, x)
     text(s, x - 0.4, fy + ph_h + 0.38, wd + 0.8, 0.3, cap, size=13, bold=True, color=MID, align=PP_ALIGN.CENTER)
     x += wd + 0.7
@@ -356,62 +365,71 @@ scr_w = lap_w - 0.24
 scr_h = scr_w * 9 / 16
 lap_y = fy + (ph_h + 0.2 - (scr_h + 0.24)) / 2
 box(s, x, lap_y, lap_w, scr_h + 0.24, fill=rgb("1B1C20"), line=rgb("3A3C42"), lw=1, radius=0.12, shadow=True, name="Laptop frame")
-buf, _ = prep(IMG + DATA["wire"][2][0], (0.5, 0.5, 0.5), 16 / 9)
+buf, _ = prep(IMG + "hospital-handover.png", (0.5, 0.45, 0.8), 16 / 9)
 s.shapes.add_picture(buf, Inches(x + 0.12), Inches(lap_y + 0.12), Inches(scr_w), Inches(scr_h)).name = "Screenshot"
 box(s, x - 0.25, lap_y + scr_h + 0.24, lap_w + 0.5, 0.12, fill=rgb("3A3C42"), line=None, radius=0.06, name="Laptop base")
-text(s, x - 0.4, fy + ph_h + 0.38, lap_w + 0.8, 0.3, DATA["wire"][2][1], size=13, bold=True, color=MID, align=PP_ALIGN.CENTER)
+text(s, x - 0.4, fy + ph_h + 0.38, lap_w + 0.8, 0.3, "Hospital handover", size=13, bold=True, color=MID, align=PP_ALIGN.CENTER)
 text(s, MX, TOP + 4.5, CW, 0.3, DATA["wire_caption"], size=12, color=GREY, align=PP_ALIGN.CENTER)
 
 # 8 architecture
 s = content_slide("Architecture", DATA["headlines"][8])
 arch = os.path.join(tempfile.gettempdir(), "gc-architecture-deck.png")
-subprocess.run(["npx", "-y", "sharp-cli", "-i", IMG + "architecture.svg", "-o", arch, "--density", "300", "resize", "2400"], check=True, capture_output=True)
+subprocess.run(["npx", "-y", "sharp-cli", "-i", IMG + "architecture-deck.svg", "-o", arch, "--density", "300", "resize", "2400"], check=True, capture_output=True)
 aw, ah = Image.open(arch).size
-dw = min(CW, 4.15 * aw / ah)
+dw = min(CW, 4.3 * aw / ah)
 pic = s.shapes.add_picture(arch, Inches(MX + (CW - dw) / 2), Inches(TOP - 0.05), Inches(dw), Inches(dw * ah / aw))
 pic.name = "Figure architecture"
-text(s, MX, TOP + 4.3, CW, 0.4, DATA["arch_caption"], size=12, color=GREY)
+text(s, MX, TOP + 4.4, CW, 0.4, DATA["arch_caption"], size=12, color=GREY)
 
 # 9 technologies
 s = content_slide("Technologies", DATA["headlines"][9], sub="(Google Cloud)")
-rstep, rh = 1.0, 0.8
+TECH = [("AI & language", ["Gemini on Vertex AI", "Google ADK", "Cloud Translation"]),
+        ("Maps & speech", ["Routes API", "Text-to-Speech", "Cloud Storage"]),
+        ("Run & data", ["Cloud Run", "Firestore", "BigQuery"]),
+        ("Delivery", ["Firebase Hosting", "Cloud Build", "Secret Manager"])]
+rstep, rh = 0.88, 0.7
 pw3 = (CW - 2.6 - 0.4) / 3
-for r_, (grp, items) in enumerate(DATA["tech"]):
+for r_, (grp, items) in enumerate(TECH):
     y = TOP + 0.05 + r_ * rstep
-    box(s, MX, y + 0.28, 0.24, 0.24, fill=AMBER, line=None, shape=MSO_SHAPE.OVAL, name="Marker")
+    box(s, MX, y + 0.23, 0.24, 0.24, fill=AMBER, line=None, shape=MSO_SHAPE.OVAL, name="Marker")
     text(s, MX + 0.45, y, 2.1, rh, grp, size=18, bold=True, anchor=MSO_ANCHOR.MIDDLE)
     for c_, nm in enumerate(items):
         p_ = box(s, MX + 2.6 + c_ * (pw3 + 0.2), y, pw3, rh, radius=0.1, name="Pill")
         shape_text(p_, [nm], size=18, anchor=MSO_ANCHOR.MIDDLE, margins=(0.25, 0, 0.1, 0))
-text(s, MX, TOP + 4.15, CW, 0.3, DATA["tech_also"], size=12, color=GREY)
+by = TOP + 0.05 + 4 * rstep + 0.1
+bq = box(s, MX, by, CW, 0.7, fill=PALE, line=rgb("9CA3AF"), dash=True, radius=0.1, name="BigQuery ML note")
+shape_text(bq, [[("BigQuery ML  ", {"bold": True}), ("pipeline in place; model retrained on peak rows before submission", {"color": MID})]], size=16, anchor=MSO_ANCHOR.MIDDLE, margins=(0.25, 0, 0.2, 0))
 
 # 10 cost
 s = content_slide("Estimated implementation cost", DATA["headlines"][10])
 total = sum(c[2] for c in DATA["cost"])
-basis = {"Routes": "3 calls/min × 60 × ₹0.85", "Gemini": "17 calls × ₹0.02", "Text-to-Speech": "~1,000 chars × ₹1.30/1,000"}
-rows = [("Service", "Basis", "₹ per hour")] + [(a_, basis[a_], f"₹{v:.0f}" if v >= 10 else f"₹{v:.2f}") for a_, _b, v in DATA["cost"]]
-tbl_w, rh_ = 7.2, 0.85
-cols = (1.9, 3.7, 1.6)
-for ri, row in enumerate(rows):
-    y, cx = TOP + 0.1 + ri * rh_, MX
+run20 = total * 20 / 60
+tw3 = (CW - 0.4) / 3
+stat_tile(s, MX, TOP + 0.1, tw3, 1.85, f"≈ ₹{total:.0f}", "per vehicle-hour (estimate)", amber=True, num_size=44)
+stat_tile(s, MX + tw3 + 0.2, TOP + 0.1, tw3, 1.85, f"≈ ₹{round(run20, -1):.0f}", "per 20-min run", num_size=44)
+stat_tile(s, MX + 2 * (tw3 + 0.2), TOP + 0.1, tw3, 1.85, f"≈ ₹{round(round(run20, -1) * 100, -2):,.0f}", "city-month at 100 runs (illustrative)", num_size=44)
+CROWS = [("Routes", "3/min × 60 × ₹0.85", f"₹{DATA['cost'][0][2]:.0f}"), ("Gemini", "17 × ₹0.02", f"₹{DATA['cost'][1][2]:.2f}"),
+         ("Text-to-Speech", "", f"₹{DATA['cost'][2][2]:.2f}")]
+cols, rh_ = (2.6, 3.6, 1.6), 0.62
+for ri, row in enumerate(CROWS):
+    y, cx = TOP + 2.25 + ri * rh_, MX
     for ci, val in enumerate(row):
-        text(s, cx + 0.1, y, cols[ci] - 0.2, rh_, val, name="Cost cell", size=16, bold=(ri == 0 or ci == 0), color=GREY if ri == 0 else INK,
-             anchor=MSO_ANCHOR.MIDDLE, align=PP_ALIGN.RIGHT if ci == 2 else PP_ALIGN.LEFT)
+        text(s, cx + 0.1, y, cols[ci] - 0.2, rh_, val, name="Cost cell", size=16, bold=(ci == 0), anchor=MSO_ANCHOR.MIDDLE, align=PP_ALIGN.RIGHT if ci == 2 else PP_ALIGN.LEFT)
         cx += cols[ci]
-    line(s, MX, y + rh_, MX + tbl_w, y + rh_, color=BORDER, w=0.75)
-stat_tile(s, MX + tbl_w + 0.45, TOP + 0.1, CW - tbl_w - 0.45, 3.4, f"≈ ₹{total:.0f}", "per vehicle-hour (estimate)", amber=True, num_size=54)
-text(s, MX, TOP + 0.1 + 4 * rh_ + 0.25, CW, 0.3, "List prices; Routes is ~98 %.", size=13, color=GREY)
+    line(s, MX, y + rh_, MX + sum(cols), y + rh_, color=BORDER, w=0.75)
+lv = box(s, MX + sum(cols) + 0.4, TOP + 2.25, CW - sum(cols) - 0.4, 3 * rh_, fill=AMBER_PALE, line=None, radius=0.12, name="Lever")
+shape_text(lv, [[("Lever: cache Routes beyond today's 20 s", {"bold": True})]], size=16, anchor=MSO_ANCHOR.MIDDLE, margins=(0.25, 0.1, 0.2, 0.1), after=4)
 
-# 11 snapshots (2x2)
+# 11 snapshots
 s = content_slide("Snapshots of the prototype", DATA["headlines"][11])
-snaps = [("control.png", (0.5, 0.34, 1.0), "Control room"), ("sim-split.png", (0.5, 0.40, 1.0), "Replay simulator"),
-         ("agent-trace.png", (0.5, 0.70, 0.45), "Routing trace"), ("hospital.png", (0.5, 0.40, 0.42), "Hospital log")]
-iw_, ih_ = (CW - 0.4) / 2, 1.85
-for i, (fn, spec, cap) in enumerate(snaps):
-    r_, c_ = divmod(i, 2)
-    x, y = MX + c_ * (iw_ + 0.4), TOP + 0.05 + r_ * (ih_ + 0.5)
-    shot(s, fn, x, y, iw_, h=ih_, spec=spec)
-    text(s, x, y + ih_ + 0.1, iw_, 0.3, cap, size=13, bold=True, color=MID)
+lw_, lh_ = 6.6, 3.7
+shot(s, "sim-split.png", MX, TOP + 0.05, lw_, h=lh_, spec=(0.5, 0.45, 1.0))
+text(s, MX, TOP + 0.05 + lh_ + 0.1, lw_, 0.3, "Replay simulator", size=13, bold=True, color=MID)
+rx, rw_ = MX + lw_ + 0.4, CW - lw_ - 0.4
+shot(s, "control.png", rx, TOP + 0.05, rw_, h=1.6, spec=(0.5, 0.34, 1.0))
+text(s, rx, TOP + 1.75, rw_, 0.3, "Control room", size=13, bold=True, color=MID)
+shot(s, "cop-alert.png", rx, TOP + 2.2, rw_, h=1.55, spec=(0.5, 0.30, 1.0))
+text(s, rx, TOP + 3.85, rw_, 0.3, "STOP alert, spoken", size=13, bold=True, color=MID)
 
 # 12 snapshots: agent trace
 s = content_slide("Snapshots of the prototype", "Live routing trace: Jayadeva chosen, two alternatives rejected", sub="(routing agent)")
@@ -426,17 +444,16 @@ text(s, MX + 6.9, TOP + 3.65, CW - 6.9, 0.6, "The trace as shown in /vehicle.", 
 
 # 13 performance
 s = content_slide("Performance report / benchmarking", DATA["headlines"][12])
-tw4 = (CW - 0.6) / 4
+tw4 = (CW - 0.4) / 3
 for i, (num, lab, unit) in enumerate([
-    (str(EV["field"]), "field accuracy", "%"), (str(EV["tier"]), "tier accuracy", "%"),
-    (EV["latency"], "mean extraction", "s"), (f"{DATA['lead_long_min']} vs {DATA['lead_short_min']}", "min lead, long vs short", ""),
+    (str(EV["field"]), "field accuracy", "%"), (str(EV["tier"]), "tier accuracy", "%"), (EV["latency"], "mean extraction", "s"),
 ]):
-    stat_tile(s, MX + i * (tw4 + 0.2), TOP + 0.05, tw4, 1.9, num, lab, unit, num_size=48)
-text(s, MX, TOP + 2.1, CW, 0.3, f"{EV['clips']} synthetic clips, not field data. Before the fix: 87 % / 73 %.", size=12, color=GREY)
+    stat_tile(s, MX + i * (tw4 + 0.2), TOP + 0.05, tw4, 1.9, num, lab, unit, num_size=54)
+text(s, MX, TOP + 2.1, CW, 0.5, f"{EV['clips']} synthetic clips, the ones the fix targeted; real clips pending. Before the fix: 87 % / 73 %.", size=12, color=GREY)
 stat_tile(s, MX, TOP + 2.65, 5.6, 1.8, DATA["load"][0], "/location p50 / p95, offline", unit="ms", num_size=48)
-box(s, MX + 5.9, TOP + 2.65, CW - 5.9, 1.8, fill=PALE, line=None, radius=0.14, name="Card")
-text(s, MX + 6.25, TOP + 2.65, CW - 6.6, 1.8, [[("344", {"bold": True, "size": 24}), (" Python · ", {}), ("138", {"bold": True, "size": 24}), (" web tests", {})],
-                                           [("98 %", {"bold": True, "size": 24}), (" coverage", {})]], size=18, anchor=MSO_ANCHOR.MIDDLE, after=6)
+t = box(s, MX + 5.9, TOP + 2.65, CW - 5.9, 1.8, fill=TILE, line=None, radius=0.14, name="Stat tile")
+shape_text(t, [[("344", {"bold": True, "size": 32, "color": AMBER}), (" Python · ", {"color": ON_DARK}), ("138", {"bold": True, "size": 32, "color": AMBER}), (" web tests", {"color": ON_DARK})],
+               [("98 %", {"bold": True, "size": 32, "color": AMBER}), (" coverage", {"color": ON_DARK})]], size=18, anchor=MSO_ANCHOR.MIDDLE, margins=(0.3, 0.1, 0.2, 0.1), after=6)
 
 # 14 additional details / future development
 s = content_slide("Additional details / future development", DATA["headlines"][13])
@@ -473,7 +490,7 @@ for i, key in enumerate(("github", "video", "app")):
         qp.click_action.hyperlink.address = url
         text(s, x + 0.2, TOP + 3.65, tw_ - 0.4, 0.4, shown, size=14, bold=True, align=PP_ALIGN.CENTER)
     else:
-        text(s, x + 0.3, TOP + 1.5, tw_ - 0.6, 1.0, shown, size=44, bold=True, color=GREY, align=PP_ALIGN.CENTER)
+        text(s, x + 0.3, TOP + 1.4, tw_ - 0.6, 1.4, "[link + QR at submission]", size=28, bold=True, color=GREY, align=PP_ALIGN.CENTER)
 
 # 16 closing (dark)
 s = new_slide(dark=True)

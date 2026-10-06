@@ -12,7 +12,7 @@ python3 deck/build_deck.py --pdf    # also the PDF via PowerPoint (AppleScript),
 python3 deck/video_cards.py         # 1920x1080 title cards into deck/video-cards/ (same palette)
 ```
 
-The build prints the body-word count per slide (target 35).
+The build prints the body-word count per slide (target 35; slides 9 and 10 run a few over). The deck uses `img/architecture-deck.svg` (merged clients, grouped Google services, larger type); `img/architecture.svg` stays for the fallback deck. Slide 10's city-month tile is an illustration (100 runs x about 50 rupees), not a measured volume. No /story capture exists yet, so the snapshots slide has three images.
 
 ## Fill before submitting
 
