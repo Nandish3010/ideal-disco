@@ -58,7 +58,7 @@ INK, MID, GREY, BORDER, PALE, WHITE, ON_DARK = rgb("111111"), rgb("374151"), rgb
 SW, SH, MX = 13.333, 7.5, 0.7
 CW = SW - 2 * MX
 TOP = 2.15  # content top
-N_SLIDES = 16
+N_SLIDES = 17
 
 prs = Presentation()
 prs.slide_width, prs.slide_height = Inches(SW), Inches(SH)
@@ -399,7 +399,7 @@ for r_, (grp, items) in enumerate(TECH):
         shape_text(p_, [nm], size=18, anchor=MSO_ANCHOR.MIDDLE, margins=(0.25, 0, 0.1, 0))
 by = TOP + 0.05 + 4 * rstep + 0.1
 bq = box(s, MX, by, CW, 0.7, fill=PALE, line=rgb("9CA3AF"), dash=True, radius=0.1, name="BigQuery ML note")
-shape_text(bq, [[("BigQuery ML  ", {"bold": True}), ("pipeline in place; model retrained on peak rows before submission", {"color": MID})]], size=16, anchor=MSO_ANCHOR.MIDDLE, margins=(0.25, 0, 0.2, 0))
+shape_text(bq, [[("BigQuery ML  ", {"bold": True}), ("pipeline in place; peak-hour spans logging on Cloud Scheduler since 6 Oct; model retrained before submission", {"color": MID})]], size=16, anchor=MSO_ANCHOR.MIDDLE, margins=(0.25, 0, 0.2, 0))
 
 # 10 cost
 s = content_slide("Estimated implementation cost", DATA["headlines"][10])
@@ -450,10 +450,10 @@ for i, (num, lab, unit) in enumerate([
     (str(EV["field"]), "field accuracy", "%"), (str(EV["tier"]), "tier accuracy", "%"), (EV["latency"], "mean extraction", "s"),
 ]):
     stat_tile(s, MX + i * (tw4 + 0.2), TOP + 0.05, tw4, 1.9, num, lab, unit, num_size=54)
-text(s, MX, TOP + 2.1, CW, 0.5, f"{EV['clips']} synthetic clips, the ones the fix targeted; real clips pending. Before the fix: 87 % / 73 %.", size=12, color=GREY)
+text(s, MX, TOP + 2.1, CW, 0.5, f"{EV['clips'] + 1} synthetic clips, {EV['clips']} scored for tier, 1 intervention note; not field recordings. Before the fix: 87 % / 73 %.", size=12, color=GREY)
 stat_tile(s, MX, TOP + 2.65, 5.6, 1.8, DATA["load"][0], "/location p50 / p95, offline", unit="ms", num_size=48)
 t = box(s, MX + 5.9, TOP + 2.65, CW - 5.9, 1.8, fill=TILE, line=None, radius=0.14, name="Stat tile")
-shape_text(t, [[("344", {"bold": True, "size": 32, "color": AMBER}), (" Python · ", {"color": ON_DARK}), ("138", {"bold": True, "size": 32, "color": AMBER}), (" web tests", {"color": ON_DARK})],
+shape_text(t, [[("349", {"bold": True, "size": 32, "color": AMBER}), (" Python · ", {"color": ON_DARK}), ("147", {"bold": True, "size": 32, "color": AMBER}), (" web tests", {"color": ON_DARK})],
                [("98 %", {"bold": True, "size": 32, "color": AMBER}), (" coverage", {"color": ON_DARK})]], size=18, anchor=MSO_ANCHOR.MIDDLE, margins=(0.3, 0.1, 0.2, 0.1), after=6)
 
 # 14 additional details / future development
@@ -476,7 +476,16 @@ lim = box(s, MX, TOP + 2.95, CW, 1.1, fill=PALE, line=None, radius=0.12, name="L
 shape_text(lim, [[("Signals simulated, patients synthetic, minutes saved estimated.", {})]],
            size=16, anchor=MSO_ANCHOR.MIDDLE, margins=(0.35, 0.1, 0.35, 0.1))
 
-# 15 links
+# 15 sustainability (extra slide; illustration, not a measured saving)
+s = content_slide("Sustainability", "We size the green to the queue, so cross-traffic idling is bounded by the clearance time.")
+tw3 = (CW - 0.4) / 3
+stat_tile(s, MX, TOP + 0.1, tw3, 3.0, "0.25", "idling fuel avoided per cleared queue (illustration: 20 vehicles × 60 s × 0.76 L/h)", "L", amber=True, num_size=54)
+stat_tile(s, MX + tw3 + 0.2, TOP + 0.1, tw3, 3.0, "2.35", "CO₂ per litre of petrol (EPA)", "kg", num_size=54)
+stat_tile(s, MX + 2 * (tw3 + 0.2), TOP + 0.1, tw3, 3.0, "SDG 3.8 · 11.2", "emergency care access · sustainable transport", num_size=28)
+text(s, MX, TOP + 3.4, CW, 0.7, "Idle burn: Argonne National Laboratory (Gaines, Rask, Keller), US DOE, 2014. CO₂: US EPA, GHG Equivalencies Calculator, 2024. The per-queue arithmetic is an illustration, not a measurement or a net saving.",
+     name="Figure citation", size=11, color=GREY)
+
+# 16 links
 s = content_slide("Links", DATA["headlines"][14])
 tw_, th_ = (CW - 0.9) / 4, 4.4
 for i, key in enumerate(("github", "video", "app", "deck")):
@@ -493,7 +502,7 @@ for i, key in enumerate(("github", "video", "app", "deck")):
     else:
         text(s, x + 0.3, TOP + 1.4, tw_ - 0.6, 1.4, "[link + QR at submission]", size=22, bold=True, color=GREY, align=PP_ALIGN.CENTER)
 
-# 16 closing (dark)
+# 17 closing (dark)
 s = new_slide(dark=True)
 text(s, MX, 2.1, 10, 0.3, DATA["eyebrow"], name="Cover eyebrow", size=12, bold=True, color=AMBER, caps=True, spc=140)
 line(s, MX, 2.6, MX + 0.9, 2.6, color=AMBER, w=3)
