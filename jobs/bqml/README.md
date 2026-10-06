@@ -15,8 +15,8 @@ come from `corridor.traffic_spans`, which the traffic logger job fills from Rout
 ## What it is not
 
 This is a proof of the pipeline, not a forecast to deploy. The logger runs on Cloud Scheduler for
-Bengaluru peak hours since 6 Oct (paused after 10 Oct), and the model is retrained on whatever has
-accumulated before submission. The first model was trained on the earlier 216 rows (187 labelled),
+Bengaluru peak hours since 6 Oct (paused after 10 Oct), and a retrain on whatever has
+accumulated is scheduled before submission. The first model was trained on the earlier 216 rows (187 labelled),
 logged for about 50 minutes at midnight on 2026-10-05 across 29 junction approaches in two
 corridors, before peak-hour collection began. There is no daily pattern to learn in 50 minutes.
 

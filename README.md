@@ -31,7 +31,7 @@ A crew binds a registered vehicle, starts a run against a dispatched incident, s
 
 Pick a corridor with `?corridor=blr` or `?corridor=hyd`; a corridor is one JSON file in `data/corridors/`.
 
-The replay on the current scenario (`blr-two-vehicles`: a critical ambulance, a platoon ambulance behind it, and a fire engine) saves ≈ 16.5 min <!-- update from replay test --> across the three vehicles. The scenario is a scripted demo scenario: GPS ticks generated along the real corridor roads, with hand-authored traffic spans (a 400 m queue at junction 3, 100 m at junction 4). The saving is one simulated baseline, not a field measurement: per junction passed, the "Today" lane waits `cycle_s / 4 + queue_m / 2` seconds (the expected remaining red, a quarter of the cycle, plus the queue draining at 2 m/s). The replay and the run report cards use the same formula.
+The replay on the current scenario (`blr-two-vehicles`: a critical ambulance, a platoon ambulance behind it, and a fire engine) saves ≈ 16.5 min across the three vehicles. The scenario is a scripted demo scenario: GPS ticks generated along the real corridor roads, with hand-authored traffic spans (a 400 m queue at junction 3, 100 m at junction 4). The saving is one simulated baseline, not a field measurement: per junction passed, the "Today" lane waits `cycle_s / 4 + queue_m / 2` seconds (the expected remaining red, a quarter of the cycle, plus the queue draining at 2 m/s). The replay and the run report cards use the same formula.
 
 ## How a cop gets warned
 
@@ -87,7 +87,7 @@ Google products actually wired:
 - **Cloud Text-to-Speech, Cloud Translation, Cloud Storage:** spoken alerts and their MP3s.
 - **Secret Manager:** Maps server key.
 - **Cloud Scheduler, Cloud Build, Artifact Registry:** traffic logger schedule and image.
-- **BigQuery:** traffic spans and run reports. **BigQuery ML:** a jam-forecast pipeline is in place and is retrained before submission; it is a pipeline proof, not a deployed forecast (see Real data).
+- **BigQuery:** traffic spans and run reports. **BigQuery ML:** a jam-forecast pipeline is in place and a retrain is scheduled before submission; it is a pipeline proof, not a deployed forecast (see Real data).
 - **Workload Identity Federation:** keyless CI deploys.
 - **Cloud Trace, Cloud Monitoring and Cloud Logging:** request and engine spans, a dashboard, an uptime check and log-based metrics.
 - **Firebase Cloud Messaging:** a push to the on-duty cop's phone when an alert is written.
@@ -99,7 +99,7 @@ Signal preemption sits behind a one-method `SignalAdapter` (`api/signal_adapter.
 
 A Cloud Run Job (`jobs/traffic_logger.py`), triggered by Cloud Scheduler for Bengaluru peak hours, logs Routes traffic spans per junction approach into BigQuery `corridor.traffic_spans`, using the same `jam_metres` as the live engine. [jobs/bqml](jobs/bqml) builds a feature view and a BigQuery ML boosted-tree model, `corridor.jam_forecast`, for the next reading's jam length. Every run also writes its report card to `corridor.run_reports`.
 
-Be clear about what that is today: the logger runs on Cloud Scheduler for Bengaluru peak hours since 6 Oct, paused after 10 Oct. `corridor.traffic_spans` held 342 rows when last counted (5 Oct 17:50 to 6 Oct 02:40 UTC), and only 1 of them has `jam_m` above zero. The first 216 rows (midnight) had zero queues, so the label had no variance and the first model was constant. The BigQuery ML model is a pipeline proof until peak-hour rows accumulate; it is retrained before submission and is not a deployed forecast. It will only say something after the logger has seen weeks of real congestion. See [jobs/bqml/README.md](jobs/bqml/README.md) for the numbers and limits.
+Be clear about what that is today: the logger runs on Cloud Scheduler for Bengaluru peak hours since 6 Oct, paused after 10 Oct. `corridor.traffic_spans` held 342 rows when last counted (5 Oct 17:50 to 6 Oct 02:40 UTC), and only 1 of them has `jam_m` above zero. The first 216 rows (midnight) had zero queues, so the label had no variance and the first model was constant. The BigQuery ML model is a pipeline proof until peak-hour rows accumulate; a retrain is scheduled before submission, and it is not a deployed forecast. It will only say something after the logger has seen weeks of real congestion. See [jobs/bqml/README.md](jobs/bqml/README.md) for the numbers and limits.
 
 ## Honest limits
 
@@ -144,7 +144,7 @@ For repository workflow and contribution conventions, see CONTRIBUTING.md.
 - **API:** pytest against a fake Firestore, so tests need no credentials and make no cloud calls; the agent tests run against a scripted runner in CI, so the routing agent's import path and guard are exercised without Vertex AI; the engines also self-check with `python3 api/acuity.py` and friends.
 - **Web:** vitest unit tests, including the replay maths and the scenario minutes-saved total; ESLint and Prettier checks.
 - **Contract and property tests:** `make contract` runs schemathesis (every check, 20 examples per operation) against the API on an in-memory Firestore, and hypothesis checks the engines' invariants for any input (`api/tests/test_properties.py`). `make openapi` rewrites `api/openapi.json`; CI fails if it is stale.
-- **Gate:** CI runs lint, format, tests and the production build, and enforces a minimum coverage threshold on the API. Run the same commands locally before opening a PR.
+- **Gate:** CI runs lint, format, tests and the production build, and enforces a minimum coverage threshold on the API. The latest green run on main: 349 Python tests (97.9% API coverage) and 147 web tests. Run the same commands locally before opening a PR.
 
 ### Performance (offline, single instance)
 
@@ -185,7 +185,7 @@ Runtime configuration (set by the workflows): project `green-corridor-2026`, ser
 
 `scripts/eval_run.py` posts voice clips to `/triage` (intervention notes to `/log`) and scores each against `data/eval/labels.json`: exact match per field (strings case-insensitive, vitals within ±5, trapped persons not stated counts as none) and the suggested tier against the expected one. A clip that fails extraction (422) counts as wrong. Preview with `python3 scripts/eval_run.py --dry-run`.
 
-**These numbers are from synthetic voices (Cloud Text-to-Speech), 12 clips, 6 Oct 2026, one pass against the deployed API after the acuity category fix. They are not field recordings.** Field accuracy is 90% (69 of 77 field checks over the 11 triage clips), tier accuracy 100% (11 of 11), and the intervention note scored wrong on the exact-name check: both drugs were logged, but oxygen came back as "oxygen 4 litres via nasal cannula" rather than "oxygen". Before the category fix: field 87%, tier 73% (8 of 11). The three misses (stroke, burns, bleeding) were extraction wording that `api/acuity.py` read as `stable`, and extraction now returns a clinical complaint category that the tiering reads first. Mean latency was 3.5 s per clip (max 9.2 s, one slow call on clip08), and both Kannada-English mixed clips matched their English twins on tier.
+**These numbers are from synthetic voices (Cloud Text-to-Speech), 12 synthetic clips (11 scored for tier, 1 intervention note), 6 Oct 2026, one pass against the deployed API after the acuity category fix. They are not field recordings.** Field accuracy is 90% (69 of 77 field checks over the 11 triage clips), tier accuracy 100% (11 of 11), and the intervention note scored wrong on the exact-name check: both drugs were logged, but oxygen came back as "oxygen 4 litres via nasal cannula" rather than "oxygen". Before the category fix: field 87%, tier 73% (8 of 11). The three misses (stroke, burns, bleeding) were extraction wording that `api/acuity.py` read as `stable`, and extraction now returns a clinical complaint category that the tiering reads first. Mean latency was 3.5 s per clip (max 9.2 s, one slow call on clip08), and both Kannada-English mixed clips matched their English twins on tier.
 
 Before category fix 87% / 73% (field / tier accuracy).
 
@@ -214,7 +214,7 @@ Before category fix 87% / 73% (field / tier accuracy).
 | vitals | 100% |
 | trapped_persons | 100% |
 
-Eleven clips is a small set, one pass, with the same synthetic scripts the category fix was written against, so 100% tier accuracy shows the three known misses are fixed, not that triage is solved. The fix itself: the extraction returns a `complaint_category` (plus burn percent and bleeding severity) and `api/acuity.py` tiers on that first, falling back to the phrase match when it is missing. Complaint stays a free-text field, so exact match (36%) is the harshest line in the table.
+Eleven scored clips is a small set, one pass, with the same synthetic scripts the category fix was written against, so 100% tier accuracy shows the three known misses are fixed, not that triage is solved. The fix itself: the extraction returns a `complaint_category` (plus burn percent and bleeding severity) and `api/acuity.py` tiers on that first, falling back to the phrase match when it is missing. Complaint stays a free-text field, so exact match (36%) is the harshest line in the table.
 
 To replace these with real clips, record 10 clips as described in [data/eval/README.md](data/eval/README.md), save them next to a `labels.json`, and run `python3 scripts/eval_run.py --clips <dir> --labels <dir>/labels.json`. The synthetic set is regenerated with `scripts/make_eval_clips.py` (12 Text-to-Speech calls) and lives in [data/eval/synthetic](data/eval/synthetic/) with its per-clip voices and rates; raw responses are in `results.json` there, and `--rescore` re-scores them without calling the API.
 
