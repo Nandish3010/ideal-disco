@@ -6,17 +6,16 @@
   --bt: 1.3;
 }
 .stage {
-  font-size: calc(14vw * var(--bt, 1));
+  font-size: clamp(40px, 11vw, 120px);
   line-height: 1;
   font-weight: 900;
   letter-spacing: -0.02em;
   margin: 0;
-  word-break: break-word;
+  word-break: keep-all; /* "PREPARE" never breaks mid-word */
+  overflow-wrap: normal;
 }
-@media (min-width: 640px) {
-  .stage {
-    font-size: calc(120px * var(--bt, 1));
-  }
+.alert-full.bigtype .stage {
+  font-size: clamp(40px, 14vw, 144px); /* bigger, but capped so PREPARE still fits one line */
 }
 .alert-full {
   border: 6px solid var(--line);

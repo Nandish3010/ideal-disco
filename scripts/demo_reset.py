@@ -2,7 +2,8 @@
 Needs GOOGLE_APPLICATION_CREDENTIALS. Run from the repo root: python3 scripts/demo_reset.py [--apply]
 Ends every run not already ended/arrived; deletes runs/*/alerts, audit/*, reports/*, briefs/*, duty/*;
 closes all incidents and deletes those already closed for over 1 h (except the seed INC-0001); clears junctions/*.phase; nulls vehicles/*.bound_device_id.
-Keeps vehicles, junctions and incidents docs, and the runs themselves (so ended runs stay readable)."""
+Keeps vehicles, junctions and incidents docs, and the runs themselves (so ended runs stay readable).
+Keeps settings/showcase (the pinned run, scripts/pin_showcase.py) unless the run, alert or brief it points at is deleted here, then removes the pin."""
 
 import os
 import sys
@@ -31,6 +32,12 @@ plan("alerts deleted", [a.reference for r in runs for a in r.reference.collectio
 for col in ("audit", "reports", "briefs", "duty"):
     plan(f"{col} deleted", [d.reference for d in db.collection(col).stream()])
 old = datetime.now(UTC) - timedelta(hours=1)
+pin = db.collection("settings").document("showcase").get()
+if pin.exists:
+    p = pin.to_dict() or {}
+    gone = {r.path for _, r, c in ops if c is None}  # everything this run deletes
+    pinned = {f"runs/{p.get('run_id')}", p.get("alert_path"), f"briefs/{p.get('brief_run_id')}"}
+    plan("showcase pin removed", [pin.reference] if pinned & gone else [])
 plan(
     "old closed incidents deleted",
     [
@@ -71,6 +78,7 @@ for label in (
     "reports deleted",
     "briefs deleted",
     "duty deleted",
+    "showcase pin removed",
     "old closed incidents deleted",
     "incidents closed",
     "junction phases cleared",

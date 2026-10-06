@@ -6,8 +6,8 @@ import { useActiveRuns, useAlerts, useJunctions } from "../live.js";
 import CorridorMap, { HAS_MAPS_KEY } from "../map.jsx";
 import { Rationale } from "../trace.jsx";
 import { ErrCard, Offline, StateBadge, useNow } from "../ui.jsx";
-import { mmss, vehicleLabel } from "../format.js";
-import { at, savedAt, simulate, spansAt, stage } from "../replay.js";
+import { mmss, tierLabel, vehicleLabel } from "../format.js";
+import { at, lead, savedAt, savedRange, simulate, spansAt, stage } from "../replay.js";
 import "../sim.css";
 
 const scenarios = { example: scenario, "blr-two-vehicles": blrTwoVehicles };
@@ -238,7 +238,7 @@ function Live({ scn, setScn }) {
                 <div>
                   <b>{r.vehicle_plate ?? r.id}</b>{" "}
                   <span className="muted">{dash(r.vehicle_type)}</span>
-                  <span className={`tp t-${tierOf(r)}`}>{dash(tierOf(r))}</span>
+                  <span className={`tp t-${tierOf(r)}`}>{dash(tierOf(r), tierLabel)}</span>
                 </div>
                 <dl>
                   <dt>Next</dt>
@@ -409,6 +409,7 @@ function Replay({ scn, setScn }) {
   const sc = scenarios[scn];
   const corridor = corridors[sc.corridor];
   const sim = useMemo(() => simulate(sc, corridor), [sc, corridor]);
+  const range = useMemo(() => savedRange(sc, corridor), [sc, corridor]);
   const [T, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(() => {
@@ -496,20 +497,25 @@ function Replay({ scn, setScn }) {
     tone: alertWith[j.id] ? "good" : "",
     label: alertWith[j.id] ?? (passed.has(j.id) ? "passed" : "—"),
   }));
-  const saved = savedAt(sim.vehicles, T);
+  const head = lead(sim); // the counter follows the critical ambulance; the all-vehicle total is the secondary line
+  const saved = savedAt([head], T);
 
   return (
     <div className="replay">
       <div className="rtop">
         <section className="card saved">
-          <div className="muted">Minutes saved</div>
+          <div className="muted">
+            Minutes saved, {head.tier === "critical" ? "critical ambulance" : head.plate}
+          </div>
           <div className="bignum" role="status" aria-live={playing ? "off" : "polite"}>
             {(saved / 60).toFixed(1)}
             <small> min</small>
           </div>
           <div className="muted">
-            of {(sim.saved_s / 60).toFixed(1)} min over {sim.vehicles.length} vehicles · simulated
-            estimate on a scripted scenario with hand-authored traffic spans
+            of {(head.saved_s / 60).toFixed(1)} min · all {sim.vehicles.length} vehicles together:{" "}
+            {(sim.saved_s / 60).toFixed(1)} min (simulated baseline) · queue drains at 1–3 m/s →{" "}
+            {range[0].toFixed(1)}–{range[1].toFixed(1)} min · scripted scenario with hand-authored
+            traffic spans
           </div>
         </section>
         <section className="card controls">

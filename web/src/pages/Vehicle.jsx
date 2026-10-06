@@ -17,7 +17,7 @@ import {
 } from "../ui.jsx";
 import { LastRouting } from "../samples.jsx";
 import { collection, getDocs, limit, onSnapshot, orderBy, query } from "firebase/firestore";
-import { copNoteText, currentAlert } from "../format.js";
+import { copNoteText, currentAlert, tierLabel } from "../format.js";
 import { db } from "../firebase.js";
 import { latestOpen } from "../pick.js";
 import Coach from "../a11y/Coach.jsx";
@@ -331,7 +331,7 @@ function Triage({ runId, vehicleType, confirmed, setDone }) {
   }, [failed, unread, hold.mic]);
 
   const tier = res?.suggested_tier;
-  const up = String(tier).toUpperCase();
+  const up = tierLabel(tier).toUpperCase();
   return (
     <section>
       <h2>{t("vehicle.patient_h")}</h2>
@@ -626,7 +626,7 @@ function Run({ bound }) {
           <>
             <div className="card">
               <div className={"tierpill " + (confirmed ? "t-" + confirmed : "")}>
-                {confirmed ? confirmed.toUpperCase() : t("vehicle.tier_unconfirmed")}
+                {confirmed ? tierLabel(confirmed).toUpperCase() : t("vehicle.tier_unconfirmed")}
               </div>
               <div className="muted">{t("vehicle.run", { id: runId })}</div>
               {run.loading && <p>{t("vehicle.loading_run")}</p>}

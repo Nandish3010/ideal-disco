@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import {
   collection,
   collectionGroup,
+  doc,
+  getDoc,
   getDocs,
   limit,
   onSnapshot,
@@ -12,10 +14,13 @@ import { db } from "./firebase.js";
 import { vehicleLabel } from "./format.js";
 import { ErrCard, useDoc, useListen, useLog, when } from "./ui.jsx";
 import { TraceCard } from "./trace.jsx";
-import { firstWithAudio, lastBrief, lastRouted } from "./pick.js";
+import { handover, routedRun, sampleAlert } from "./pick.js";
 import { t } from "./i18n/index.js";
 
 // Read-only panels so a judge sees the AI output without any POST. Firestore reads only.
+// settings/showcase (written by scripts/pin_showcase.py) pins one good run for them: {run_id, alert_path, brief_run_id, note}.
+// Each panel prefers the pin and falls back to the newest suitable data when it is missing or stale.
+const usePin = () => useDoc("settings/showcase").data;
 
 // ?sample=1 / ?last=1 (the landing page shortcuts) bring that panel into view.
 function useScrollTo(param) {
@@ -33,10 +38,12 @@ const FALLBACK = {
   audio_url: "/sample-alert.mp3",
 };
 
-// Plays the newest alert that has speech; falls back to the bundled MP3 when there is none or the read fails.
+// Plays the pinned alert, else the PREPARE alert with speech and the longest queue; falls back to the bundled MP3 when
+// there is none or the read fails.
 // play(alert, onBlocked) is the page's own speak(), so one sound at a time.
 export function SampleAlert({ play }) {
   const el = useScrollTo("sample");
+  const pin = usePin();
   const [a, setA] = useState(null);
   const [busy, setBusy] = useState(false);
   const [blocked, setBlocked] = useState(false);
@@ -45,10 +52,16 @@ export function SampleAlert({ play }) {
     setBlocked(false);
     let row = null;
     try {
-      const q = await getDocs(
-        query(collectionGroup(db, "alerts"), orderBy("created_at", "desc"), limit(10)),
-      );
-      row = firstWithAudio(q.docs.map((d) => d.data()));
+      if (pin?.alert_path) {
+        const d = await getDoc(doc(db, pin.alert_path));
+        if (d.exists() && d.data().audio_url) row = d.data();
+      }
+      if (!row) {
+        const q = await getDocs(
+          query(collectionGroup(db, "alerts"), orderBy("created_at", "desc"), limit(50)),
+        );
+        row = sampleAlert(q.docs.map((d) => d.data()));
+      }
     } catch (e) {
       console.warn("sample alert read failed, using the bundled clip:", e.message);
     }
@@ -90,11 +103,30 @@ const useNewest = (name, field, n) =>
 
 const ATMIST = ["age", "time", "mechanism", "injuries", "signs", "treatment"];
 
-// "Last handover": newest briefs/* written by a model (not the offline stub), with that run's logged interventions.
-export function LastHandover({ Chips }) {
+// "Last handover": the pinned brief when its run went to `hospital` (a roster name), else the newest model-written brief
+// (not the offline stub) of a run bound there, with that run's logged interventions.
+export function LastHandover({ Chips, hospital }) {
   const el = useScrollTo("last");
-  const s = useNewest("briefs", "generated_at", 10);
-  const b = s.data ? lastBrief(s.data) : null;
+  const pin = usePin();
+  const pinned = useDoc(pin?.brief_run_id ? `briefs/${pin.brief_run_id}` : null).data;
+  const pinnedRun = useDoc(pin?.brief_run_id ? `runs/${pin.brief_run_id}` : null).data;
+  const bs = useNewest("briefs", "generated_at", 25);
+  const rs = useNewest("runs", "started_at", 25);
+  const s = {
+    loading: bs.loading || rs.loading,
+    error: bs.error || rs.error,
+    retry: () => (bs.retry(), rs.retry()),
+  };
+  const b =
+    bs.data && rs.data
+      ? handover({
+          pinned: pinned && { id: pin.brief_run_id, ...pinned },
+          pinnedRun,
+          briefs: bs.data,
+          runs: rs.data,
+          hospital,
+        })
+      : null;
   const log = useLog(b?.id);
   const seen = new Set();
   const items = (log.rows ?? [])
@@ -136,10 +168,12 @@ export function LastHandover({ Chips }) {
   );
 }
 
-// "Last routing decision": newest run whose hospital routing was applied (or shows a multi-step trace).
+// "Last routing decision": the pinned run, else the newest run whose hospital routing was applied (or shows a multi-step trace).
 export function LastRouting() {
+  const pin = usePin();
+  const pinnedRun = useDoc(pin?.run_id ? `runs/${pin.run_id}` : null).data;
   const s = useNewest("runs", "started_at", 25);
-  const r = s.data ? lastRouted(s.data) : null;
+  const r = s.data ? routedRun(pinnedRun && { id: pin.run_id, ...pinnedRun }, s.data) : null;
   return (
     <section>
       <h2>{t("sample.routing")}</h2>

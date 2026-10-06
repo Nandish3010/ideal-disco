@@ -42,10 +42,12 @@ export function seqLine(sequence, runs = []) {
 
 // "Fire engine · trapped persons", "Ambulance · critical". Raw enums (fire_with_trapped, police_with_incident) never reach the screen.
 const TIER = { fire_with_trapped: "trapped persons", police_with_incident: "incident" };
+// A tier on its own ("critical", "trapped persons"); "" when there is none. Every screen shows tiers through this or vehicleLabel.
+export const tierLabel = (tier) => (tier ? (TIER[tier] ?? String(tier).replaceAll("_", " ")) : "");
+
 export function vehicleLabel(type, tier) {
   const kind = KIND[type] ?? type ?? "Vehicle";
-  const t = tier && tier !== type ? (TIER[tier] ?? String(tier).replaceAll("_", " ")) : null;
-  return t ? `${kind} · ${t}` : kind;
+  return tier && tier !== type ? `${kind} · ${tierLabel(tier)}` : kind;
 }
 
 // "1 junction" / "2 junctions" (pass `many` for an irregular plural).

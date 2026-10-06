@@ -28,7 +28,7 @@ import {
   useNow,
   when,
 } from "../ui.jsx";
-import { dur } from "../format.js";
+import { dur, vehicleLabel } from "../format.js";
 import Coach from "../a11y/Coach.jsx";
 import { buzz, useBigType } from "../a11y/cop.js";
 import { t } from "../i18n/index.js";
@@ -230,8 +230,7 @@ function Current({ a, t0, now, onAck, big }) {
         <p className="alert-text">{a.text_local || a.text}</p>
         {a.text_local && <p className="alert-en">{a.text}</p>}
         <p className="muted">
-          {run?.vehicle_type ?? t("cop.vehicle")}
-          {tier ? ` · ${tier}` : ""}
+          {run ? vehicleLabel(run.vehicle_type, tier) : t("cop.vehicle")}
           {run && run.state !== "en_route" ? (
             <>
               {" "}

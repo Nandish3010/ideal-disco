@@ -5,7 +5,7 @@ import { corridors } from "../data.js";
 import CorridorMap from "../map.jsx";
 import { TraceCard } from "../trace.jsx";
 import { ErrCard, Offline } from "../ui.jsx";
-import { copNoteText, mmss, seqLine, traceLine, vehicleLabel } from "../format.js";
+import { copNoteText, mmss, seqLine, tierLabel, traceLine, vehicleLabel } from "../format.js";
 import { buildTimeline, chooseRun, mapState, ms } from "../story.js";
 import "../story.css";
 
@@ -21,19 +21,24 @@ async function load(runId) {
   let run;
   if (runId) run = await one(`runs/${runId}`);
   else {
-    const rows = await many(
-      query(collection(db, "runs"), where("state", "in", ["arrived", "ended"])),
-    );
-    const newest = rows.sort((a, b) => ms(b.started_at) - ms(a.started_at)).slice(0, 12);
-    run = chooseRun(
-      await Promise.all(
-        newest.map(async (r) => ({
-          run: r,
-          alerts: (await getDocs(collection(db, `runs/${r.id}/alerts`))).size,
-          brief: !!(await one(`briefs/${r.id}`)),
-        })),
-      ),
-    );
+    // no ?run=: the pinned showcase run (settings/showcase) if it still exists, else the newest finished run with alerts
+    const pin = await one("settings/showcase").catch(() => null);
+    run = pin?.run_id ? await one(`runs/${pin.run_id}`).catch(() => null) : null;
+    if (!run) {
+      const rows = await many(
+        query(collection(db, "runs"), where("state", "in", ["arrived", "ended"])),
+      );
+      const newest = rows.sort((a, b) => ms(b.started_at) - ms(a.started_at)).slice(0, 12);
+      run = chooseRun(
+        await Promise.all(
+          newest.map(async (r) => ({
+            run: r,
+            alerts: (await getDocs(collection(db, `runs/${r.id}/alerts`))).size,
+            brief: !!(await one(`briefs/${r.id}`)),
+          })),
+        ),
+      );
+    }
   }
   if (!run) return null;
   const [log, alerts, audit, js, brief, report, aar] = await Promise.all([
@@ -111,7 +116,7 @@ function Item({ it, d, play, playing, jname }) {
         <>
           <h3>
             Crew confirmed the tier
-            {it.tier && <span className={`pill tier-${it.tier}`}>{it.tier}</span>}
+            {it.tier && <span className={`pill tier-${it.tier}`}>{tierLabel(it.tier)}</span>}
           </h3>
           {it.routing ? (
             <>

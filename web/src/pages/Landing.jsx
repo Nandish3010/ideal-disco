@@ -1,12 +1,19 @@
 import { BASE } from "../api.js";
 import { t, tn } from "../i18n/index.js";
 import { corridors } from "../data.js";
-import { simulate } from "../replay.js";
+import { lead, savedRange, simulate } from "../replay.js";
 import "../story.css";
 import scenario from "../../../data/scenarios/blr-two-vehicles.json";
 
-// The hero figure comes from the same replay maths as /sim, computed once from the scenario, so the two always agree.
-const SAVED_MIN = (simulate(scenario, corridors[scenario.corridor]).saved_s / 60).toFixed(1);
+// The hero figures come from the same replay maths as /sim, computed once from the scenario, so the two always agree:
+// the critical ambulance's own saving leads, the all-vehicle total and the 1-3 m/s drain range follow.
+const SIM = simulate(scenario, corridors[scenario.corridor]);
+const HERO = {
+  n: (lead(SIM).saved_s / 60).toFixed(1),
+  all: (SIM.saved_s / 60).toFixed(1),
+  k: SIM.vehicles.length,
+  range: savedRange(scenario, corridors[scenario.corridor]).map((m) => m.toFixed(1)),
+};
 
 const GEMINI = [1, 2, 3, 4, 5, 6, 7].map((n) => `landing.g${n}`);
 const SCREENS = ["vehicle", "cop", "hospital", "control", "sim", "dispatch"];
@@ -23,8 +30,12 @@ export default function Landing() {
         <h2 id="hero-h">{t("landing.hero_h")}</h2>
         <p className="lede">{t("landing.hero_lede")}</p>
         <p className="herofig">
-          <b>{t("landing.saved", { n: SAVED_MIN })}</b> {t("landing.saved_on")}{" "}
+          <b>{t("landing.saved", { n: HERO.n })}</b> {t("landing.saved_on")}{" "}
           <span className="muted">{t("landing.saved_note")}</span>
+        </p>
+        <p className="muted">
+          {t("landing.saved_all", { k: HERO.k, n: HERO.all })}{" "}
+          {t("landing.saved_range", { lo: HERO.range[0], hi: HERO.range[1] })}
         </p>
         <div className="ctas">
           <a className="cta" href="/sim?mode=replay&autoplay=1&speed=50">
@@ -51,7 +62,7 @@ export default function Landing() {
 
       <h2>{t("landing.h60")}</h2>
       <ol className="steps">
-        <li>{tn("landing.step1", { link: link("/sim?mode=replay") })}</li>
+        <li>{tn("landing.step1", { link: link("/sim?mode=replay&speed=50") })}</li>
         <li>{tn("landing.step2", { link: link("/cop") })}</li>
         <li>{tn("landing.step3", { link: link("/hospital") })}</li>
       </ol>

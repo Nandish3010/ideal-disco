@@ -8,7 +8,7 @@ import { Rationale, TraceCard } from "../trace.jsx";
 import { AfterAction } from "./Hospital.jsx";
 import { RunLabel } from "../samples.jsx";
 import { withMethod } from "../pick.js";
-import { mmss } from "../format.js";
+import { mmss, tierLabel, vehicleLabel } from "../format.js";
 import { presence } from "../story.js";
 import { ErrCard, Offline, StateBadge, useListen, useNow } from "../ui.jsx";
 import { t } from "../i18n/index.js";
@@ -149,7 +149,7 @@ export default function Control() {
                     {a.junction_id?.split("_").pop().toUpperCase()} {jname(a.junction_id)}
                   </b>
                   : {t("control.alert_unacked", { stage: dash(a.stage), age: dur(age(a)) })}
-                  {r ? ` · ${r.vehicle_type} ${dash(tierOf(r), (t) => t.toUpperCase())}` : ""}
+                  {r ? ` · ${vehicleLabel(r.vehicle_type, tierOf(r))}` : ""}
                 </span>
                 <Badge cls="esc-b">{t("control.escalate")}</Badge>
               </div>
@@ -234,7 +234,11 @@ export default function Control() {
                           <b>{r.vehicle_plate ?? r.id}</b>
                         </td>
                         <td>
-                          {tierOf(r) ? <Badge cls={`t-${tierOf(r)}`}>{tierOf(r)}</Badge> : "—"}
+                          {tierOf(r) ? (
+                            <Badge cls={`t-${tierOf(r)}`}>{tierLabel(tierOf(r))}</Badge>
+                          ) : (
+                            "—"
+                          )}
                         </td>
                         <td>
                           <StateBadge run={r} now={now} />

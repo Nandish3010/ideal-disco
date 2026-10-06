@@ -149,5 +149,9 @@ export const firestore = {
     deliver(...sub);
     return () => subs.delete(sub);
   },
+  getDoc: async (ref) => {
+    const v = FIX[ref.path];
+    return { exists: () => v != null, id: ref.path.split("/").pop(), data: () => v };
+  },
   getDocs: async (ref) => snap(FIX[ref.path] ?? []),
 };

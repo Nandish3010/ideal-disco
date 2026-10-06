@@ -357,3 +357,12 @@ def test_route_offline_is_the_rule_based_fallback() -> None:
 def test_eta_to_offline_is_a_straight_line() -> None:
     out = agent.eta_to(12.9172, 77.6229, 12.9185, 77.599)
     assert out["source"] == "straight_line_estimate" and out["eta_s"] > 0 and out["distance_km"] > 2
+
+
+def test_router_model_follows_gemini_text_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The agent runs on GEMINI_TEXT_MODEL (the README's setting); GEMINI_MODEL is the extraction model and is ignored."""
+    monkeypatch.delenv("GEMINI_TEXT_MODEL", raising=False)
+    monkeypatch.setenv("GEMINI_MODEL", "extraction-model")
+    assert agent.router_model() == "gemini-3-flash-preview"
+    monkeypatch.setenv("GEMINI_TEXT_MODEL", "text-model")
+    assert agent.router_model() == "text-model"
