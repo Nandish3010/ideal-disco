@@ -2001,7 +2001,7 @@
     },
     "/cop-note": {
       "post": {
-        "description": "The on-duty cop's spoken or typed report. Gemini only fills the {kind, extra_seconds, reason} schema; what happens\nnext is copnote.apply, plain rules.",
+        "description": "The on-duty cop's spoken or typed report. Gemini only fills the {kind, extra_seconds, reason} schema; what happens\nnext is copnote.apply, plain rules (a cannot_clear or a delay over 90 s then hands the junction to the re-planner agent in\nthe background).",
         "operationId": "cop_note_cop_note_post",
         "parameters": [
           {

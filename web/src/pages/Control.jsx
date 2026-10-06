@@ -4,7 +4,7 @@ import { db } from "../firebase.js";
 import { corridors } from "../data.js";
 import { LIVE, useActiveRuns, useJunctions } from "../live.js";
 import CorridorMap from "../map.jsx";
-import { Rationale, TraceCard } from "../trace.jsx";
+import { PlanCard, Rationale, TraceCard } from "../trace.jsx";
 import { AfterAction } from "./Hospital.jsx";
 import { RunLabel } from "../samples.jsx";
 import { withMethod } from "../pick.js";
@@ -313,6 +313,7 @@ export default function Control() {
                       runs={runs}
                       last={junctions[key]?.last_sequence}
                     />
+                    <PlanCard replan={junctions[key]?.replan} />
                     <div className={pres.on ? "" : "muted"}>{pres.text}</div>
                     {a ? (
                       <div className="ja">

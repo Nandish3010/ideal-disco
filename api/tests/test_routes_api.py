@@ -89,6 +89,23 @@ def test_success_sends_the_stripped_key_and_caches(monkeypatch: pytest.MonkeyPat
     assert len(calls) == 1 and again["stale"] is False and again["intervals"] == out["intervals"]
 
 
+def test_alt_asks_for_alternatives_and_takes_the_first_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    second = {**ROUTE, "duration": "140s"}
+    calls = stub_post(
+        monkeypatch,
+        SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"routes": [ROUTE, second]}),
+    )
+    assert (
+        routes_api.traffic_to_point(A, B)["duration_s"] == 95
+    )  # the default: the best route, no alternatives asked
+    assert "computeAlternativeRoutes" not in calls[0]["body"]
+    assert routes_api.traffic_to_point(A, B, alt=1)["duration_s"] == 140
+    assert calls[1]["body"]["computeAlternativeRoutes"] is True
+    stub_post(monkeypatch, ok())  # only one route came back: a failure like any other
+    out = routes_api.traffic_to_point(A, B, alt=1)
+    assert out["duration_s"] is None and out["stale"] is True
+
+
 @pytest.mark.parametrize("failure", [httpx.ConnectTimeout("t"), httpx.HTTPError("5xx"), ok({})])
 def test_failure_without_cache_is_normal_and_stale(monkeypatch: pytest.MonkeyPatch, failure: Any) -> None:
     stub_post(monkeypatch, failure)

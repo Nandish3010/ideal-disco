@@ -2,6 +2,7 @@
 
 import re
 
+import acuity
 from telemetry import traced
 
 # ponytail: config, lowest rank passes first. Tune from report cards.
@@ -20,6 +21,26 @@ PLATOON_S = 45  # vehicles on the same approach arriving this close together sha
 def key(c: dict) -> str:
     t = c["tier"]
     return t if t in TIER_RANK else f"{c['vehicle_type']}_{t}"
+
+
+def rank(c: dict) -> int:
+    """Lower passes first; an unknown tier ranks last."""
+    return TIER_RANK.get(key(c), len(TIER_RANK))
+
+
+def contender(run_id, r, eta_s, approach):
+    """Priority-engine row if this run may preempt, else None. Ambulances need the crew's confirmed tier and a patient on
+    board; fire and police need an incident (always true for a started run)."""
+    vt = r["vehicle_type"]
+    if vt == "ambulance":
+        if not (r.get("confirmed_tier") and r.get("patient_on_board")):
+            return None
+        tier = r["confirmed_tier"]
+    elif r.get("incident_id"):
+        tier = r.get("confirmed_tier") or acuity.tier({"incident_id": r["incident_id"]}, vt)
+    else:
+        return None
+    return {"run_id": run_id, "vehicle_type": vt, "tier": tier, "eta_s": eta_s, "approach": approach}
 
 
 @traced("priority")
