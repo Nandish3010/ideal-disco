@@ -106,7 +106,7 @@ Server-side guards (the model's answer is used only if all hold): it may add cap
 ```json
 { "device_id": "dev-cop-1", "name": "Constable Rao", "on": true, "since": "2026-10-05T09:00:00Z", "device_token_hash": "5e8848..." }
 ```
-Written by `/duty` when a cop goes on or off duty at a junction (doc id like `blr_j3`). `name` may be `null`. `device_token_hash` is the sha256 of the token handed to the cop who went on duty; it is removed when that cop goes off duty. `note_count` is the number of cop notes so far (below); going on duty again keeps it.
+Written by `/duty` when a cop goes on or off duty at a junction (doc id like `blr_j3`). `name` may be `null`. `device_token_hash` is the sha256 of the token handed to the cop who went on duty; it is removed when that cop goes off duty. `fcm_token` (optional) is the web push token of the cop's browser, sent with `POST /duty`; the API pushes each new alert for this junction to it (`api/push.py`) while `on` is true. It is removed when the cop goes off duty, and when the next cop goes on duty without sending one. Like the rest of `duty/`, it is readable in the demo rules. `note_count` is the number of cop notes so far (below); going on duty again keeps it.
 
 ### `duty/{corridor}_{junction_id}/notes/{n}`
 ```json
@@ -165,7 +165,7 @@ The same row is inserted into BigQuery `corridor.run_reports` (created on first 
 
 ## API
 
-All bodies JSON. Errors: `{"error": "<code>", "detail": "..."}` with 4xx/5xx. Request bodies that fail validation return 422 `{"error": "validation_error", "detail": "<field>: <message>; ..."}`; `detail` is always text, and some errors add keys (`state`, `fallback`). Firestore failures return 503 `{"error": "store_unavailable"}`, anything unexpected 500 `{"error": "internal_error"}`. Every response carries an `X-Request-Id` header (the caller's, else a new uuid4) that is also on every server log line. CORS allows only the two Firebase Hosting origins, `localhost:5173` / `127.0.0.1:5173` and the comma-separated env `EXTRA_ORIGINS`.
+All bodies JSON. Errors: `{"error": "<code>", "detail": "..."}` with 4xx/5xx. Request bodies that fail validation return 422 `{"error": "validation_error", "detail": "<field>: <message>; ..."}`; `detail` is always text, and some errors add keys (`state`, `fallback`). Firestore failures return 503 `{"error": "store_unavailable"}`, anything unexpected 500 `{"error": "internal_error"}`. Every response carries an `X-Request-Id` header (the caller's, else a new uuid4) that is also on every server log line; with `OTEL_ENABLED=1` each line also has `trace_id` and `logging.googleapis.com/trace`, which links it to its Cloud Trace span. CORS allows only the two Firebase Hosting origins, `localhost:5173` / `127.0.0.1:5173` and the comma-separated env `EXTRA_ORIGINS`.
 
 ### Device tokens
 There are no accounts. Instead a device holds a random token (32 bytes, urlsafe) and the calls that change a run or a junction must send it in the header `X-Device-Token`. Only its sha256 is stored (`vehicles/{plate}.device_token_hash`, `duty/{junction}.device_token_hash`), so a read of Firestore gives nobody a usable token.
@@ -186,7 +186,7 @@ Which token each protected call needs:
 | `POST /ack` | the token of the cop on duty at the alert's junction, or the vehicle token of the run's plate |
 | `POST /duty` with `on: false` | the junction token of that junction (going on duty needs none) |
 
-Errors: 401 `{ "error": "device_token_required" }` (no header), 403 `{ "error": "device_token_mismatch" }` (not a token that call accepts, including a vehicle that was never bound, or a cop who is off duty). A missing run or alert is still 404 first. Left open on purpose: `/health`, every read, `POST /incidents` (the dispatch console; per-IP rate limited), the first `POST /brief` of a run, a `POST /runs/{id}/after-action` without `regenerate` (returns the stored report, or writes the first one), `POST /hospital/duty` (stands in for a hospital roster, like `/duty`), and `POST /housekeeping` (its own `X-Housekeeping-Token`).
+Errors: 401 `{ "error": "device_token_required" }` (no header), 403 `{ "error": "device_token_mismatch" }` (not a token that call accepts, including a vehicle that was never bound, or a cop who is off duty). A missing run or alert is still 404 first. Left open on purpose in demo mode (production mode, below, closes the ones marked there): `/health`, every read, `POST /incidents` (the dispatch console; per-IP rate limited), the first `POST /brief` of a run, a `POST /runs/{id}/after-action` without `regenerate` (returns the stored report, or writes the first one), `POST /hospital/duty` (stands in for a hospital roster, like `/duty`), and `POST /housekeeping` (its own `X-Housekeeping-Token`).
 This is a demo-grade control, not authentication: `/vehicles/bind` stands in for the agency registry and `/duty` for a roster, and both are open, so anyone who knows a registered plate or a junction can take its token over (which also locks the previous holder out). Real binding would sit behind agency sign-in. The web sim feeder binds each scenario vehicle itself (`device_id: "sim-<plate>"`) and uses that token, which rotates the token of a real phone bound to the same plate: the phone must bind again.
 Env `DEVICE_TOKENS_DISABLED=1` turns the check off (for `api/offline_replay.py` only); unset, the default, it is enforced.
 
@@ -223,6 +223,21 @@ Response `{"ok": true, "model": "gemini-3.1-flash-lite"}`
 { "type": "cardiac", "severity_note": "chest pain, adult" }
 ```
 200 `{ "incident_id": "INC-4BC6E7" }` (state `open`)
+
+### `GET /runs/{run_id}/log` and `GET /briefs/{run_id}`
+The transit log and the stored ATMIST brief over the API, for browsers that may not read them from Firestore (production mode, below). Header `X-Device-Token`: the run's vehicle token or any hospital desk token (401 `device_token_required`, 403 `device_token_mismatch`; 404 `unknown_run` first). The log is `[{ "n": 1, "t": "<ISO>", "kind": "voice", "transcript_en": "...", "fields": {}, "interventions": [], "confirmed": false }]`, oldest first, timestamps as ISO strings; the brief is the `briefs/{run_id}` doc with `generated_at` as an ISO string, or 404 `no_brief`. Both work in demo mode too, where the browser reads Firestore directly instead.
+
+### Production mode (`PRODUCTION_MODE=1`)
+The demo leaves the calls a judge needs open. With `PRODUCTION_MODE=1` (middleware in `api/production.py`, registered inside the request context, so a refusal still has an `X-Request-Id`):
+
+| Call | Needs |
+|---|---|
+| `POST /incidents` | header `X-Dispatch-Token` equal to env `DISPATCH_TOKEN`: 401 `dispatch_token_required` without it, 403 `forbidden` when wrong |
+| `POST /vehicles/bind`, `POST /hospital/duty` | header `X-Agency-Key` equal to env `AGENCY_KEY`: 401 `agency_key_required`, 403 `forbidden` |
+| `POST /brief` | a hospital desk token in `X-Device-Token` (the first brief of a run is no longer open) |
+| `POST /runs/{id}/after-action` | the run's vehicle token or a hospital desk token, `regenerate` or not |
+
+A credential env that is unset refuses every call (403 `forbidden`): production never falls open. `DEVICE_TOKENS_DISABLED` is ignored. `web/firestore.rules.production` denies browser reads of `runs/*/log`, `briefs`, `after_action`, `vehicles` and `hospital_duty`; the two GET endpoints above serve the first two, `POST /runs/{id}/after-action` the third. Cop go-on-duty (`POST /duty`) stays open: an agency roster is the roadmap item.
 
 ### `POST /runs`
 Start:
@@ -361,7 +376,9 @@ Ticks run the same sweeps, so the scheduler only covers idle periods and is spac
 ```json
 { "corridor": "blr", "junction_id": "blr_j3", "device_id": "dev-cop-1", "on": true, "name": "Constable Rao" }
 ```
-`junction_id` may be `blr_j3` or `j3`; `name` is optional. Writes `duty/blr_j3`.
+`junction_id` may be `blr_j3` or `j3`; `name` is optional; `fcm_token` (optional, at most 4096 characters) is the browser's FCM registration token: stored on `duty/blr_j3` when `on` is true, never echoed back. Writes `duty/blr_j3`.
+
+**Push.** When an alert is written for a junction whose `duty` doc is `on` and has an `fcm_token`, `finish_alert` (after the voice is attached) sends one FCM message with a `notification` (title `<stage> · emergency vehicle`, body the spoken-language text, else the English text) and a `data` payload of strings: `run_id`, `alert_n`, `junction_id`, `stage`, `text`, `audio_url` (empty when synthesis failed). Web push headers: `Urgency: high`, `TTL: 120`. A failure is logged (`push_error`) and never raised; a token FCM reports as unregistered is removed from the doc. `push_sent` is logged on success. The service account needs `roles/firebasecloudmessaging.admin`.
 200 the doc: `{ "device_id": "dev-cop-1", "name": "Constable Rao", "on": true, "since": "2026-10-05T09:00:00Z", "device_token": "<43 characters>" }`; `device_token` is present only when `on` is true and is new every time (see Device tokens). `on: false` needs the header `X-Device-Token` with that junction's token (401 / 403) and answers without a token. 400 `{ "error": "unknown_corridor" }`, 404 `{ "error": "unknown_junction" }`.
 
 ### `POST /cop-note`
@@ -395,3 +412,11 @@ Scenario runs make no Routes calls (recorded spans). The routing agent's `eta_to
 ## Dev-only: `OFFLINE_AI=1` and `DEVICE_TOKENS_DISABLED=1`
 
 Local testing without any paid Google call (never set in a deploy workflow; the API logs `{"event": "offline_ai"}` once at startup when it is on). Firestore is still used. With it set: `tts.localize_alert` returns the English text, `tts.speak` returns `(None, text)` so alerts are text only (no Translation, TTS or Storage), `brief.generate` returns a fixed stub (`model: "offline"`), `aar.generate` a fixed summary, issues and recommendations (`model: "offline"`, the timeline is still built from the record), the routing agent returns its rule-based fallback at once (`trace: [{"fallback": "offline_ai"}]`, straight-line ETAs, no Routes call), the preemption `rationale` is skipped, `/cop-note` answers from a stub (text containing "bus": `delay`, 120 s, "bus stalled"; anything else, or audio alone: `cleared`), and `/triage` and `/log` answer 422 `extraction_failed` (set tiers through `/runs/{id}/confirm`). `api/offline_replay.py` replays a scenario against a local API in this mode; start that API with `RATE_LIMIT_DISABLED=1` too (see Rate limits and caps) so the replay is never throttled, and with `DEVICE_TOKENS_DISABLED=1` because the replay sends no device tokens (see Device tokens).
+
+## Operations environment
+
+| Env | Effect |
+|---|---|
+| `OTEL_ENABLED=1` | Cloud Trace spans via OpenTelemetry (set by `deploy-api.yml`): one per request (not `/health`), one per outgoing httpx call (Gemini, Routes), and manual spans `leadtime`, `priority`, `brief`, `agent.route`, `tts`, `push.send`. Unset, nothing is imported or exported. The service account needs `roles/cloudtrace.agent`. |
+| `OTEL_SAMPLE_RATIO` | Share of traces kept, default `1`. |
+| `PRODUCTION_MODE=1`, `DISPATCH_TOKEN`, `AGENCY_KEY` | See Production mode above. |
