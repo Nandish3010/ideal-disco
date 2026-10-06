@@ -18,7 +18,10 @@ TIMEOUT_MS, LONG_TIMEOUT_MS = (
 SYSTEM = (
     "You transcribe emergency crew reports into fields. Extract only what was said; never infer "
     "severity or fill in values that were not stated (use null). Translate the transcript to English. "
-    "Reply as JSON matching the schema."
+    "complaint is the main problem in the speaker's words. complaint_category is the clinically closest match for "
+    "what was said, from the fixed list; use other when unsure. burn_percent and bleeding_severity only when stated or "
+    "plainly described (a controlled or minor bleed is minor or moderate; severe or uncontrolled is major), else null. "
+    "Never infer vitals or values that were not said. Reply as JSON matching the schema."
 )
 IMAGE_SYSTEM = (
     " The input is a photo of a patient monitor or ECG strip. Read only values visible on the screen; use null for "
@@ -62,10 +65,30 @@ class Intervention(BaseModel):
     time_note: str | None = None
 
 
+Category = Literal[
+    "chest_pain",
+    "stroke_signs",
+    "major_bleeding",
+    "moderate_bleeding",
+    "burns",
+    "breathing_difficulty",
+    "fracture",
+    "unconscious",
+    "seizure",
+    "allergic_reaction",
+    "abdominal_pain",
+    "minor_injury",
+    "other",
+]
+
+
 class Extraction(BaseModel):
     age: int | None = None
     sex: str | None = None
     complaint: str | None = None
+    complaint_category: Category | None = None
+    burn_percent: int | None = None
+    bleeding_severity: Literal["minor", "moderate", "major"] | None = None
     conscious: bool | None = None
     breathing: bool | None = None
     vitals: Vitals = Vitals()
