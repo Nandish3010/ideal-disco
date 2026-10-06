@@ -411,11 +411,16 @@ function Replay({ scn, setScn }) {
   const sim = useMemo(() => simulate(sc, corridor), [sc, corridor]);
   const [T, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState(20);
+  const [speed, setSpeed] = useState(() => {
+    const v = Number(new URLSearchParams(location.search).get("speed")); // ?speed=5|20|50
+    return [5, 20, 50].includes(v) ? v : 20;
+  });
   const end = Math.ceil(sim.end_s);
+  const auto = useRef(new URLSearchParams(location.search).get("autoplay") === "1"); // first load only
   useEffect(() => {
     setT(0);
-    setPlaying(false);
+    setPlaying(auto.current);
+    auto.current = false;
   }, [sim]);
   useEffect(() => {
     if (!playing) return;

@@ -1,6 +1,7 @@
 import { BASE } from "../api.js";
 import { corridors } from "../data.js";
 import { simulate } from "../replay.js";
+import "../story.css";
 import scenario from "../../../data/scenarios/blr-two-vehicles.json";
 
 // The hero figure comes from the same replay maths as /sim, computed once from the scenario, so the two always agree.
@@ -58,9 +59,20 @@ export default function Landing() {
           <b>{SAVED_MIN} min</b> saved on the Bengaluru two-vehicle replay{" "}
           <span className="muted">(simulated estimate on a scripted scenario)</span>
         </p>
-        <a className="cta" href="/sim">
-          Watch the replay
-        </a>
+        <div className="ctas">
+          <a className="cta" href="/sim?mode=replay&autoplay=1&speed=50">
+            Try the demo
+          </a>
+          <a className="cta alt" href="/cop?sample=1">
+            Hear a cop alert
+          </a>
+          <a className="cta alt" href="/hospital?last=1">
+            Read a handover
+          </a>
+          <a className="cta alt" href="/story">
+            See the whole story
+          </a>
+        </div>
       </section>
 
       <p className="lede">
