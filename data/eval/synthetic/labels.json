@@ -1,0 +1,320 @@
+{
+  "clips": {
+    "clip01": {
+      "script": "Patient is 58-year-old male with chest pain. Blood pressure 85 over 50, SpO2 91 percent. Conscious and breathing.",
+      "expected_fields": {
+        "age": 58,
+        "sex": "male",
+        "complaint": "chest pain",
+        "conscious": true,
+        "breathing": true,
+        "vitals": {
+          "sbp": 85,
+          "dbp": 50,
+          "hr": null,
+          "spo2": 91,
+          "rr": null,
+          "temp": null
+        },
+        "trapped_persons": 0,
+        "incident_type": "medical"
+      },
+      "expected_tier": "critical",
+      "description": "Chest pain with hypotensive vitals",
+      "voice": "en-IN-Neural2-A",
+      "speaking_rate": 0.95,
+      "language": "en-IN"
+    },
+    "clip01-kn": {
+      "script": "ರೋಗಿಗೆ chest pain ಇದೆ. 58 ವರ್ಷದ male. BP 85 by 50, SpO2 91 percent. Conscious ಇದ್ದಾರೆ, breathing ಇದೆ.",
+      "expected_fields": {
+        "age": 58,
+        "sex": "male",
+        "complaint": "chest pain",
+        "conscious": true,
+        "breathing": true,
+        "vitals": {
+          "sbp": 85,
+          "dbp": 50,
+          "hr": null,
+          "spo2": 91,
+          "rr": null,
+          "temp": null
+        },
+        "trapped_persons": 0,
+        "incident_type": "medical"
+      },
+      "expected_tier": "critical",
+      "description": "Chest pain with hypotensive vitals (Kannada-English mixed)",
+      "voice": "kn-IN-Wavenet-A",
+      "speaking_rate": 1.0,
+      "language": "kn-IN mixed with English"
+    },
+    "clip02": {
+      "script": "Unconscious patient, 42-year-old female. Not responding to voice or touch. Breathing present, SpO2 88 percent.",
+      "expected_fields": {
+        "age": 42,
+        "sex": "female",
+        "complaint": "unconscious",
+        "conscious": false,
+        "breathing": true,
+        "vitals": {
+          "sbp": null,
+          "dbp": null,
+          "hr": null,
+          "spo2": 88,
+          "rr": null,
+          "temp": null
+        },
+        "trapped_persons": 0,
+        "incident_type": "medical"
+      },
+      "expected_tier": "critical",
+      "description": "Unconscious patient",
+      "voice": "en-IN-Neural2-B",
+      "speaking_rate": 1.0,
+      "language": "en-IN"
+    },
+    "clip03": {
+      "script": "Stroke alert. 67-year-old male, facial drooping on left, right arm weakness, slurred speech. Conscious, breathing normal.",
+      "expected_fields": {
+        "age": 67,
+        "sex": "male",
+        "complaint": "stroke signs",
+        "conscious": true,
+        "breathing": true,
+        "vitals": {
+          "sbp": null,
+          "dbp": null,
+          "hr": null,
+          "spo2": null,
+          "rr": null,
+          "temp": null
+        },
+        "trapped_persons": 0,
+        "incident_type": "medical"
+      },
+      "expected_tier": "critical",
+      "description": "Stroke with classic signs",
+      "voice": "en-IN-Neural2-C",
+      "speaking_rate": 1.05,
+      "language": "en-IN"
+    },
+    "clip04": {
+      "script": "Pediatric fracture. 8-year-old child, fell from cycle, right leg swollen and deformed. Child conscious and breathing. BP 100 over 60, SpO2 96 percent.",
+      "expected_fields": {
+        "age": 8,
+        "sex": null,
+        "complaint": "fracture",
+        "conscious": true,
+        "breathing": true,
+        "vitals": {
+          "sbp": 100,
+          "dbp": 60,
+          "hr": null,
+          "spo2": 96,
+          "rr": null,
+          "temp": null
+        },
+        "trapped_persons": 0,
+        "incident_type": "medical"
+      },
+      "expected_tier": "urgent",
+      "description": "Pediatric fracture",
+      "voice": "en-IN-Neural2-D",
+      "speaking_rate": 1.1,
+      "language": "en-IN"
+    },
+    "clip05": {
+      "script": "Breathing difficulty. 55-year-old male, rapid breathing at 32 per minute, using accessory muscles. SpO2 89 percent. Conscious, BP 130 over 80.",
+      "expected_fields": {
+        "age": 55,
+        "sex": "male",
+        "complaint": "breathing difficulty",
+        "conscious": true,
+        "breathing": true,
+        "vitals": {
+          "sbp": 130,
+          "dbp": 80,
+          "hr": null,
+          "spo2": 89,
+          "rr": 32,
+          "temp": null
+        },
+        "trapped_persons": 0,
+        "incident_type": "medical"
+      },
+      "expected_tier": "critical",
+      "description": "Respiratory distress with low SpO2",
+      "voice": "en-IN-Neural2-A",
+      "speaking_rate": 1.0,
+      "language": "en-IN"
+    },
+    "clip05-kn": {
+      "script": "ರೋಗಿಗೆ breathing difficulty ಇದೆ. 55 ವರ್ಷದ male. Respiratory rate 32, SpO2 89 percent, BP 130 by 80. Conscious ಇದ್ದಾರೆ.",
+      "expected_fields": {
+        "age": 55,
+        "sex": "male",
+        "complaint": "breathing difficulty",
+        "conscious": true,
+        "breathing": true,
+        "vitals": {
+          "sbp": 130,
+          "dbp": 80,
+          "hr": null,
+          "spo2": 89,
+          "rr": 32,
+          "temp": null
+        },
+        "trapped_persons": 0,
+        "incident_type": "medical"
+      },
+      "expected_tier": "critical",
+      "description": "Respiratory distress with low SpO2 (Kannada-English mixed)",
+      "voice": "kn-IN-Wavenet-B",
+      "speaking_rate": 1.0,
+      "language": "kn-IN mixed with English"
+    },
+    "clip06": {
+      "script": "Burn injury. 35-year-old male with thermal burns to chest and arms, approximately 25 percent body surface area. Conscious, in pain, breathing shallow.",
+      "expected_fields": {
+        "age": 35,
+        "sex": "male",
+        "complaint": "burns > 20%",
+        "conscious": true,
+        "breathing": true,
+        "vitals": {
+          "sbp": null,
+          "dbp": null,
+          "hr": null,
+          "spo2": null,
+          "rr": null,
+          "temp": null
+        },
+        "trapped_persons": 0,
+        "incident_type": "medical"
+      },
+      "expected_tier": "critical",
+      "description": "Significant burn injury",
+      "voice": "en-IN-Neural2-B",
+      "speaking_rate": 0.95,
+      "language": "en-IN"
+    },
+    "clip07": {
+      "script": "Laceration to left forearm with moderate bleeding, controlled by direct pressure. 28-year-old male, conscious, alert, normal breathing. SpO2 97 percent.",
+      "expected_fields": {
+        "age": 28,
+        "sex": "male",
+        "complaint": "moderate bleeding",
+        "conscious": true,
+        "breathing": true,
+        "vitals": {
+          "sbp": null,
+          "dbp": null,
+          "hr": null,
+          "spo2": 97,
+          "rr": null,
+          "temp": null
+        },
+        "trapped_persons": 0,
+        "incident_type": "medical"
+      },
+      "expected_tier": "urgent",
+      "description": "Controlled moderate bleeding",
+      "voice": "en-IN-Neural2-C",
+      "speaking_rate": 1.0,
+      "language": "en-IN"
+    },
+    "clip08": {
+      "script": "Minor ankle sprain. 32-year-old female stepped wrong during walk. Ankle swollen but no deformity. Vitals normal, BP 118 over 76, HR 82, SpO2 98 percent, breathing normal.",
+      "expected_fields": {
+        "age": 32,
+        "sex": "female",
+        "complaint": "ankle sprain",
+        "conscious": true,
+        "breathing": true,
+        "vitals": {
+          "sbp": 118,
+          "dbp": 76,
+          "hr": 82,
+          "spo2": 98,
+          "rr": null,
+          "temp": null
+        },
+        "trapped_persons": 0,
+        "incident_type": "medical"
+      },
+      "expected_tier": "stable",
+      "description": "Minor injury with normal vitals",
+      "voice": "en-IN-Neural2-D",
+      "speaking_rate": 1.05,
+      "language": "en-IN"
+    },
+    "clip09": {
+      "script": "Fire dispatch. Structure fire at warehouse on Whitefield Road. One person trapped on second floor. Two persons standing outside. Approximately 5 to 10 percent of building involved.",
+      "expected_fields": {
+        "age": null,
+        "sex": null,
+        "complaint": "structure fire",
+        "conscious": null,
+        "breathing": null,
+        "vitals": {
+          "sbp": null,
+          "dbp": null,
+          "hr": null,
+          "spo2": null,
+          "rr": null,
+          "temp": null
+        },
+        "trapped_persons": 1,
+        "incident_type": "fire"
+      },
+      "expected_tier": "fire_with_trapped",
+      "description": "Fire dispatch with trapped person",
+      "voice": "en-IN-Neural2-A",
+      "speaking_rate": 1.1,
+      "language": "en-IN"
+    },
+    "clip10": {
+      "script": "Medical log update. Patient given oxygen 4 litres via nasal cannula at 09:15. Also administered aspirin 300 milligrams orally. Patient tolerating well.",
+      "expected_fields": {
+        "age": null,
+        "sex": null,
+        "complaint": null,
+        "conscious": null,
+        "breathing": null,
+        "vitals": {
+          "sbp": null,
+          "dbp": null,
+          "hr": null,
+          "spo2": null,
+          "rr": null,
+          "temp": null
+        },
+        "trapped_persons": 0,
+        "incident_type": null,
+        "interventions": [
+          {
+            "kind": "drug",
+            "name": "oxygen",
+            "dose": "4 litres",
+            "route": "nasal cannula",
+            "time_note": "09:15"
+          },
+          {
+            "kind": "drug",
+            "name": "aspirin",
+            "dose": "300 mg",
+            "route": "oral",
+            "time_note": null
+          }
+        ]
+      },
+      "expected_tier": null,
+      "description": "Intervention log entry (for /log endpoint, not /triage)",
+      "voice": "en-IN-Neural2-B",
+      "speaking_rate": 1.0,
+      "language": "en-IN"
+    }
+  }
+}

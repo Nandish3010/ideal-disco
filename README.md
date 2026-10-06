@@ -158,7 +158,40 @@ Runtime configuration (set by the workflows): project `green-corridor-2026`, ser
 
 ## Evaluation
 
-`scripts/eval_run.py` posts recorded EMT clips to `/triage` and scores per-field and tier accuracy against `data/eval/labels.json`. Preview with `python3 scripts/eval_run.py --dry-run`. The scripted scenarios and filenames (`clip01.m4a` to `clip10.m4a`) are in [data/eval/README.md](data/eval/README.md); results are written to `data/eval/results.json`.
+`scripts/eval_run.py` posts voice clips to `/triage` (intervention notes to `/log`) and scores each against `data/eval/labels.json`: exact match per field (strings case-insensitive, vitals within ±5, trapped persons not stated counts as none) and the suggested tier against the expected one. A clip that fails extraction (422) counts as wrong. Preview with `python3 scripts/eval_run.py --dry-run`.
+
+**These numbers are from synthetic voices (Cloud Text-to-Speech), 12 clips, 6 Oct 2026, one pass against the deployed API. They are not field recordings.** Field accuracy is 87% (67 of 77 field checks over the 11 triage clips), tier accuracy 73% (8 of 11), and the intervention note logged both drugs correctly. Mean latency was 2.9 s per clip (max 3.2 s), including the two Kannada-English mixed clips, which scored the same as their English twins on tier.
+
+| Clip | Description | Endpoint | Expected Tier | Suggested Tier | Tier Match | Field Accuracy | Latency |
+|------|-------------|----------|---------------|----------------|------------|----------------|---------|
+| clip01 | Chest pain with hypotensive vitals | /triage | critical | critical | ✓ | 100% | 2.9 s |
+| clip01-kn | Chest pain with hypotensive vitals (Kannada-English mixed) | /triage | critical | critical | ✓ | 100% | 3.2 s |
+| clip02 | Unconscious patient | /triage | critical | critical | ✓ | 86% | 2.8 s |
+| clip03 | Stroke with classic signs | /triage | critical | stable | ✗ | 86% | 2.8 s |
+| clip04 | Pediatric fracture | /triage | urgent | urgent | ✓ | 86% | 2.9 s |
+| clip05 | Respiratory distress with low SpO2 | /triage | critical | critical | ✓ | 100% | 2.8 s |
+| clip05-kn | Respiratory distress with low SpO2 (Kannada-English mixed) | /triage | critical | critical | ✓ | 86% | 2.8 s |
+| clip06 | Significant burn injury | /triage | critical | stable | ✗ | 86% | 2.8 s |
+| clip07 | Controlled moderate bleeding | /triage | urgent | stable | ✗ | 86% | 2.8 s |
+| clip08 | Minor injury with normal vitals | /triage | stable | stable | ✓ | 57% | 2.9 s |
+| clip09 | Fire dispatch with trapped person | /triage | fire_with_trapped | fire_with_trapped | ✓ | 86% | 2.8 s |
+| clip10 | Intervention log entry (for /log endpoint, not /triage) | /log | - | - | - | interventions ✓ | 2.8 s |
+
+| Field | Accuracy |
+|-------|----------|
+| age | 100% |
+| sex | 100% |
+| complaint | 36% |
+| conscious | 91% |
+| breathing | 82% |
+| vitals | 100% |
+| trapped_persons | 100% |
+
+The tier misses (clip03 stroke, clip06 burns, clip07 bleeding) are extraction wording, not transcription: Gemini returns the complaint as spoken ("facial drooping on left, right arm weakness"), the lookup in `api/acuity.py` matches fixed complaint phrases, so those cases fall through to `stable`. Complaint is a free-text field, so exact match (36%) is the harshest line in the table.
+
+To replace these with real clips, record 10 clips as described in [data/eval/README.md](data/eval/README.md), save them next to a `labels.json`, and run `python3 scripts/eval_run.py --clips <dir> --labels <dir>/labels.json`. The synthetic set is regenerated with `scripts/make_eval_clips.py` (12 Text-to-Speech calls) and lives in [data/eval/synthetic](data/eval/synthetic/) with its per-clip voices and rates; raw responses are in `results.json` there, and `--rescore` re-scores them without calling the API.
+
+**Crew agreement.** `python3 scripts/eval_run.py --agreement` reads Firestore `runs` (public REST, free) and reports the suggested tier against the crew's confirmed tier over runs that have both. On 6 Oct 2026 it was 19 of 19 (100%); those are demo and rehearsal runs, so it shows the crew confirmed the suggestion in every rehearsal run, not clinical agreement.
 
 ## Repository layout
 

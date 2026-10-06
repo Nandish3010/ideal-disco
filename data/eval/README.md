@@ -17,4 +17,6 @@ Each clip corresponds to a scenario in `labels.json`. Read the script (or descri
 9. **Fire dispatch note** — Fire call with trapped persons, give location and count.
 10. **Intervention log note** — Medical procedure or drug administered (e.g., oxygen, aspirin), include dose.
 
+A synthetic set (Cloud Text-to-Speech voices) lives in [synthetic/](synthetic/) until real recordings replace it; evaluate a directory with `python3 scripts/eval_run.py --clips <dir> --labels <dir>/labels.json`.
+
 Each clip will be posted to `/triage` with base64 encoding and compared to the expected fields in `labels.json`.

@@ -6,6 +6,7 @@ import base64
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -16,10 +17,15 @@ from typing import Any
 
 def get_api_base() -> str:
     """Get API base URL from env, default to Cloud Run URL."""
-    return os.getenv("API_BASE", "https://green-corridor-2026-emg.run.app")
+    return os.getenv("API_BASE", "https://corridor-api-919512130399.asia-south1.run.app")
 
 
-def bind_device(api_base: str, plate: str = "KA01AB1234", device_id: str = "eval-runner") -> str | None:
+# ponytail: the second registered ambulance, so a run does not supersede a demo run or rotate the demo token of KA01AB1234
+PLATE = os.getenv("EVAL_PLATE", "KA01AB4321")
+PACE_S = 6.5  # /triage and /log share a 10-per-minute per-IP bucket
+
+
+def bind_device(api_base: str, plate: str = PLATE, device_id: str = "eval-runner") -> str | None:
     """Bind device to vehicle and return device_token (or None on error)."""
     try:
         body = json.dumps({"plate": plate, "device_id": device_id}).encode()
@@ -51,8 +57,8 @@ def load_labels(path: Path) -> dict[str, Any]:
 
 def list_clips(data_dir: Path) -> list[str]:
     """List all clip files in order."""
-    clips = sorted(data_dir.glob("clip*.m4a")) + sorted(data_dir.glob("clip*.wav"))
-    return [c.name for c in clips]
+    clips = [c for ext in ("m4a", "wav", "mp3") for c in data_dir.glob(f"clip*.{ext}")]
+    return sorted(c.name for c in clips)
 
 
 def clip_to_id(clip_name: str) -> str:
@@ -72,6 +78,8 @@ def get_mime_type(clip_name: str) -> str:
         return "audio/mp4"
     elif clip_name.endswith(".wav"):
         return "audio/wav"
+    elif clip_name.endswith(".mp3"):
+        return "audio/mp3"
     else:
         return "audio/webm"
 
@@ -104,7 +112,11 @@ def field_matches(expected: Any, actual: Any, field_name: str) -> bool:
     """Check if a field matches expected value (with tolerance for vitals)."""
     if field_name == "vitals":
         return vitals_match(expected, actual)
-    # Exact match for other fields (including string complaint)
+    if field_name == "trapped_persons":  # not stated means none, as acuity.py reads it
+        return (expected or 0) == (actual or 0)
+    # Exact match for other fields; strings compare case-insensitively
+    if isinstance(expected, str) and isinstance(actual, str):
+        return expected.strip().lower() == actual.strip().lower()
     return expected == actual
 
 
@@ -133,7 +145,7 @@ def dry_run_plan(data_dir: Path, labels: dict, clips: list[str]) -> str:
         if label:
             lines.append(f"  {clip_id}: {label.get('description', 'N/A')}")
     lines.append("")
-    lines.append("Expected output: data/eval/results.json")
+    lines.append("Expected output: results.json next to the clips")
     return "\n".join(lines)
 
 
@@ -158,7 +170,7 @@ def create_incident_and_run(
         run_body = json.dumps(
             {
                 "action": "start",
-                "plate": "KA01AB1234",
+                "plate": PLATE,
                 "incident_id": incident_id,
                 "corridor": corridor,
                 "source": "sim",
@@ -177,17 +189,23 @@ def create_incident_and_run(
 
 
 def post_clip_to_triage(
-    api_base: str, run_id: str, clip_audio: str, mime: str, device_token: str | None = None
+    api_base: str,
+    run_id: str,
+    clip_audio: str,
+    mime: str,
+    device_token: str | None = None,
+    vehicle_type: str = "ambulance",
+    path: str = "/triage",
 ) -> dict | None:
-    """Post clip to /triage endpoint, return response or None on error."""
+    """Post clip to /triage (or /log), return response or None on error (no retry: the API already retries once)."""
     try:
         body = json.dumps(
-            {"run_id": run_id, "vehicle_type": "ambulance", "audio_b64": clip_audio, "mime": mime}
+            {"run_id": run_id, "vehicle_type": vehicle_type, "audio_b64": clip_audio, "mime": mime}
         ).encode()
         headers = {"Content-Type": "application/json"}
         if device_token:
             headers["X-Device-Token"] = device_token
-        req = urllib.request.Request(f"{api_base}/triage", data=body, headers=headers, method="POST")
+        req = urllib.request.Request(f"{api_base}{path}", data=body, headers=headers, method="POST")
         with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
@@ -199,97 +217,180 @@ def post_clip_to_triage(
         return None
 
 
+FIELDS = ["age", "sex", "complaint", "conscious", "breathing", "vitals", "trapped_persons"]
+
+
+def interventions_match(expected: list, actual: list) -> bool:
+    """Same set of intervention names (case-insensitive). Dose and time are not scored."""
+    names = lambda xs: {(x.get("name") or "").strip().lower() for x in xs or []}  # noqa: E731
+    return names(expected) == names(actual)
+
+
 def run_evaluation(
     api_base: str, data_dir: Path, labels: dict, clips: list[str], device_token: str | None = None
 ) -> dict[str, Any]:
-    """Run evaluation: post clips, compare results, compute accuracy."""
-    results = {"clips": {}, "summary": {}}
-
-    # Create incident and run (reused for all clips)
+    """Post each clip once (no retry: the API already retries internally); returns raw responses, see score()."""
     run_id = create_incident_and_run(api_base, device_token)
     if not run_id:
         print("Failed to create incident/run", file=sys.stderr)
-        return results
-
-    field_accuracies = []
-    tier_accuracies = []
-
-    for clip_name in clips:
+        return {"clips": {}, "summary": {}}
+    raw = {"run_id": run_id, "clips": {}}
+    for n, clip_name in enumerate(clips):
         clip_id = clip_to_id(clip_name)
         label = labels.get(clip_id)
-        if not label:
-            continue
-
         clip_path = data_dir / clip_name
-        if not clip_path.exists():
-            print(f"Warning: {clip_name} not found", file=sys.stderr)
+        if not label or not clip_path.exists():
+            print(f"Warning: {clip_name} has no label or file", file=sys.stderr)
             continue
+        expected = label.get("expected_fields", {})
+        endpoint = "/log" if "interventions" in expected else "/triage"  # an intervention note goes to /log
+        vehicle_type = "fire" if expected.get("incident_type") == "fire" else "ambulance"
+        if n:
+            time.sleep(PACE_S)
+        t0 = time.monotonic()
+        response = post_clip_to_triage(
+            api_base,
+            run_id,
+            load_clip_audio(clip_path),
+            get_mime_type(clip_name),
+            device_token,
+            vehicle_type,
+            endpoint,
+        )
+        raw["clips"][clip_id] = {
+            "endpoint": endpoint,
+            "latency_s": round(time.monotonic() - t0, 2),
+            "response": response,
+        }
+    return raw
 
-        # Load and post clip
-        audio_b64 = load_clip_audio(clip_path)
-        mime = get_mime_type(clip_name)
-        response = post_clip_to_triage(api_base, run_id, audio_b64, mime, device_token)
-        if not response:
-            results["clips"][clip_id] = {"error": "failed_to_post"}
-            continue
 
-        # Extract fields from response
-        extracted = response.get("fields", {})
-        suggested_tier = response.get("suggested_tier")
+def score(raw: dict, labels: dict) -> dict[str, Any]:
+    """Score raw responses against labels. A clip with no response (422 or any failure) is wrong on everything."""
+    results = {"run_id": raw.get("run_id"), "clips": {}, "summary": {}}
+    field_hits = {f: [] for f in FIELDS}
+    field_accuracies, tier_accuracies, latencies, interventions_ok = [], [], [], []
+
+    for clip_id, r in raw["clips"].items():
+        label = labels[clip_id]
         expected = label.get("expected_fields", {})
         expected_tier = label.get("expected_tier")
-
-        # Compute field accuracy
-        field_names = ["age", "sex", "complaint", "conscious", "breathing", "vitals", "trapped_persons"]
-        field_correct, field_total, field_details = compute_field_accuracy(expected, extracted, field_names)
-
-        # Compute tier accuracy
-        tier_match = suggested_tier == expected_tier
-        if expected_tier:  # Only count if we have an expected tier
-            tier_accuracies.append(tier_match)
-
-        field_accuracies.append(field_correct / field_total if field_total > 0 else 0)
-
-        results["clips"][clip_id] = {
+        is_log = r["endpoint"] == "/log"
+        response = r["response"]
+        entry = {
             "description": label.get("description"),
-            "expected_tier": expected_tier,
-            "suggested_tier": suggested_tier,
-            "tier_match": tier_match,
-            "field_accuracy": field_correct / field_total if field_total > 0 else 0,
-            "field_details": field_details,
-            "extracted": extracted,
-            "expected": expected,
+            "endpoint": r["endpoint"],
+            "latency_s": r["latency_s"],
+            "raw": r,
         }
+        if not response:
+            entry.update(error="failed_to_post", expected_tier=expected_tier, tier_match=False)
+            if is_log:
+                interventions_ok.append(False)
+            else:
+                field_accuracies.append(0.0)
+                for f in FIELDS:
+                    field_hits[f].append(False)
+                if expected_tier:
+                    tier_accuracies.append(False)
+            results["clips"][clip_id] = entry
+            continue
 
-    # Compute summary
+        extracted = response.get("fields", {})
+        latencies.append(r["latency_s"])
+        entry.update(extracted=extracted, expected=expected, transcript_en=response.get("transcript_en"))
+        if is_log:
+            ok = interventions_match(expected.get("interventions"), response.get("interventions"))
+            interventions_ok.append(ok)
+            entry.update(interventions_match=ok, interventions=response.get("interventions"))
+        else:
+            suggested_tier = response.get("suggested_tier")
+            field_correct, field_total, field_details = compute_field_accuracy(expected, extracted, FIELDS)
+            for f, hit in field_details.items():
+                field_hits[f].append(hit)
+            field_accuracies.append(field_correct / field_total)
+            tier_match = suggested_tier == expected_tier
+            if expected_tier:
+                tier_accuracies.append(tier_match)
+            entry.update(
+                expected_tier=expected_tier,
+                suggested_tier=suggested_tier,
+                tier_match=tier_match,
+                field_accuracy=field_correct / field_total,
+                field_details=field_details,
+            )
+        results["clips"][clip_id] = entry
+
+    s = results["summary"]
     if field_accuracies:
-        results["summary"]["overall_accuracy"] = sum(field_accuracies) / len(field_accuracies)
-        results["summary"]["field_count"] = len(field_accuracies)
+        s["overall_accuracy"] = sum(field_accuracies) / len(field_accuracies)
+        s["field_count"] = len(field_accuracies)
+        s["per_field_accuracy"] = {f: sum(h) / len(h) for f, h in field_hits.items() if h}
     if tier_accuracies:
-        results["summary"]["tier_accuracy"] = sum(tier_accuracies) / len(tier_accuracies)
-        results["summary"]["tier_count"] = len(tier_accuracies)
-
+        s["tier_accuracy"] = sum(tier_accuracies) / len(tier_accuracies)
+        s["tier_count"] = len(tier_accuracies)
+    if interventions_ok:
+        s["interventions_accuracy"] = sum(interventions_ok) / len(interventions_ok)
+        s["interventions_count"] = len(interventions_ok)
+    if latencies:
+        s["latency_mean_s"] = round(sum(latencies) / len(latencies), 2)
+        s["latency_max_s"] = max(latencies)
+    s["failed_clips"] = sum(1 for c in results["clips"].values() if "error" in c)
     return results
 
 
 def markdown_table(results: dict) -> str:
     """Generate markdown table of results."""
     lines = [
-        "| Clip | Description | Expected Tier | Suggested Tier | Tier Match | Field Accuracy |",
-        "|------|-------------|---------------|--------------------|--------------|",
+        "| Clip | Description | Endpoint | Expected Tier | Suggested Tier | Tier Match | Field Accuracy | Latency |",
+        "|------|-------------|----------|---------------|----------------|------------|----------------|---------|",
     ]
-    for clip_id in sorted(results.get("clips", {}).keys()):
-        clip = results["clips"][clip_id]
-        if "error" in clip:
-            lines.append(f"| {clip_id} | ERROR | - | - | - | - |")
+    for clip_id in sorted(results.get("clips", {})):
+        c = results["clips"][clip_id]
+        desc = c.get("description") or ""
+        lat = f"{c['latency_s']:.1f} s"
+        if "error" in c:
+            lines.append(
+                f"| {clip_id} | {desc} | {c['endpoint']} | {c.get('expected_tier') or '-'} | ERROR | ✗ | 0% | {lat} |"
+            )
+        elif c["endpoint"] == "/log":
+            lines.append(
+                f"| {clip_id} | {desc} | /log | - | - | - | interventions {'✓' if c['interventions_match'] else '✗'} | {lat} |"
+            )
         else:
-            desc = clip.get("description", "")[:40]
-            exp_tier = clip.get("expected_tier", "N/A")
-            sug_tier = clip.get("suggested_tier", "N/A")
-            tier_match = "✓" if clip.get("tier_match") else "✗"
-            field_acc = f"{clip.get('field_accuracy', 0):.0%}"
-            lines.append(f"| {clip_id} | {desc} | {exp_tier} | {sug_tier} | {tier_match} | {field_acc} |")
+            tm = "✓" if c["tier_match"] else "✗"
+            lines.append(
+                f"| {clip_id} | {desc} | /triage | {c['expected_tier']} | {c['suggested_tier']} | {tm} | {c['field_accuracy']:.0%} | {lat} |"
+            )
+    s = results.get("summary", {})
+    if "per_field_accuracy" in s:
+        lines += ["", "| Field | Accuracy |", "|-------|----------|"]
+        lines += [f"| {f} | {a:.0%} |" for f, a in s["per_field_accuracy"].items()]
     return "\n".join(lines)
+
+
+def firestore_runs(project: str = "green-corridor-2026") -> list[dict]:
+    """All docs in Firestore `runs` via the public REST API (reads are open), as {field: string value}."""
+    base = f"https://firestore.googleapis.com/v1/projects/{project}/databases/(default)/documents/runs"
+    runs, token = [], ""
+    while True:
+        url = f"{base}?pageSize=300&mask.fieldPaths=acuity_tier&mask.fieldPaths=confirmed_tier" + (
+            f"&pageToken={token}" if token else ""
+        )
+        with urllib.request.urlopen(url, timeout=20) as resp:
+            page = json.loads(resp.read())
+        for d in page.get("documents", []):
+            runs.append({k: v.get("stringValue") for k, v in d.get("fields", {}).items()})
+        token = page.get("nextPageToken", "")
+        if not token:
+            return runs
+
+
+def agreement() -> dict:
+    """Crew agreement: suggested tier (acuity_tier, from /triage) vs the crew's tap (confirmed_tier), runs with both."""
+    both = [r for r in firestore_runs() if r.get("acuity_tier") and r.get("confirmed_tier")]
+    same = sum(r["acuity_tier"] == r["confirmed_tier"] for r in both)
+    return {"n": len(both), "agree": same, "agreement": same / len(both) if both else None}
 
 
 def submit_to_vertex_eval(results: dict) -> None:
@@ -305,14 +406,33 @@ def main():
     parser = argparse.ArgumentParser(description="Evaluation runner for triage clips")
     parser.add_argument("--dry-run", action="store_true", help="List plan without posting to API")
     parser.add_argument(
+        "--clips", type=Path, default=Path("data/eval"), help="directory of clipNN.{m4a,wav,mp3}"
+    )
+    parser.add_argument("--labels", type=Path, default=Path("data/eval/labels.json"))
+    parser.add_argument(
+        "--rescore",
+        action="store_true",
+        help="re-score the raw responses in <clips>/results.json (no API calls)",
+    )
+    parser.add_argument(
+        "--agreement",
+        action="store_true",
+        help="crew agreement: suggested vs confirmed tier over Firestore runs (free, no clips)",
+    )
+    parser.add_argument(
         "--vertex-eval", action="store_true", help="Also submit to Vertex AI Evaluation Service (not run)"
     )
     args = parser.parse_args()
 
-    data_dir = Path("data/eval")
-    labels_path = Path("data/eval/labels.json")
+    if args.agreement:
+        a = agreement()
+        print(json.dumps(a))
+        if a["n"]:
+            print(f"Crew agreement: {a['agree']}/{a['n']} = {a['agreement']:.0%} (runs with both tiers)")
+        return
 
-    # Load or use template
+    data_dir, labels_path = args.clips, args.labels
+
     if not labels_path.exists():
         print(
             f"Error: {labels_path} not found. Create from labels.template.json and name it labels.json.",
@@ -334,35 +454,35 @@ def main():
         print(f"Error: No audio clips found in {data_dir}", file=sys.stderr)
         sys.exit(1)
 
-    # Run evaluation
-    api_base = get_api_base()
-    print(f"Running evaluation against {api_base}...", file=sys.stderr)
+    results_path = data_dir / "results.json"
+    if args.rescore:
+        raw = json.loads(results_path.read_text())
+        raw = {"run_id": raw.get("run_id"), "clips": {k: c["raw"] for k, c in raw["clips"].items()}}
+    else:
+        api_base = get_api_base()
+        print(f"Running evaluation against {api_base}...", file=sys.stderr)
+        device_token = bind_device(api_base)
+        if not device_token:
+            print("Failed to bind device; continuing without token", file=sys.stderr)
+        raw = run_evaluation(api_base, data_dir, labels, clips, device_token)
+    results = score(raw, labels)
 
-    # Bind device to get token
-    device_token = bind_device(api_base)
-    if not device_token:
-        print("Failed to bind device; continuing without token", file=sys.stderr)
-
-    results = run_evaluation(api_base, data_dir, labels, clips, device_token)
-
-    # Write results
-    results_path = Path("data/eval/results.json")
-    with open(results_path, "w") as f:
-        json.dump(results, f, indent=2)
+    # Write results and the markdown table next to the clips
+    results_path.write_text(json.dumps(results, indent=2) + "\n")
+    table = markdown_table(results)
+    (data_dir / "results.md").write_text(table + "\n")
     print(f"Results written to {results_path}", file=sys.stderr)
 
-    # Print table
     print("\n## Evaluation Results\n")
-    print(markdown_table(results))
+    print(table)
     if results["summary"]:
         print("\n### Summary\n")
         for key, val in results["summary"].items():
-            if isinstance(val, float):
+            if isinstance(val, float) and not key.endswith("_s"):
                 print(f"- **{key}**: {val:.1%}")
-            else:
+            elif not isinstance(val, dict):
                 print(f"- **{key}**: {val}")
 
-    # Vertex eval (if requested)
     if args.vertex_eval:
         print("\nVertex AI Evaluation Service flag detected (--vertex-eval)", file=sys.stderr)
         submit_to_vertex_eval(results)
