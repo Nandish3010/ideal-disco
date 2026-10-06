@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   collection,
   collectionGroup,
@@ -16,6 +16,16 @@ import { firstWithAudio, lastBrief, lastRouted } from "./pick.js";
 
 // Read-only panels so a judge sees the AI output without any POST. Firestore reads only.
 
+// ?sample=1 / ?last=1 (the landing page shortcuts) bring that panel into view.
+function useScrollTo(param) {
+  const el = useRef(null);
+  useEffect(() => {
+    if (new URLSearchParams(location.search).get(param) === "1")
+      el.current?.scrollIntoView({ block: "center" });
+  }, [param]);
+  return el;
+}
+
 const FALLBACK = {
   stage: "SAMPLE",
   text: "Sample alert (bundled demo audio)",
@@ -25,6 +35,7 @@ const FALLBACK = {
 // Plays the newest alert that has speech; falls back to the bundled MP3 when there is none or the read fails.
 // play(alert, onBlocked) is the page's own speak(), so one sound at a time.
 export function SampleAlert({ play }) {
+  const el = useScrollTo("sample");
   const [a, setA] = useState(null);
   const [busy, setBusy] = useState(false);
   const [blocked, setBlocked] = useState(false);
@@ -46,7 +57,7 @@ export function SampleAlert({ play }) {
     setBusy(false);
   }
   return (
-    <section className="card">
+    <section className="card" ref={el}>
       <button onClick={go} disabled={busy}>
         {busy ? "Loading…" : "▶ Sample alert"}
       </button>
@@ -87,6 +98,7 @@ const ATMIST = [
 
 // "Last handover": newest briefs/* written by a model (not the offline stub), with that run's logged interventions.
 export function LastHandover({ Chips }) {
+  const el = useScrollTo("last");
   const s = useNewest("briefs", "generated_at", 10);
   const b = s.data ? lastBrief(s.data) : null;
   const log = useLog(b?.id);
@@ -98,7 +110,7 @@ export function LastHandover({ Chips }) {
       return !seen.has(k) && seen.add(k);
     });
   return (
-    <section className="card">
+    <section className="card" ref={el}>
       <h2 style={{ marginTop: 0 }}>Last handover</h2>
       <ErrCard what="the last handover" error={s.error} retry={s.retry} />
       {s.loading ? (

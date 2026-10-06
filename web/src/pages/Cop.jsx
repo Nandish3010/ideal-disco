@@ -12,6 +12,7 @@ import { db } from "../firebase.js";
 import { api, copTokenKey } from "../api.js";
 import { corridors } from "../data.js";
 import { SampleAlert } from "../samples.jsx";
+import { InstallApp } from "../pwa.jsx";
 import {
   Err,
   ErrCard,
@@ -536,9 +537,12 @@ export default function Cop() {
   const j = js.find((x) => x.id === jn) ?? js[0];
 
   const about = (
-    <p className="muted">
-      Junction constable view: hear and acknowledge approaching emergency vehicles
-    </p>
+    <>
+      <p className="muted">
+        Junction constable view: hear and acknowledge approaching emergency vehicles
+      </p>
+      <InstallApp />
+    </>
   );
   if (duty) {
     return (
