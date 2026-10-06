@@ -36,7 +36,7 @@ from gemini import log, offline
 from hospitals import CAPS, HOSPITALS, by_id, on_diversion
 from telemetry import traced
 
-TIMEOUT_S = 20
+TIMEOUT_S = 40
 FALLBACK_SPEED_MPS = 8  # straight-line ETA when Routes has no answer
 KEYWORDS = {  # complaint/transcript substrings -> capability
     "cath_lab": ("chest pain", "stemi", "cardiac", "heart attack"),

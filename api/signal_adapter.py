@@ -22,16 +22,18 @@ class SimAdapter(SignalAdapter):
         self.db = db
 
     def request_green(self, junction_id, approach, duration_s, run_ids, sequence=None, blocked=False):
-        until = datetime.now(UTC) + timedelta(seconds=duration_s)
-        self.db.collection("junctions").document(junction_id).set(
-            {
-                "phase": {
-                    "approach": approach,
-                    "until": until,
-                    "run_ids": run_ids,
-                    "sequence": sequence or [],
-                    "blocked": blocked,  # a cop reported the junction cannot clear: until/clear time already doubled
-                }
-            },
-            merge=True,
-        )
+        now = datetime.now(UTC)
+        doc: dict = {
+            "phase": {
+                "approach": approach,
+                "until": now + timedelta(seconds=duration_s),
+                "run_ids": run_ids,
+                "sequence": sequence or [],
+                "blocked": blocked,  # a cop reported the junction cannot clear: until/clear time already doubled
+            }
+        }
+        if (
+            len(sequence or []) >= 2
+        ):  # kept past the phase: a later single-vehicle phase leaves it alone (main.rationale adds the why)
+            doc["last_sequence"] = {"sequence": sequence, "at": now}
+        self.db.collection("junctions").document(junction_id).set(doc, merge=True)

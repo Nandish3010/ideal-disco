@@ -124,10 +124,34 @@ def test_a_delay_with_no_green_running_is_noted_only(scene: Scene) -> None:
     assert scene.junction.get().to_dict()["phase"]["until"] < datetime.now(UTC)  # a stale phase stays stale
 
 
-def test_a_delay_still_escalates_an_alert_the_cop_already_acked(scene: Scene) -> None:
+def test_a_long_delay_never_escalates_an_alert_that_is_already_acked(scene: Scene) -> None:
     scene.alert.update({"acked_at": datetime.now(UTC)})
-    scene.apply(kind="delay", extra_seconds=150)
-    assert scene.a["escalated"] is True
+    out = scene.apply(kind="delay", extra_seconds=150)
+    assert out["effects"]["escalated"] == 0 and out["effects"]["phase_extended_s"] == 150
+    assert scene.a["escalated"] is False and scene.audit("escalation") == []
+    assert scene.a["cop_delay_s"] == 150  # still noted on the alert
+
+
+def test_a_long_delay_escalates_only_the_unacked_alert_of_a_run_still_approaching(scene: Scene) -> None:
+    runs = scene.db.collection("runs")
+    other = runs.document("run-ahead")  # a second run still heading for the junction: its alert is unacked
+    other.set(
+        {**(runs.document(scene.rid).get().to_dict() or {}), "ahead_ids": [scene.jid], "state": "en_route"}
+    )
+    mine = other.collection("alerts").document("0")
+    mine.set(
+        {"junction_id": scene.jid, "stage": "PREPARE", "created_at": datetime.now(UTC), "acked_at": None}
+    )
+    gone = runs.document("run-passed")  # a run that already passed: state en_route but no longer ahead
+    gone.set({"vehicle_type": "ambulance", "state": "en_route", "ahead_ids": []})
+    old = gone.collection("alerts").document("0")
+    old.set({"junction_id": scene.jid, "stage": "STOP", "created_at": datetime.now(UTC), "acked_at": None})
+    scene.alert.update({"acked_at": datetime.now(UTC)})
+    out = scene.apply(kind="delay", extra_seconds=150)
+    assert out["effects"]["escalated"] == 1
+    assert mine.get().to_dict()["escalated"] is True and mine.get().to_dict()["escalation_reason"]
+    assert scene.a["escalated"] is False and "cop_note" in scene.a
+    assert not old.get().to_dict().get("escalated") and "cop_note" not in old.get().to_dict()
 
 
 # ---- cleared ----------------------------------------------------------------------------------------------------------

@@ -17,6 +17,11 @@ from fakefs import seed
 NAME = "blr-two-vehicles"
 SC, BLR = SCENARIOS[NAME], CORRIDORS["blr"]
 ORDER = [f"blr_{j['id']}" for j in BLR["junctions"]]
+ROLE = {
+    "KA01AB1234": "critical",
+    "KA01AB4321": "stroke",
+    "KA01FE5678": "fire_with_trapped",
+}  # both ambulances are critical
 
 
 def collect(coll: Any) -> list[dict]:
@@ -25,7 +30,7 @@ def collect(coll: Any) -> list[dict]:
 
 @pytest.fixture(scope="module")
 def replay() -> Iterator[dict[str, dict]]:
-    """{tier: per-run record}, plus the audit trail under "audit"."""
+    """{role: per-run record}, plus the audit trail under "audit"."""
     fake.clear()
     seed(fake)
     client = TestClient(main.app)
@@ -51,7 +56,7 @@ def replay() -> Iterator[dict[str, dict]]:
             }
         )
         client.post(f"/runs/{rid}/confirm", json={"tier": v["tier"]})
-        runs[v["tier"]] = {
+        runs[ROLE[v["plate"]]] = {
             "id": rid,
             "type": v["type"],
             "plate": v["plate"],
@@ -61,7 +66,7 @@ def replay() -> Iterator[dict[str, dict]]:
         }
 
     events = sorted(
-        ((v["start_offset_s"] + k["t"], v["tier"], k) for v in SC["vehicles"] for k in v["ticks"]),
+        ((v["start_offset_s"] + k["t"], ROLE[v["plate"]], k) for v in SC["vehicles"] for k in v["ticks"]),
         key=lambda e: e[:2],
     )
     base = datetime.now(UTC).replace(microsecond=0)
@@ -116,7 +121,7 @@ def alerts_of(replay: dict, stage: str | None = None) -> list[dict]:
 
 
 def test_replay_drove_every_vehicle(replay: dict) -> None:
-    for tier in ("critical", "urgent", "fire_with_trapped"):
+    for tier in ("critical", "stroke", "fire_with_trapped"):
         assert replay[tier]["ticks"], tier
     assert all(r["ticks"][0]["state"] == "en_route" for t, r in replay.items() if t != "audit")
 
@@ -169,8 +174,8 @@ def junction_sequences(replay: dict, jid: str) -> list[dict[str, int]]:
 
 def test_j3_fire_goes_first_and_the_ambulances_share_a_slot(replay: dict) -> None:
     seqs = junction_sequences(replay, "blr_j3")
-    both = [s for s in seqs if {"critical", "urgent"} <= set(s)]
-    assert both and all(s["critical"] == s["urgent"] for s in both)
+    both = [s for s in seqs if {"critical", "stroke"} <= set(s)]
+    assert both and all(s["critical"] == s["stroke"] for s in both)
     with_fire = [s for s in both if "fire_with_trapped" in s]
     assert with_fire, seqs
     assert all(
@@ -208,14 +213,14 @@ def test_fire_has_no_brief_and_no_routing(replay: dict) -> None:
 
 
 def test_scenario_routing_is_recorded_not_applied(replay: dict) -> None:
-    for tier in ("critical", "urgent"):
+    for tier in ("critical", "stroke"):
         routing = replay[tier]["doc"]["routing"]
         assert routing["applied"] is False and routing["reason"] == "scenario run keeps corridor hospital"
         assert replay[tier]["doc"]["destination"]["name"] == BLR["hospital"]["name"]
 
 
 def test_ambulances_arrive_and_the_report_counts_from_the_first_tick(replay: dict) -> None:
-    for tier in ("critical", "urgent"):
+    for tier in ("critical", "stroke"):
         r = replay[tier]
         assert (
             r["ticks"][-1]["state"] == "arrived" and r["doc"]["state"] == "ended"

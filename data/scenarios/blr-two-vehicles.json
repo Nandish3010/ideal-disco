@@ -138,7 +138,7 @@
       "run_id": "run-amb-2",
       "plate": "KA01AB4321",
       "type": "ambulance",
-      "tier": "urgent",
+      "tier": "critical",
       "patient": "68 year old female, sudden left-side weakness and slurred speech 20 minutes ago, BP 170 over 100, conscious",
       "start_offset_s": 40,
       "approaches": {

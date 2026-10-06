@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from typing import Literal
 
 import httpx
@@ -32,6 +33,27 @@ LOG_SYSTEM = (
     " List each drug, procedure or observation the crew says was done or given in interventions, with dose, "
     "route and time exactly as spoken; leave a part null if it was not said. Never infer an intervention."
 )
+FIRE_SYSTEM = (
+    " The input is a fire dispatch note, not a patient report. Fill incident_type (for example structure fire) and "
+    "trapped_persons: the number of people said to be trapped, 0 if the note says no one is trapped, null only if "
+    "it does not say."
+)
+NUMBER_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
+TRAPPED = re.compile(
+    r"\b(\d+|one|two|three|four|five)\s+(?:people|persons|person)\s+(?:are\s+)?trapped\b", re.I
+)
+NO_ONE_TRAPPED = re.compile(
+    r"\b(?:no\s*one|nobody|no\s+(?:people|persons?))\b(?:\s+(?:is|are))?\s+trapped\b", re.I
+)
+
+
+def trapped_from_text(text: str | None) -> int | None:
+    """Fallback when the model leaves trapped_persons null on a fire note: '2 people trapped', 'one person trapped'
+    -> that number, 'no one trapped' -> 0, anything else -> None."""
+    if m := TRAPPED.search(text or ""):
+        w = m.group(1).lower()
+        return NUMBER_WORDS.get(w) or int(w)
+    return 0 if NO_ONE_TRAPPED.search(text or "") else None
 
 
 NO_THINKING = types.ThinkingConfig(
@@ -154,7 +176,14 @@ def text_models():
 def extract(
     audio_bytes, mime, text, vehicle_type, lang_hint, run_id=None, interventions=False, image_bytes=None
 ) -> dict:
+    schema = LogExtraction if interventions else Extraction
     if offline():
+        if (
+            vehicle_type == "fire" and text
+        ):  # dev stub: a fire dispatch note, read by the regex fallback alone
+            return schema(
+                incident_type="fire", trapped_persons=trapped_from_text(text), transcript_en=text
+            ).model_dump()
         raise ExtractionFailed(run_id)
     parts = []
     if audio_bytes:
@@ -164,18 +193,18 @@ def extract(
     if text:
         parts.append(text)
     ctx = f" Reporting vehicle: {vehicle_type}." + (f" Likely language: {lang_hint}." if lang_hint else "")
-    schema = LogExtraction if interventions else Extraction
     cfg = types.GenerateContentConfig(
         system_instruction=SYSTEM
         + (IMAGE_SYSTEM if image_bytes else "")
         + (LOG_SYSTEM if interventions else "")
+        + (FIRE_SYSTEM if vehicle_type == "fire" else "")
         + ctx,
         response_mime_type="application/json",
         response_schema=schema,
         thinking_config=NO_THINKING,
     )
     # ponytail: first model twice, then the fallback once
-    return generate_json(
+    out = generate_json(
         [os.environ["GEMINI_MODEL"]] * 2 + [os.environ["GEMINI_FALLBACK_MODEL"]],
         parts,
         cfg,
@@ -183,6 +212,11 @@ def extract(
         run_id,
         LONG_TIMEOUT_MS if audio_bytes or image_bytes else TIMEOUT_MS,
     )[0]
+    if (
+        vehicle_type == "fire" and out.get("trapped_persons") is None
+    ):  # the model left it null: read the words
+        out["trapped_persons"] = trapped_from_text(out["transcript_en"])
+    return out
 
 
 def cop_note(audio_bytes, mime, text) -> dict:

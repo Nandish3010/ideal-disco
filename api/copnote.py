@@ -81,8 +81,8 @@ def apply(db, jid: str, raw: dict, now: datetime) -> dict[str, Any]:
     alerts = alerts_ahead(db, jid)
     unacked = next(
         (a for a in alerts if not a.to_dict().get("acked_at")), None
-    )  # what "cleared" acknowledges
-    target = unacked or (alerts[0] if alerts else None)  # the active alert: what an escalation flags
+    )  # what "cleared" acknowledges and an escalation flags: an acknowledged alert is never escalated
+    target = unacked
     unacked_path, target_path = (x.reference.path if x else None for x in (unacked, target))
     fx: dict[str, Any] = {"phase_extended_s": 0, "acked": 0, "escalated": 0, "blocked_s": 0}
     why = {"delay": "cop_reported_delay", "cannot_clear": "cop_cannot_clear"}.get(kind)

@@ -3,7 +3,7 @@ import { collection, doc, getDoc, getDocs, query, where } from "firebase/firesto
 import { db } from "../firebase.js";
 import { corridors } from "../data.js";
 import CorridorMap from "../map.jsx";
-import { TraceCard } from "../trace.jsx";
+import { LastSequence, TraceCard } from "../trace.jsx";
 import { ErrCard, Offline } from "../ui.jsx";
 import { copNoteText, mmss, seqLine, tierLabel, traceLine, vehicleLabel } from "../format.js";
 import { buildTimeline, chooseRun, mapState, ms } from "../story.js";
@@ -181,6 +181,9 @@ function Item({ it, d, play, playing, jname }) {
           </h3>
           {seqLine(it.sequence, d.runs) && <p>{seqLine(it.sequence, d.runs)}</p>}
           {it.rationale && <p className="muted">{it.rationale}</p>}
+          {!seqLine(it.sequence, d.runs) && (
+            <LastSequence last={d.junctions[it.jid]?.last_sequence} runs={d.runs} />
+          )}
         </>
       );
     case "brief": {

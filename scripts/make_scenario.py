@@ -5,7 +5,7 @@ Ticks are interpolated along the corridor's approach polylines, so rerun this af
 Ambulance KA01AB1234 (critical) starts LEAD_M (900 m) of straight lead-in before the origin of j1's approach
 polyline, driven at 11 m/s, then runs all 5 junctions to the hospital; fire engine KA01FE5678
 (fire_with_trapped) comes in on j3's cross approach and reaches the stop line ~3 s ahead of it; a second
-ambulance KA01AB4321 (urgent, a stroke case: stroke_unit, so Jayadeva) is the first one's whole trace, lead-in included, 40 s later (platoon).
+ambulance KA01AB4321 (critical, a stroke case: stroke_unit, so Jayadeva) is the first one's whole trace, lead-in included, 40 s later (platoon).
 Span intervals use route order (stop line = largest to_m), like api/leadtime.py and the traffic logger.
 """
 
@@ -199,7 +199,7 @@ out = {
             "run_id": "run-amb-2",
             "plate": "KA01AB4321",
             "type": "ambulance",
-            "tier": "urgent",
+            "tier": "critical",
             "patient": "68 year old female, sudden left-side weakness and slurred speech 20 minutes ago, BP 170 over 100, conscious",
             "start_offset_s": amb2_start,
             "approaches": {"j1": "E", "j2": "SE", "j3": "E", "j4": "E", "j5": "E"},
