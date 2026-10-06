@@ -163,10 +163,16 @@ ONLY a JSON object:
 "dropped" is [] when you drop nothing. The two reasons are exactly two plain sentences: which capabilities and beds made it
 eligible, and why it beat the others. "alternatives" are the top two hospitals you rejected, most plausible first."""
 
+
+def router_model() -> str:
+    """The routing agent runs on GEMINI_TEXT_MODEL, like the brief and the report (GEMINI_MODEL is the extraction model)."""
+    return os.environ.get("GEMINI_TEXT_MODEL", "gemini-3-flash-preview")
+
+
 hospital_router = (
     LlmAgent(
         name="hospital_router",
-        model=os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview"),
+        model=router_model(),
         instruction=INSTRUCTION,
         tools=[list_hospitals, eta_to, required_capabilities, check_diversion],
         planner=BuiltInPlanner(thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW)),

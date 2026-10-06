@@ -79,13 +79,13 @@ const base = (v, corridor) => ({
 
 // "Today": the same baseline as api/report.py. At every junction the vehicle passes it stops for the remaining red
 // (arrival at mid-red = cycle_s / 4) plus the recorded queue ahead draining at 2.0 m/s (jam_m / 2.0). Deterministic.
-export function simulateWithout(sc, corridor) {
+export function simulateWithout(sc, corridor, rate = DRAIN_MPS) {
   return sc.vehicles.map((v) => {
     const b = base(v, corridor);
     const stops = b.passes.map((p) => {
       const jam_m = jamAt(sc, p.junction, p.approach, b.start_s + p.t);
       const red_s = p.cycle_s / 4,
-        drain_s = jam_m / DRAIN_MPS;
+        drain_s = jam_m / rate;
       return { junction: p.junction, t: p.t, wait_s: red_s + drain_s, red_s, drain_s, jam_m };
     });
     return { ...b, stops, without_s: b.duration_s + stops.reduce((s, x) => s + x.wait_s, 0) };
@@ -154,8 +154,8 @@ function schedule(v, list, key) {
   });
 }
 
-export function simulate(sc, corridor) {
-  const wo = simulateWithout(sc, corridor),
+export function simulate(sc, corridor, rate = DRAIN_MPS) {
+  const wo = simulateWithout(sc, corridor, rate),
     w = simulateWith(sc, corridor);
   const vehicles = sc.vehicles.map((v, i) => ({
     ...wo[i],
@@ -179,6 +179,16 @@ export function simulate(sc, corridor) {
     end_s: Math.max(...vehicles.map((v) => v.start_s + v.without_s)),
     sequencing: vehicles.flatMap((v) => v.offsets.map((o) => ({ ...o, at: v.start_s + o.t }))),
   };
+}
+
+// The vehicle the headline is about: the critical ambulance, else the first vehicle.
+export const lead = (sim) =>
+  sim.vehicles.find((v) => v.type === "ambulance" && v.tier === "critical") ?? sim.vehicles[0];
+
+// The lead vehicle's saving in minutes if the queue drained at each of `rates` m/s (baseline re-run per rate): [low, high].
+export function savedRange(sc, corridor, rates = [1, 3]) {
+  const m = rates.map((r) => lead(simulate(sc, corridor, r)).saved_s / 60);
+  return [Math.min(...m), Math.max(...m)];
 }
 
 // Where is vehicle v at scenario time T given its holds? {lat, lng, started, hold (current or null), delay (s lost so far)}

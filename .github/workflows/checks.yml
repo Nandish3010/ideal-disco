@@ -33,11 +33,9 @@ jobs:
           cache-dependency-path: |
             api/requirements.txt
             api/requirements-dev.txt
-      # google-adk is the heavy package and no test needs it: agent.py falls back to the rule-based router without it
-      - name: Install
-        run: |
-          grep -v '^google-adk' api/requirements.txt > "$RUNNER_TEMP/requirements.txt"
-          pip install -r api/requirements-dev.txt -r "$RUNNER_TEMP/requirements.txt"
+      # google-adk (pinned in requirements.txt) stays in, so HAVE_ADK is True and test_agent.py's fake-runner tests run
+      # through the real ADK import; the pip cache keeps the install fast
+      - run: pip install -r api/requirements-dev.txt -r api/requirements.txt
       - run: ruff check .
       - run: ruff format --check .
       - run: mypy api

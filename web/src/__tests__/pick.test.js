@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  destName,
   firstWithAudio,
+  handover,
   lastBrief,
   lastRouted,
   latestOpen,
+  routedRun,
+  sampleAlert,
   typeLabel,
   within,
   withMethod,
@@ -34,6 +38,49 @@ describe("pick", () => {
     ];
     expect(lastRouted(runs).id).toBe("z");
     expect(lastRouted([runs[0], runs[3]])).toBeNull();
+  });
+  it("sampleAlert: the PREPARE alert with speech and the longest queue, else the newest with speech", () => {
+    const a = (id, stage, jam_m, audio_url, at) => ({
+      id,
+      stage,
+      jam_m,
+      audio_url,
+      created_at: `2026-10-05T${at}:00Z`,
+    });
+    const rows = [
+      a("newest-stop", "STOP", 0, "u", "12"),
+      a("short", "PREPARE", 120, "u", "11"),
+      a("silent-long", "PREPARE", 900, null, "10"),
+      a("long-old", "PREPARE", 520, "u", "08"),
+      a("long-new", "PREPARE", 520, "u", "09"),
+    ];
+    expect(sampleAlert(rows).id).toBe("long-new");
+    expect(sampleAlert([rows[0], rows[2]]).id).toBe("newest-stop");
+    expect(sampleAlert([rows[2]])).toBeNull();
+  });
+  it("handover: the pinned brief for its own hospital, else the newest brief for the selected one", () => {
+    const J = "Jayadeva Institute of Cardiovascular Sciences";
+    const runs = [
+      { id: "r1", destination: { name: J } },
+      { id: "r2", destination: { name: "Apollo Hospital Bannerghatta Road" } },
+      { id: "r3", destination: { name: J } },
+    ];
+    const brief = (id, h) => ({ id, model: "gemini", generated_at: `2026-10-05T${h}:00:00Z` });
+    const briefs = [brief("r1", "09"), brief("r2", "11"), brief("r3", "10")];
+    const pinned = brief("r1", "08");
+    expect(handover({ pinned, pinnedRun: runs[0], briefs, runs, hospital: J }).id).toBe("r1");
+    // pinned run went to Jayadeva: Apollo's desk gets Apollo's newest brief, not the pin
+    const apollo = runs[1].destination.name;
+    expect(handover({ pinned, pinnedRun: runs[0], briefs, runs, hospital: apollo }).id).toBe("r2");
+    expect(handover({ briefs, runs, hospital: J }).id).toBe("r3");
+    expect(handover({ briefs, runs, hospital: "Fortis Hospital Bannerghatta Road" })).toBeNull();
+    expect(destName(undefined)).toBeNull();
+  });
+  it("routedRun prefers the pinned run when it has a routing", () => {
+    const runs = [{ id: "n", routing: { applied: true, decided_at: "2026-10-05T09:00:00Z" } }];
+    expect(routedRun({ id: "p", routing: { trace: [] } }, runs).id).toBe("p");
+    expect(routedRun({ id: "p" }, runs).id).toBe("n");
+    expect(routedRun(undefined, runs).id).toBe("n");
   });
   it("within keeps the last 24 h only", () => {
     const now = Date.parse("2026-10-06T00:00:00Z");

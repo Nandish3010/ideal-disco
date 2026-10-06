@@ -35,7 +35,9 @@ TAGS = [
     {"name": "ops", "description": "Health and scheduled housekeeping."},
 ]
 
-DESCRIPTION = """Preempts traffic signals along an emergency vehicle's route: ticks in, alerts out.
+DESCRIPTION = """Along an emergency vehicle's route, requests green phases through a signal adapter (simulated in the demo) and
+alerts the junction constable: ticks in, alerts out. The adapter is the only simulated part: `SimAdapter` writes the requested
+phase to Firestore and no real signal controller is called; the spoken alerts, acknowledgements and escalations are real.
 
 **Errors.** Every 4xx and 5xx body is the same envelope, `{"error": "<code>", "detail": "<text>"}`, sometimes with extra keys
 (`state`, `fallback`, `retry_after_s`). Every response carries `X-Request-Id`.

@@ -6,6 +6,7 @@ import {
   mmss,
   plural,
   seqLine,
+  tierLabel,
   traceLine,
   vehicleLabel,
 } from "../format.js";
@@ -55,6 +56,16 @@ describe("seqLine", () => {
 });
 
 it("mmss", () => expect(mmss(394)).toBe("6:34"));
+
+describe("tierLabel", () => {
+  it("never shows a raw enum", () => {
+    expect(tierLabel("fire_with_trapped")).toBe("trapped persons");
+    expect(tierLabel("police_with_incident")).toBe("incident");
+    expect(tierLabel("critical")).toBe("critical");
+    expect(tierLabel("some_new_tier")).toBe("some new tier");
+    expect(tierLabel(undefined)).toBe("");
+  });
+});
 
 describe("vehicleLabel", () => {
   it("turns type and tier enums into labels", () => {

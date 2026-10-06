@@ -3,6 +3,7 @@ import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase.js";
 import { api } from "../api.js";
 import { corridors } from "../data.js";
+import { tierLabel, vehicleLabel } from "../format.js";
 import { HOSPITALS } from "../hospitals.js";
 import { ErrCard, Field, store, useDoc, when } from "../ui.jsx";
 import { ms, useEnRoute, useNow } from "./Cop.jsx";
@@ -331,7 +332,8 @@ export default function Hospital() {
         {inbound.map((r) => (
           <button key={r.id} aria-pressed={r.id === sel?.id} onClick={() => setPick(r.id)}>
             <span className="countdown">{mmss(eta(r, now))}</span>
-            <span className={`pill tier-${tierOf(r)}`}>{tierOf(r)}</span> {r.vehicle_type}
+            <span className={`pill tier-${tierOf(r)}`}>{tierLabel(tierOf(r))}</span>{" "}
+            {vehicleLabel(r.vehicle_type)}
             <div className="muted">
               {r.incident_id} · {r.id}
             </div>
@@ -339,7 +341,7 @@ export default function Hospital() {
         ))}
       </div>
       {sel && <Selected key={sel.id} run={sel} />}
-      <LastHandover Chips={Chips} />
+      <LastHandover Chips={Chips} hospital={hospital} />
     </>
   );
 }

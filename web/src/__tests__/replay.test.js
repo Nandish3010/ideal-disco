@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { blendedEta, clearSeconds, jamMetres, simulate, stage } from "../replay.js";
+import {
+  blendedEta,
+  clearSeconds,
+  jamMetres,
+  lead,
+  savedRange,
+  simulate,
+  stage,
+} from "../replay.js";
 import blr from "../../../data/corridors/blr.json";
 import scenario from "../../../data/scenarios/blr-two-vehicles.json";
 
@@ -44,5 +52,24 @@ describe("simulate()", () => {
     expect(simulate(scenario, blr).saved_s).toBe(a.saved_s);
     expect(a.saved_s).toBeCloseTo(988, 6);
     expect(a.vehicles.map((v) => Math.round(v.saved_s))).toEqual([473, 30, 485]);
+  });
+});
+
+describe("headline numbers", () => {
+  it("leads with the critical ambulance, not the three-vehicle total", () => {
+    const sim = simulate(scenario, blr);
+    const v = lead(sim);
+    expect([v.type, v.tier]).toEqual(["ambulance", "critical"]);
+    expect(v.saved_s).toBeLessThan(sim.saved_s);
+    expect(simulate(scenario, blr, 2).saved_s).toBe(sim.saved_s); // 2 m/s is the default drain rate
+  });
+
+  it("savedRange re-runs the baseline at 1 and 3 m/s and brackets the headline", () => {
+    const [lo, hi] = savedRange(scenario, blr);
+    const mid = lead(simulate(scenario, blr)).saved_s / 60;
+    expect(lo).toBeLessThan(mid);
+    expect(mid).toBeLessThan(hi);
+    expect(lo).toBeCloseTo(lead(simulate(scenario, blr, 3)).saved_s / 60, 9);
+    expect(hi).toBeCloseTo(lead(simulate(scenario, blr, 1)).saved_s / 60, 9);
   });
 });
