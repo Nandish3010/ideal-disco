@@ -1,18 +1,21 @@
 {
-  "run_id": "run-f52488d1",
+  "run_id": "run-2d02cf8e",
   "clips": {
     "clip01-kn": {
       "description": "Chest pain with hypotensive vitals (Kannada-English mixed)",
       "endpoint": "/triage",
-      "latency_s": 3.17,
+      "latency_s": 3.66,
       "raw": {
         "endpoint": "/triage",
-        "latency_s": 3.17,
+        "latency_s": 3.66,
         "response": {
           "fields": {
             "age": 58,
             "sex": "male",
             "complaint": "chest pain",
+            "complaint_category": "chest_pain",
+            "burn_percent": null,
+            "bleeding_severity": null,
             "conscious": true,
             "breathing": true,
             "vitals": {
@@ -25,9 +28,9 @@
             },
             "trapped_persons": null,
             "incident_type": null,
-            "transcript_en": "The patient has chest pain, 58-year-old male, BP 85/50, SpO2 91%, conscious, breathing."
+            "transcript_en": "Patient has chest pain. 58-year-old male. BP 85/50. SpO2 91%. Conscious. Breathing."
           },
-          "transcript_en": "The patient has chest pain, 58-year-old male, BP 85/50, SpO2 91%, conscious, breathing.",
+          "transcript_en": "Patient has chest pain. 58-year-old male. BP 85/50. SpO2 91%. Conscious. Breathing.",
           "suggested_tier": "critical"
         }
       },
@@ -35,6 +38,9 @@
         "age": 58,
         "sex": "male",
         "complaint": "chest pain",
+        "complaint_category": "chest_pain",
+        "burn_percent": null,
+        "bleeding_severity": null,
         "conscious": true,
         "breathing": true,
         "vitals": {
@@ -47,7 +53,7 @@
         },
         "trapped_persons": null,
         "incident_type": null,
-        "transcript_en": "The patient has chest pain, 58-year-old male, BP 85/50, SpO2 91%, conscious, breathing."
+        "transcript_en": "Patient has chest pain. 58-year-old male. BP 85/50. SpO2 91%. Conscious. Breathing."
       },
       "expected": {
         "age": 58,
@@ -66,7 +72,7 @@
         "trapped_persons": 0,
         "incident_type": "medical"
       },
-      "transcript_en": "The patient has chest pain, 58-year-old male, BP 85/50, SpO2 91%, conscious, breathing.",
+      "transcript_en": "Patient has chest pain. 58-year-old male. BP 85/50. SpO2 91%. Conscious. Breathing.",
       "expected_tier": "critical",
       "suggested_tier": "critical",
       "tier_match": true,
@@ -93,6 +99,9 @@
             "age": 58,
             "sex": "male",
             "complaint": "chest pain",
+            "complaint_category": "chest_pain",
+            "burn_percent": null,
+            "bleeding_severity": null,
             "conscious": true,
             "breathing": true,
             "vitals": {
@@ -105,9 +114,9 @@
             },
             "trapped_persons": null,
             "incident_type": null,
-            "transcript_en": "Patient is 58-year-old male with chest pain. Blood pressure 85 over 50, SPO2 91%. Conscious and breathing."
+            "transcript_en": "Patient is 58 year old male with chest pain. Blood pressure 85 over 50, SPO2 91%. Conscious and breathing."
           },
-          "transcript_en": "Patient is 58-year-old male with chest pain. Blood pressure 85 over 50, SPO2 91%. Conscious and breathing.",
+          "transcript_en": "Patient is 58 year old male with chest pain. Blood pressure 85 over 50, SPO2 91%. Conscious and breathing.",
           "suggested_tier": "critical"
         }
       },
@@ -115,6 +124,9 @@
         "age": 58,
         "sex": "male",
         "complaint": "chest pain",
+        "complaint_category": "chest_pain",
+        "burn_percent": null,
+        "bleeding_severity": null,
         "conscious": true,
         "breathing": true,
         "vitals": {
@@ -127,7 +139,7 @@
         },
         "trapped_persons": null,
         "incident_type": null,
-        "transcript_en": "Patient is 58-year-old male with chest pain. Blood pressure 85 over 50, SPO2 91%. Conscious and breathing."
+        "transcript_en": "Patient is 58 year old male with chest pain. Blood pressure 85 over 50, SPO2 91%. Conscious and breathing."
       },
       "expected": {
         "age": 58,
@@ -146,7 +158,7 @@
         "trapped_persons": 0,
         "incident_type": "medical"
       },
-      "transcript_en": "Patient is 58-year-old male with chest pain. Blood pressure 85 over 50, SPO2 91%. Conscious and breathing.",
+      "transcript_en": "Patient is 58 year old male with chest pain. Blood pressure 85 over 50, SPO2 91%. Conscious and breathing.",
       "expected_tier": "critical",
       "suggested_tier": "critical",
       "tier_match": true,
@@ -164,15 +176,18 @@
     "clip02": {
       "description": "Unconscious patient",
       "endpoint": "/triage",
-      "latency_s": 2.78,
+      "latency_s": 2.99,
       "raw": {
         "endpoint": "/triage",
-        "latency_s": 2.78,
+        "latency_s": 2.99,
         "response": {
           "fields": {
             "age": 42,
             "sex": "female",
-            "complaint": "not responding to voice or touch",
+            "complaint": "unconscious patient not responding to voice or touch",
+            "complaint_category": "unconscious",
+            "burn_percent": null,
+            "bleeding_severity": null,
             "conscious": false,
             "breathing": true,
             "vitals": {
@@ -194,7 +209,10 @@
       "extracted": {
         "age": 42,
         "sex": "female",
-        "complaint": "not responding to voice or touch",
+        "complaint": "unconscious patient not responding to voice or touch",
+        "complaint_category": "unconscious",
+        "burn_percent": null,
+        "bleeding_severity": null,
         "conscious": false,
         "breathing": true,
         "vitals": {
@@ -244,15 +262,18 @@
     "clip03": {
       "description": "Stroke with classic signs",
       "endpoint": "/triage",
-      "latency_s": 2.82,
+      "latency_s": 3.09,
       "raw": {
         "endpoint": "/triage",
-        "latency_s": 2.82,
+        "latency_s": 3.09,
         "response": {
           "fields": {
             "age": 67,
             "sex": "male",
             "complaint": "facial drooping on left, right arm weakness, slurred speech",
+            "complaint_category": "stroke_signs",
+            "burn_percent": null,
+            "bleeding_severity": null,
             "conscious": true,
             "breathing": true,
             "vitals": {
@@ -264,17 +285,20 @@
               "temp": null
             },
             "trapped_persons": null,
-            "incident_type": "stroke",
-            "transcript_en": "stroke alert, 67 year old male, facial drooping on left, right arm weakness, slurred speech. conscious, breathing normal."
+            "incident_type": null,
+            "transcript_en": "Stroke alert, 67 year old male, facial drooping on left, right arm weakness, slurred speech. Conscious, breathing normal."
           },
-          "transcript_en": "stroke alert, 67 year old male, facial drooping on left, right arm weakness, slurred speech. conscious, breathing normal.",
-          "suggested_tier": "stable"
+          "transcript_en": "Stroke alert, 67 year old male, facial drooping on left, right arm weakness, slurred speech. Conscious, breathing normal.",
+          "suggested_tier": "critical"
         }
       },
       "extracted": {
         "age": 67,
         "sex": "male",
         "complaint": "facial drooping on left, right arm weakness, slurred speech",
+        "complaint_category": "stroke_signs",
+        "burn_percent": null,
+        "bleeding_severity": null,
         "conscious": true,
         "breathing": true,
         "vitals": {
@@ -286,8 +310,8 @@
           "temp": null
         },
         "trapped_persons": null,
-        "incident_type": "stroke",
-        "transcript_en": "stroke alert, 67 year old male, facial drooping on left, right arm weakness, slurred speech. conscious, breathing normal."
+        "incident_type": null,
+        "transcript_en": "Stroke alert, 67 year old male, facial drooping on left, right arm weakness, slurred speech. Conscious, breathing normal."
       },
       "expected": {
         "age": 67,
@@ -306,10 +330,10 @@
         "trapped_persons": 0,
         "incident_type": "medical"
       },
-      "transcript_en": "stroke alert, 67 year old male, facial drooping on left, right arm weakness, slurred speech. conscious, breathing normal.",
+      "transcript_en": "Stroke alert, 67 year old male, facial drooping on left, right arm weakness, slurred speech. Conscious, breathing normal.",
       "expected_tier": "critical",
-      "suggested_tier": "stable",
-      "tier_match": false,
+      "suggested_tier": "critical",
+      "tier_match": true,
       "field_accuracy": 0.8571428571428571,
       "field_details": {
         "age": true,
@@ -324,15 +348,18 @@
     "clip04": {
       "description": "Pediatric fracture",
       "endpoint": "/triage",
-      "latency_s": 2.85,
+      "latency_s": 3.13,
       "raw": {
         "endpoint": "/triage",
-        "latency_s": 2.85,
+        "latency_s": 3.13,
         "response": {
           "fields": {
             "age": 8,
             "sex": null,
-            "complaint": "Pediatric fracture, right leg swollen and deformed",
+            "complaint": "Pediatric fracture, fell from bicycle, right leg swollen and deformed",
+            "complaint_category": "fracture",
+            "burn_percent": null,
+            "bleeding_severity": null,
             "conscious": true,
             "breathing": true,
             "vitals": {
@@ -344,17 +371,20 @@
               "temp": null
             },
             "trapped_persons": null,
-            "incident_type": "child fell from cycle",
-            "transcript_en": "Pediatric fracture. 8-year-old child, fell from cycle, right leg swollen and deformed. Child conscious and breathing. BP 100/60, SpO2 96%."
+            "incident_type": "bicycle accident",
+            "transcript_en": "Pediatric fracture, 8 year old child, fell from bicycle, right leg swollen and deformed. Child conscious and breathing, BP 100/60, SPO2 96%."
           },
-          "transcript_en": "Pediatric fracture. 8-year-old child, fell from cycle, right leg swollen and deformed. Child conscious and breathing. BP 100/60, SpO2 96%.",
+          "transcript_en": "Pediatric fracture, 8 year old child, fell from bicycle, right leg swollen and deformed. Child conscious and breathing, BP 100/60, SPO2 96%.",
           "suggested_tier": "urgent"
         }
       },
       "extracted": {
         "age": 8,
         "sex": null,
-        "complaint": "Pediatric fracture, right leg swollen and deformed",
+        "complaint": "Pediatric fracture, fell from bicycle, right leg swollen and deformed",
+        "complaint_category": "fracture",
+        "burn_percent": null,
+        "bleeding_severity": null,
         "conscious": true,
         "breathing": true,
         "vitals": {
@@ -366,8 +396,8 @@
           "temp": null
         },
         "trapped_persons": null,
-        "incident_type": "child fell from cycle",
-        "transcript_en": "Pediatric fracture. 8-year-old child, fell from cycle, right leg swollen and deformed. Child conscious and breathing. BP 100/60, SpO2 96%."
+        "incident_type": "bicycle accident",
+        "transcript_en": "Pediatric fracture, 8 year old child, fell from bicycle, right leg swollen and deformed. Child conscious and breathing, BP 100/60, SPO2 96%."
       },
       "expected": {
         "age": 8,
@@ -386,7 +416,7 @@
         "trapped_persons": 0,
         "incident_type": "medical"
       },
-      "transcript_en": "Pediatric fracture. 8-year-old child, fell from cycle, right leg swollen and deformed. Child conscious and breathing. BP 100/60, SpO2 96%.",
+      "transcript_en": "Pediatric fracture, 8 year old child, fell from bicycle, right leg swollen and deformed. Child conscious and breathing, BP 100/60, SPO2 96%.",
       "expected_tier": "urgent",
       "suggested_tier": "urgent",
       "tier_match": true,
@@ -404,15 +434,18 @@
     "clip05-kn": {
       "description": "Respiratory distress with low SpO2 (Kannada-English mixed)",
       "endpoint": "/triage",
-      "latency_s": 2.77,
+      "latency_s": 3.82,
       "raw": {
         "endpoint": "/triage",
-        "latency_s": 2.77,
+        "latency_s": 3.82,
         "response": {
           "fields": {
             "age": 55,
             "sex": "male",
             "complaint": "breathing difficulty",
+            "complaint_category": "breathing_difficulty",
+            "burn_percent": null,
+            "bleeding_severity": null,
             "conscious": true,
             "breathing": null,
             "vitals": {
@@ -425,9 +458,9 @@
             },
             "trapped_persons": null,
             "incident_type": null,
-            "transcript_en": "Patient with breathing difficulty. 55-year-old male. Respiratory rate 32, SpO2 89%, BP 130/80. Conscious."
+            "transcript_en": "I have breathing difficulty, 55-year-old male. Respiratory rate 32, SPO2 89%, BP 130/80. Conscious."
           },
-          "transcript_en": "Patient with breathing difficulty. 55-year-old male. Respiratory rate 32, SpO2 89%, BP 130/80. Conscious.",
+          "transcript_en": "I have breathing difficulty, 55-year-old male. Respiratory rate 32, SPO2 89%, BP 130/80. Conscious.",
           "suggested_tier": "critical"
         }
       },
@@ -435,6 +468,9 @@
         "age": 55,
         "sex": "male",
         "complaint": "breathing difficulty",
+        "complaint_category": "breathing_difficulty",
+        "burn_percent": null,
+        "bleeding_severity": null,
         "conscious": true,
         "breathing": null,
         "vitals": {
@@ -447,7 +483,7 @@
         },
         "trapped_persons": null,
         "incident_type": null,
-        "transcript_en": "Patient with breathing difficulty. 55-year-old male. Respiratory rate 32, SpO2 89%, BP 130/80. Conscious."
+        "transcript_en": "I have breathing difficulty, 55-year-old male. Respiratory rate 32, SPO2 89%, BP 130/80. Conscious."
       },
       "expected": {
         "age": 55,
@@ -466,7 +502,7 @@
         "trapped_persons": 0,
         "incident_type": "medical"
       },
-      "transcript_en": "Patient with breathing difficulty. 55-year-old male. Respiratory rate 32, SpO2 89%, BP 130/80. Conscious.",
+      "transcript_en": "I have breathing difficulty, 55-year-old male. Respiratory rate 32, SPO2 89%, BP 130/80. Conscious.",
       "expected_tier": "critical",
       "suggested_tier": "critical",
       "tier_match": true,
@@ -484,15 +520,18 @@
     "clip05": {
       "description": "Respiratory distress with low SpO2",
       "endpoint": "/triage",
-      "latency_s": 2.76,
+      "latency_s": 2.78,
       "raw": {
         "endpoint": "/triage",
-        "latency_s": 2.76,
+        "latency_s": 2.78,
         "response": {
           "fields": {
             "age": 55,
             "sex": "male",
             "complaint": "breathing difficulty",
+            "complaint_category": "breathing_difficulty",
+            "burn_percent": null,
+            "bleeding_severity": null,
             "conscious": true,
             "breathing": true,
             "vitals": {
@@ -505,9 +544,9 @@
             },
             "trapped_persons": null,
             "incident_type": null,
-            "transcript_en": "Breathing difficulty. 55-year-old male, rapid breathing at 32 per minute, using accessory muscles. SpO2 89%. Conscious, BP 130/80."
+            "transcript_en": "breathing difficulty. 55-year-old male, rapid breathing at 32 per minute, using accessory muscles. SPO2 89%, conscious, BP 130 over 80."
           },
-          "transcript_en": "Breathing difficulty. 55-year-old male, rapid breathing at 32 per minute, using accessory muscles. SpO2 89%. Conscious, BP 130/80.",
+          "transcript_en": "breathing difficulty. 55-year-old male, rapid breathing at 32 per minute, using accessory muscles. SPO2 89%, conscious, BP 130 over 80.",
           "suggested_tier": "critical"
         }
       },
@@ -515,6 +554,9 @@
         "age": 55,
         "sex": "male",
         "complaint": "breathing difficulty",
+        "complaint_category": "breathing_difficulty",
+        "burn_percent": null,
+        "bleeding_severity": null,
         "conscious": true,
         "breathing": true,
         "vitals": {
@@ -527,7 +569,7 @@
         },
         "trapped_persons": null,
         "incident_type": null,
-        "transcript_en": "Breathing difficulty. 55-year-old male, rapid breathing at 32 per minute, using accessory muscles. SpO2 89%. Conscious, BP 130/80."
+        "transcript_en": "breathing difficulty. 55-year-old male, rapid breathing at 32 per minute, using accessory muscles. SPO2 89%, conscious, BP 130 over 80."
       },
       "expected": {
         "age": 55,
@@ -546,7 +588,7 @@
         "trapped_persons": 0,
         "incident_type": "medical"
       },
-      "transcript_en": "Breathing difficulty. 55-year-old male, rapid breathing at 32 per minute, using accessory muscles. SpO2 89%. Conscious, BP 130/80.",
+      "transcript_en": "breathing difficulty. 55-year-old male, rapid breathing at 32 per minute, using accessory muscles. SPO2 89%, conscious, BP 130 over 80.",
       "expected_tier": "critical",
       "suggested_tier": "critical",
       "tier_match": true,
@@ -564,15 +606,18 @@
     "clip06": {
       "description": "Significant burn injury",
       "endpoint": "/triage",
-      "latency_s": 2.84,
+      "latency_s": 2.4,
       "raw": {
         "endpoint": "/triage",
-        "latency_s": 2.84,
+        "latency_s": 2.4,
         "response": {
           "fields": {
             "age": 35,
             "sex": "male",
-            "complaint": "burn injury to chest and arms",
+            "complaint": "thermal burns to chest and arms",
+            "complaint_category": "burns",
+            "burn_percent": 25,
+            "bleeding_severity": null,
             "conscious": true,
             "breathing": true,
             "vitals": {
@@ -584,17 +629,20 @@
               "temp": null
             },
             "trapped_persons": null,
-            "incident_type": "burn injury",
+            "incident_type": null,
             "transcript_en": "Burn injury. 35 year old male with thermal burns to chest and arms, approximately 25% body surface area. Conscious, in pain, breathing shallow."
           },
           "transcript_en": "Burn injury. 35 year old male with thermal burns to chest and arms, approximately 25% body surface area. Conscious, in pain, breathing shallow.",
-          "suggested_tier": "stable"
+          "suggested_tier": "critical"
         }
       },
       "extracted": {
         "age": 35,
         "sex": "male",
-        "complaint": "burn injury to chest and arms",
+        "complaint": "thermal burns to chest and arms",
+        "complaint_category": "burns",
+        "burn_percent": 25,
+        "bleeding_severity": null,
         "conscious": true,
         "breathing": true,
         "vitals": {
@@ -606,7 +654,7 @@
           "temp": null
         },
         "trapped_persons": null,
-        "incident_type": "burn injury",
+        "incident_type": null,
         "transcript_en": "Burn injury. 35 year old male with thermal burns to chest and arms, approximately 25% body surface area. Conscious, in pain, breathing shallow."
       },
       "expected": {
@@ -628,8 +676,8 @@
       },
       "transcript_en": "Burn injury. 35 year old male with thermal burns to chest and arms, approximately 25% body surface area. Conscious, in pain, breathing shallow.",
       "expected_tier": "critical",
-      "suggested_tier": "stable",
-      "tier_match": false,
+      "suggested_tier": "critical",
+      "tier_match": true,
       "field_accuracy": 0.8571428571428571,
       "field_details": {
         "age": true,
@@ -644,15 +692,18 @@
     "clip07": {
       "description": "Controlled moderate bleeding",
       "endpoint": "/triage",
-      "latency_s": 2.79,
+      "latency_s": 2.51,
       "raw": {
         "endpoint": "/triage",
-        "latency_s": 2.79,
+        "latency_s": 2.51,
         "response": {
           "fields": {
             "age": 28,
             "sex": "male",
             "complaint": "laceration to left forearm",
+            "complaint_category": "moderate_bleeding",
+            "burn_percent": null,
+            "bleeding_severity": "moderate",
             "conscious": true,
             "breathing": true,
             "vitals": {
@@ -665,16 +716,19 @@
             },
             "trapped_persons": null,
             "incident_type": null,
-            "transcript_en": "Laceration to left forearm with moderate bleeding, controlled by direct pressure. 28-year-old male, conscious, alert, normal breathing. SPO2 97%."
+            "transcript_en": "laceration to left forearm with moderate bleeding, controlled by direct pressure. 28 year old male, conscious, alert, normal breathing. SPO2 97%."
           },
-          "transcript_en": "Laceration to left forearm with moderate bleeding, controlled by direct pressure. 28-year-old male, conscious, alert, normal breathing. SPO2 97%.",
-          "suggested_tier": "stable"
+          "transcript_en": "laceration to left forearm with moderate bleeding, controlled by direct pressure. 28 year old male, conscious, alert, normal breathing. SPO2 97%.",
+          "suggested_tier": "urgent"
         }
       },
       "extracted": {
         "age": 28,
         "sex": "male",
         "complaint": "laceration to left forearm",
+        "complaint_category": "moderate_bleeding",
+        "burn_percent": null,
+        "bleeding_severity": "moderate",
         "conscious": true,
         "breathing": true,
         "vitals": {
@@ -687,7 +741,7 @@
         },
         "trapped_persons": null,
         "incident_type": null,
-        "transcript_en": "Laceration to left forearm with moderate bleeding, controlled by direct pressure. 28-year-old male, conscious, alert, normal breathing. SPO2 97%."
+        "transcript_en": "laceration to left forearm with moderate bleeding, controlled by direct pressure. 28 year old male, conscious, alert, normal breathing. SPO2 97%."
       },
       "expected": {
         "age": 28,
@@ -706,10 +760,10 @@
         "trapped_persons": 0,
         "incident_type": "medical"
       },
-      "transcript_en": "Laceration to left forearm with moderate bleeding, controlled by direct pressure. 28-year-old male, conscious, alert, normal breathing. SPO2 97%.",
+      "transcript_en": "laceration to left forearm with moderate bleeding, controlled by direct pressure. 28 year old male, conscious, alert, normal breathing. SPO2 97%.",
       "expected_tier": "urgent",
-      "suggested_tier": "stable",
-      "tier_match": false,
+      "suggested_tier": "urgent",
+      "tier_match": true,
       "field_accuracy": 0.8571428571428571,
       "field_details": {
         "age": true,
@@ -724,17 +778,20 @@
     "clip08": {
       "description": "Minor injury with normal vitals",
       "endpoint": "/triage",
-      "latency_s": 2.93,
+      "latency_s": 9.25,
       "raw": {
         "endpoint": "/triage",
-        "latency_s": 2.93,
+        "latency_s": 9.25,
         "response": {
           "fields": {
             "age": 32,
             "sex": "female",
             "complaint": "minor ankle sprain",
-            "conscious": null,
-            "breathing": null,
+            "complaint_category": "minor_injury",
+            "burn_percent": null,
+            "bleeding_severity": null,
+            "conscious": true,
+            "breathing": true,
             "vitals": {
               "sbp": 118,
               "dbp": 76,
@@ -744,10 +801,10 @@
               "temp": null
             },
             "trapped_persons": null,
-            "incident_type": "steped wrong during walk",
-            "transcript_en": "Minor ankle sprain. 32-year-old female stepped wrong during walk. Ankle swollen but no deformity. Vitals normal, BP 118/76, HR 82, SPO2 98%, breathing normal."
+            "incident_type": null,
+            "transcript_en": "minor ankle sprain. 32 year old female stepped wrong during walk. Ankle swollen but no deformity. Vitals normal, BP 118/76, HR 82, SPO2 98%, breathing normal."
           },
-          "transcript_en": "Minor ankle sprain. 32-year-old female stepped wrong during walk. Ankle swollen but no deformity. Vitals normal, BP 118/76, HR 82, SPO2 98%, breathing normal.",
+          "transcript_en": "minor ankle sprain. 32 year old female stepped wrong during walk. Ankle swollen but no deformity. Vitals normal, BP 118/76, HR 82, SPO2 98%, breathing normal.",
           "suggested_tier": "stable"
         }
       },
@@ -755,8 +812,11 @@
         "age": 32,
         "sex": "female",
         "complaint": "minor ankle sprain",
-        "conscious": null,
-        "breathing": null,
+        "complaint_category": "minor_injury",
+        "burn_percent": null,
+        "bleeding_severity": null,
+        "conscious": true,
+        "breathing": true,
         "vitals": {
           "sbp": 118,
           "dbp": 76,
@@ -766,8 +826,8 @@
           "temp": null
         },
         "trapped_persons": null,
-        "incident_type": "steped wrong during walk",
-        "transcript_en": "Minor ankle sprain. 32-year-old female stepped wrong during walk. Ankle swollen but no deformity. Vitals normal, BP 118/76, HR 82, SPO2 98%, breathing normal."
+        "incident_type": null,
+        "transcript_en": "minor ankle sprain. 32 year old female stepped wrong during walk. Ankle swollen but no deformity. Vitals normal, BP 118/76, HR 82, SPO2 98%, breathing normal."
       },
       "expected": {
         "age": 32,
@@ -786,17 +846,17 @@
         "trapped_persons": 0,
         "incident_type": "medical"
       },
-      "transcript_en": "Minor ankle sprain. 32-year-old female stepped wrong during walk. Ankle swollen but no deformity. Vitals normal, BP 118/76, HR 82, SPO2 98%, breathing normal.",
+      "transcript_en": "minor ankle sprain. 32 year old female stepped wrong during walk. Ankle swollen but no deformity. Vitals normal, BP 118/76, HR 82, SPO2 98%, breathing normal.",
       "expected_tier": "stable",
       "suggested_tier": "stable",
       "tier_match": true,
-      "field_accuracy": 0.5714285714285714,
+      "field_accuracy": 0.8571428571428571,
       "field_details": {
         "age": true,
         "sex": true,
         "complaint": false,
-        "conscious": false,
-        "breathing": false,
+        "conscious": true,
+        "breathing": true,
         "vitals": true,
         "trapped_persons": true
       }
@@ -804,15 +864,18 @@
     "clip09": {
       "description": "Fire dispatch with trapped person",
       "endpoint": "/triage",
-      "latency_s": 2.78,
+      "latency_s": 2.39,
       "raw": {
         "endpoint": "/triage",
-        "latency_s": 2.78,
+        "latency_s": 2.39,
         "response": {
           "fields": {
             "age": null,
             "sex": null,
             "complaint": null,
+            "complaint_category": null,
+            "burn_percent": null,
+            "bleeding_severity": null,
             "conscious": null,
             "breathing": null,
             "vitals": {
@@ -835,6 +898,9 @@
         "age": null,
         "sex": null,
         "complaint": null,
+        "complaint_category": null,
+        "burn_percent": null,
+        "bleeding_severity": null,
         "conscious": null,
         "breathing": null,
         "vitals": {
@@ -884,15 +950,20 @@
     "clip10": {
       "description": "Intervention log entry (for /log endpoint, not /triage)",
       "endpoint": "/log",
-      "latency_s": 2.83,
+      "latency_s": 2.49,
       "raw": {
         "endpoint": "/log",
-        "latency_s": 2.83,
+        "latency_s": 2.49,
         "response": {
+          "n": 12,
+          "transcript_en": "Medical log update. Patient given oxygen 4 litres via nasal cannula at 9:15. Also administered aspirin 300 milligrams orally. Patient tolerating well.",
           "fields": {
             "age": null,
             "sex": null,
-            "complaint": null,
+            "complaint": "patient given oxygen",
+            "complaint_category": "other",
+            "burn_percent": null,
+            "bleeding_severity": null,
             "conscious": null,
             "breathing": null,
             "vitals": {
@@ -907,14 +978,12 @@
             "incident_type": null,
             "transcript_en": "Medical log update. Patient given oxygen 4 litres via nasal cannula at 9:15. Also administered aspirin 300 milligrams orally. Patient tolerating well."
           },
-          "transcript_en": "Medical log update. Patient given oxygen 4 litres via nasal cannula at 9:15. Also administered aspirin 300 milligrams orally. Patient tolerating well.",
-          "suggested_tier": null,
           "interventions": [
             {
               "kind": "procedure",
-              "name": "Oxygen",
-              "dose": "4 litres",
-              "route": "nasal cannula",
+              "name": "oxygen 4 litres via nasal cannula",
+              "dose": null,
+              "route": "nasal",
               "time_note": "9:15"
             },
             {
@@ -924,13 +993,17 @@
               "route": "orally",
               "time_note": null
             }
-          ]
+          ],
+          "confirmed": false
         }
       },
       "extracted": {
         "age": null,
         "sex": null,
-        "complaint": null,
+        "complaint": "patient given oxygen",
+        "complaint_category": "other",
+        "burn_percent": null,
+        "bleeding_severity": null,
         "conscious": null,
         "breathing": null,
         "vitals": {
@@ -979,13 +1052,13 @@
         ]
       },
       "transcript_en": "Medical log update. Patient given oxygen 4 litres via nasal cannula at 9:15. Also administered aspirin 300 milligrams orally. Patient tolerating well.",
-      "interventions_match": true,
+      "interventions_match": false,
       "interventions": [
         {
           "kind": "procedure",
-          "name": "Oxygen",
-          "dose": "4 litres",
-          "route": "nasal cannula",
+          "name": "oxygen 4 litres via nasal cannula",
+          "dose": null,
+          "route": "nasal",
           "time_note": "9:15"
         },
         {
@@ -999,23 +1072,23 @@
     }
   },
   "summary": {
-    "overall_accuracy": 0.8701298701298701,
+    "overall_accuracy": 0.8961038961038962,
     "field_count": 11,
     "per_field_accuracy": {
       "age": 1.0,
       "sex": 1.0,
       "complaint": 0.36363636363636365,
-      "conscious": 0.9090909090909091,
-      "breathing": 0.8181818181818182,
+      "conscious": 1.0,
+      "breathing": 0.9090909090909091,
       "vitals": 1.0,
       "trapped_persons": 1.0
     },
-    "tier_accuracy": 0.7272727272727273,
+    "tier_accuracy": 1.0,
     "tier_count": 11,
-    "interventions_accuracy": 1.0,
+    "interventions_accuracy": 0.0,
     "interventions_count": 1,
-    "latency_mean_s": 2.85,
-    "latency_max_s": 3.17,
+    "latency_mean_s": 3.45,
+    "latency_max_s": 9.25,
     "failed_clips": 0
   }
 }
