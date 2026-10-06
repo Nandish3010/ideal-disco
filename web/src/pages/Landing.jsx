@@ -15,7 +15,7 @@ const HERO = {
   range: savedRange(scenario, corridors[scenario.corridor]).map((m) => m.toFixed(1)),
 };
 
-const GEMINI = [1, 2, 3, 4, 5, 6, 7].map((n) => `landing.g${n}`);
+const GEMINI = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `landing.g${n}`);
 const SCREENS = ["vehicle", "cop", "hospital", "control", "sim", "dispatch"];
 
 export default function Landing() {

@@ -87,6 +87,7 @@
   "landing.g5": "Cop voice notes to rule actions: a spoken report from the junction fills a fixed schema, and plain rules act on it.",
   "landing.g6": "After-action report: a plain summary of each finished run, with the timeline built in code.",
   "landing.g7": "Hospital routing agent: built on Agent Development Kit, with four tools and a code guard that checks its choice before it is applied.",
+  "landing.g8": "Corridor re-planner: an Agent Development Kit agent that reacts to a cop's delay note (a stalled bus, a blocked lane), calls four tools, and proposes one action that code guards check; its reasoning trace is written to the junction card.",
   "landing.limits_h": "Honest limits",
   "landing.limits": "Traffic signals are simulated behind an adapter; the demo scenario uses hand-authored traffic spans; patients are synthetic; no user accounts; device-scoped tokens protect vehicle, cop and run actions; demo endpoints are rate-limited but reachable. Minutes saved is a simulated estimate, not a measurement.",
   "landing.repo": "Repository",

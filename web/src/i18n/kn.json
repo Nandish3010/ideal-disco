@@ -87,6 +87,7 @@
   "landing.g5": "Cop voice notes ನಿಂದ rule actions: junction ನಿಂದ spoken report fixed schema ತುಂಬುತ್ತೆ, plain rules ಅದರ ಮೇಲೆ act ಮಾಡ್ತವೆ.",
   "landing.g6": "After-action report: ಮುಗಿದ ಪ್ರತಿ run ನ ಸರಳ summary, timeline code ನಿಂದ ಬರುತ್ತೆ.",
   "landing.g7": "Hospital routing agent: Agent Development Kit ಮೇಲೆ ಮಾಡಿದ್ದು, ನಾಲ್ಕು tools, ಮತ್ತು apply ಆಗೋ ಮೊದಲು ಅದರ ಆಯ್ಕೆ check ಮಾಡೋ code guard.",
+  "landing.g8": "Corridor re-planner: Agent Development Kit agent, cop ಕೊಟ್ಟ delay note (stalled bus, blocked lane) ಗೆ react ಮಾಡಿ ನಾಲ್ಕು tools call ಮಾಡಿ ಒಂದು action propose ಮಾಡುತ್ತೆ, code guards check ಮಾಡುತ್ತವೆ; ಅದರ reasoning trace junction card ಮೇಲೆ ಬರೆಯುತ್ತೆ.",
   "landing.limits_h": "ನಿಜವಾದ limits",
   "landing.limits": "Traffic signals adapter ಹಿಂದೆ simulated; demo scenario hand-authored traffic spans use ಮಾಡುತ್ತೆ; patients synthetic; user accounts ಇಲ್ಲ; device-scoped tokens vehicle, cop, run actions ಕಾಯ್ತವೆ; demo endpoints rate-limited ಆದ್ರೆ reachable. Minutes saved simulated estimate, measurement ಅಲ್ಲ.",
   "landing.repo": "ರೆಪೊಸಿಟರಿ",

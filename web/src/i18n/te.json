@@ -87,6 +87,7 @@
   "landing.g5": "Cop voice notes నుంచి rule actions: junction నుంచి spoken report fixed schema నింపుతుంది, plain rules దాని మీద పని చేస్తాయి.",
   "landing.g6": "After-action report: ప్రతి finished run కి simple summary, timeline code తోనే తయారవుతుంది.",
   "landing.g7": "Hospital routing agent: Agent Development Kit మీద తయారైంది, నాలుగు tools ఉన్నాయి, అప్లై చేసే ముందు దాని choice ని code guard చెక్ చేస్తుంది.",
+  "landing.g8": "Corridor re-planner: Agent Development Kit agent, cop ఇచ్చిన delay note (stalled bus, blocked lane) కి స్పందించి నాలుగు tools పిలిచి ఒక action ప్రతిపాదిస్తుంది, code guards చెక్ చేస్తాయి; దాని reasoning trace junction card లో రాస్తుంది.",
   "landing.limits_h": "నిజమైన limits",
   "landing.limits": "Traffic signals adapter వెనుక simulated; demo scenario లో hand-authored traffic spans వాడాం; patients synthetic; user accounts లేవు; device-scoped tokens vehicle, cop, run actions ని protect చేస్తాయి; demo endpoints rate-limited, కానీ reachable. Minutes saved అనేది simulated estimate, measurement కాదు.",
   "landing.repo": "రిపాజిటరీ",
