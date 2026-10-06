@@ -4,6 +4,9 @@ export const mmss = (s) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
 
+// "run-4f1446b1" → "#4f14": the run id as people see it (keep the full id in a title= for debugging).
+export const shortId = (id) => (id ? `#${String(id).replace(/^run-/, "").slice(0, 4)}` : "");
+
 // One trace entry as a line: the backend's `text` when present, else tool(args) → result, else the fallback marker.
 export function traceLine(e) {
   if (e.text) return e.text.replace("->", "→");

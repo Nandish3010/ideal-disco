@@ -6,10 +6,19 @@ import {
   mmss,
   plural,
   seqLine,
+  shortId,
   tierLabel,
   traceLine,
   vehicleLabel,
 } from "../format.js";
+
+describe("shortId", () => {
+  it("shows run ids as #xxxx", () => {
+    expect(shortId("run-4f1446b1")).toBe("#4f14");
+    expect(shortId("abcdef")).toBe("#abcd");
+    expect(shortId(undefined)).toBe("");
+  });
+});
 
 describe("traceLine", () => {
   it("prefers text and uses an arrow", () => {

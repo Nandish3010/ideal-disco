@@ -3,7 +3,7 @@ import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase.js";
 import { api } from "../api.js";
 import { corridors } from "../data.js";
-import { tierLabel, vehicleLabel } from "../format.js";
+import { shortId, tierLabel, vehicleLabel } from "../format.js";
 import { HOSPITALS } from "../hospitals.js";
 import { ErrCard, Field, store, useDoc, when } from "../ui.jsx";
 import { ms, useEnRoute, useNow } from "./Cop.jsx";
@@ -334,8 +334,8 @@ export default function Hospital() {
             <span className="countdown">{mmss(eta(r, now))}</span>
             <span className={`pill tier-${tierOf(r)}`}>{tierLabel(tierOf(r))}</span>{" "}
             {vehicleLabel(r.vehicle_type)}
-            <div className="muted">
-              {r.incident_id} · {r.id}
+            <div className="muted" title={r.id}>
+              {r.incident_id} · {shortId(r.id)}
             </div>
           </button>
         ))}

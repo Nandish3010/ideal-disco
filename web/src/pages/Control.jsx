@@ -8,7 +8,7 @@ import { PlanCard, Rationale, TraceCard } from "../trace.jsx";
 import { AfterAction } from "./Hospital.jsx";
 import { RunLabel } from "../samples.jsx";
 import { withMethod } from "../pick.js";
-import { mmss, tierLabel, vehicleLabel } from "../format.js";
+import { mmss, shortId, tierLabel, vehicleLabel } from "../format.js";
 import { presence } from "../story.js";
 import { ErrCard, Offline, StateBadge, useListen, useNow } from "../ui.jsx";
 import { t } from "../i18n/index.js";
@@ -231,7 +231,7 @@ export default function Control() {
                       >
                         <td>{ICON[r.vehicle_type] ?? "?"}</td>
                         <td>
-                          <b>{r.vehicle_plate ?? r.id}</b>
+                          <b title={r.id}>{r.vehicle_plate ?? shortId(r.id)}</b>
                         </td>
                         <td>
                           {tierOf(r) ? (
@@ -257,7 +257,7 @@ export default function Control() {
             {s && (
               <dl className="detail">
                 <dt>{t("control.d_run")}</dt>
-                <dd>{s.id}</dd>
+                <dd title={s.id}>{shortId(s.id)}</dd>
                 <dt>{t("control.d_dest")}</dt>
                 <dd>{dash(s.destination?.name)}</dd>
                 <dt>{t("control.d_eta")}</dt>
