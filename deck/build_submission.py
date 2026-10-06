@@ -117,8 +117,8 @@ DATA = {
     "cost": [("Routes", "3 calls/min", 3 * 60 * 0.85), ("Gemini", "17 calls", 17 * 0.02), ("Text-to-Speech", "~1,000 chars", 1.0 * 1.3)],
     "cost_caption": "List prices; Routes is ~98 % of the bill.",
     # slide 12
-    "tests": "≈250 Python, 45 web tests; 98 % API coverage",
-    "load_placeholder": "[p50/p95 fill at freeze]",
+    "tests": "344 Python, 138 web tests; 98 % API coverage",
+    "load": ("17 / 37", "/location p50 / p95, offline single instance"),  # api/loadtest/RESULTS.md
     "perf_caption": "not field recordings.",
     # slide 13
     "roadmap": [
@@ -597,8 +597,8 @@ perf = [
 for i, (num, lab, unit) in enumerate(perf):
     stat_tile(s, LEFT + i * (tw4 + 0.2), 1.6, tw4, 1.55, num, lab, unit)
 text(s, LEFT, 3.25, W, 0.28, [f"{EV['clips']} synthetic clips; " + DATA["perf_caption"]], size=CAP, color=GREY)
-stat_tile(s, LEFT, 3.85, 4.4, 0.95, DATA["load_placeholder"], "Load test", grey=True)
-text(s, LEFT + 4.7, 3.85, W - 4.7, 0.95, [DATA["tests"]], size=BODY, anchor=MSO_ANCHOR.MIDDLE)
+stat_tile(s, LEFT, 3.7, 4.4, 1.5, DATA["load"][0], DATA["load"][1], unit="ms")
+text(s, LEFT + 4.7, 3.7, W - 4.7, 1.5, [DATA["tests"]], size=BODY, anchor=MSO_ANCHOR.MIDDLE)
 
 # ---------- 13 future: three-step roadmap ----------
 s = S[12]

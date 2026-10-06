@@ -20,9 +20,8 @@ The build prints the body-word count per slide (target 35); slide 5 (six screens
 
 ## Fill before submitting
 
-- Slide 12: load test p50/p95 (grey placeholder tile) (`[load test p50/p95: fill at freeze]`; `api/loadtest/RESULTS.md` does not exist yet).
 - Slide 14: demo video link (the "[link]" tile; add a QR for it with `qr_png` in the script).
-- Slide 12: re-check the test counts (`DATA["tests"]`) (about 250 Python, 45 web, 98% API coverage) and the rehearsal numbers (16.5 min saved, J3 4 min, J4 1 min) at freeze.
+- Slide 12: re-check the load-test tile (`DATA["load"]`, from `api/loadtest/RESULTS.md`: 17 / 37 ms), the test counts (`DATA["tests"]`: 344 Python, 138 web, 98% API coverage, from the CI run on main) and the rehearsal numbers (16.5 min saved, J3 4 min, J4 1 min) at freeze.
 - Slide 10: the rupee figures are list-price estimates, labelled as such; re-check against current price lists.
 
 ## Export
