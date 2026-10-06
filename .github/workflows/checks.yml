@@ -42,5 +42,9 @@ jobs:
       - run: ruff format --check .
       - run: mypy api
       - run: pytest --cov --cov-fail-under=80
+      - name: OpenAPI document is current
+        run: python -m api.export_openapi --check
+      - name: Contract tests
+        run: make contract
       - name: Engine self-checks
         run: python api/acuity.py && python api/priority.py && python api/leadtime.py && python api/report.py

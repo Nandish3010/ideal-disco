@@ -1,0 +1,7 @@
+# Contract run settings (make contract). `--checks all` runs every check; this file only tells one of them which
+# statuses are acceptable.
+[checks.positive_data_acceptance]
+# Input that is valid by the schema can still be refused by a rule a schema cannot state: an id that does not exist,
+# a run with no log entries yet, an extraction the offline server cannot do (422 extraction_failed). Those are the
+# documented 4xx answers; a 5xx or an undocumented status still fails.
+expected-statuses = ["2xx", "400", "401", "403", "404", "409", "422", "429"]

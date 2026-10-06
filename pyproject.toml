@@ -31,7 +31,7 @@ addopts = "-q"
 
 [tool.coverage.run]
 source = ["api"]
-omit = ["api/tests/*", "api/gemini.py", "api/agent.py", "api/tts.py", "api/routes_api.py", "api/firestore_client.py", "api/offline_replay.py"]
+omit = ["api/tests/*", "api/gemini.py", "api/agent.py", "api/tts.py", "api/routes_api.py", "api/firestore_client.py", "api/offline_replay.py", "api/offline_server.py", "api/export_openapi.py"]
 
 [tool.coverage.report]
 fail_under = 80
