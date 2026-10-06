@@ -7,6 +7,7 @@ import Hospital from "./pages/Hospital.jsx";
 import Sim from "./pages/Sim.jsx";
 import Control from "./pages/Control.jsx";
 import Vehicle from "./pages/Vehicle.jsx";
+import { registerSW } from "./pwa.jsx";
 
 // ponytail: path switch instead of react-router; the corridor is chosen by ?corridor=blr|hyd
 const routes = {
@@ -26,6 +27,8 @@ const [title, Page] = routes[path] ?? [
 ];
 if (path === "/") document.title = "Emergency Green Corridor";
 else document.title = `${title} · Emergency Green Corridor`;
+
+if (import.meta.env.PROD) registerSW();
 
 createRoot(document.getElementById("root")).render(
   <>
