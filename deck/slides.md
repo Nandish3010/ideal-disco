@@ -1,6 +1,7 @@
 ---
 marp: true
 theme: corridor
+# APPENDIX: longer Marp notes. The submission deck is deck/Green-Corridor-Deck.pdf (built by deck/build_deck.py); do not submit this file.
 paginate: true
 footer: "Emergency Green Corridor"
 ---

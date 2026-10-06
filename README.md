@@ -9,7 +9,8 @@
 
 - Live app: https://green-corridor-2026.web.app (try `/sim?mode=replay&scenario=blr-two-vehicles` first, no sign-in)
 - API health: https://corridor-api-919512130399.asia-south1.run.app/health
-- Deck: [deck/slides.pdf](deck/slides.pdf) · Video plan: [deck/VIDEO.md](deck/VIDEO.md) · Contracts: [SCHEMA.md](SCHEMA.md)
+- Submission deck: [deck/Green-Corridor-Deck.pdf](deck/Green-Corridor-Deck.pdf) (own-design deck, built by `deck/build_deck.py`); template-based fallback: [deck/Green-Corridor-Submission.pdf](deck/Green-Corridor-Submission.pdf); longer Marp notes: [deck/slides.md](deck/slides.md) (appendix)
+- Video plan: [deck/VIDEO.md](deck/VIDEO.md) · Contracts: [SCHEMA.md](SCHEMA.md)
 
 ## The problem
 
@@ -17,7 +18,7 @@ Ambulances, fire engines and police vehicles sit at red signals while the office
 
 ## What it does in 60 seconds
 
-A crew binds a registered vehicle, starts a run against a dispatched incident, speaks the patient's condition, and taps once to confirm the tier. From then on the vehicle's GPS drives everything else. Six React PWA screens, all live from one Firestore event bus:
+A crew binds a registered vehicle, starts a run against a dispatched incident, speaks the patient's condition, and taps once to confirm the tier. From then on the vehicle's GPS drives everything else. Eight routes in one React PWA (six role screens plus a landing page and `/story`), all live from one Firestore event bus. The six role screens:
 
 | Screen | For | Shows |
 |---|---|---|
@@ -30,7 +31,7 @@ A crew binds a registered vehicle, starts a run against a dispatched incident, s
 
 Pick a corridor with `?corridor=blr` or `?corridor=hyd`; a corridor is one JSON file in `data/corridors/`.
 
-The replay on the current scenario (`blr-two-vehicles`: a critical ambulance, a platoon ambulance behind it, and a fire engine) saves ≈ 16.5 min <!-- update from replay test --> across the three vehicles. The scenario is a scripted demo scenario: GPS ticks generated along the real corridor roads, with hand-authored traffic spans (a 500 m queue at junction 3, 100 m at junction 4). The saving is one simulated baseline, not a field measurement: per junction passed, the "Today" lane waits `cycle_s / 4 + queue_m / 2` seconds (the expected remaining red, a quarter of the cycle, plus the queue draining at 2 m/s). The replay and the run report cards use the same formula.
+The replay on the current scenario (`blr-two-vehicles`: a critical ambulance, a platoon ambulance behind it, and a fire engine) saves ≈ 16.5 min <!-- update from replay test --> across the three vehicles. The scenario is a scripted demo scenario: GPS ticks generated along the real corridor roads, with hand-authored traffic spans (a 400 m queue at junction 3, 100 m at junction 4). The saving is one simulated baseline, not a field measurement: per junction passed, the "Today" lane waits `cycle_s / 4 + queue_m / 2` seconds (the expected remaining red, a quarter of the cycle, plus the queue draining at 2 m/s). The replay and the run report cards use the same formula.
 
 ## How a cop gets warned
 
@@ -44,7 +45,7 @@ PREPARE            when eta_s <= clear_s + 15
 STOP CROSS TRAFFIC when eta_s <= 30
 ```
 
-A 500 m queue alerts earlier than a 100 m queue, so nobody is called out sooner than they need to be. Each stage fires once per junction per run. The alert is a short conversational line (English by default, colloquial Kannada or Telugu by configuration), spoken on the cop's phone with Text-to-Speech so the officer hears it, not just reads it. The cop taps ACK; if nobody acknowledges within 20 s the alert is flagged as an escalation on the control room board and written to the audit log.
+A 400 m queue alerts earlier than a 100 m queue, so nobody is called out sooner than they need to be. Each stage fires once per junction per run. The alert is a short conversational line (English by default, colloquial Kannada or Telugu by configuration), spoken on the cop's phone with Text-to-Speech so the officer hears it, not just reads it. The cop taps ACK; if nobody acknowledges within 20 s the alert is flagged as an escalation on the control room board and written to the audit log.
 
 ## Rules decide, Gemini explains
 
@@ -96,9 +97,9 @@ Signal preemption sits behind a one-method `SignalAdapter` (`api/signal_adapter.
 
 ## Real data
 
-A Cloud Run Job (`jobs/traffic_logger.py`), triggered by Cloud Scheduler during peak hours, logs Routes traffic spans per junction approach into BigQuery `corridor.traffic_spans`, using the same `jam_metres` as the live engine. [jobs/bqml](jobs/bqml) builds a feature view and a BigQuery ML boosted-tree model, `corridor.jam_forecast`, for the next reading's jam length. Every run also writes its report card to `corridor.run_reports`.
+A Cloud Run Job (`jobs/traffic_logger.py`), triggered by Cloud Scheduler for Bengaluru peak hours, logs Routes traffic spans per junction approach into BigQuery `corridor.traffic_spans`, using the same `jam_metres` as the live engine. [jobs/bqml](jobs/bqml) builds a feature view and a BigQuery ML boosted-tree model, `corridor.jam_forecast`, for the next reading's jam length. Every run also writes its report card to `corridor.run_reports`.
 
-Be clear about what that is today: the logger has run on Cloud Scheduler for Bengaluru peak hours since 6 Oct, with N rows so far [fill at freeze]. The first 216 rows were logged at midnight with zero queues, so the label had no variance and the model learned nothing useful. The BigQuery ML model is a pipeline proof until peak-hour rows accumulate; it is retrained before submission and is not a deployed forecast. It will only say something after the logger has seen weeks of real congestion. See [jobs/bqml/README.md](jobs/bqml/README.md) for the numbers and limits.
+Be clear about what that is today: the logger runs on Cloud Scheduler for Bengaluru peak hours since 6 Oct, paused after 10 Oct. `corridor.traffic_spans` held 342 rows when last counted (5 Oct 17:50 to 6 Oct 02:40 UTC), and only 1 of them has `jam_m` above zero. The first 216 rows (midnight) had zero queues, so the label had no variance and the first model was constant. The BigQuery ML model is a pipeline proof until peak-hour rows accumulate; it is retrained before submission and is not a deployed forecast. It will only say something after the logger has seen weeks of real congestion. See [jobs/bqml/README.md](jobs/bqml/README.md) for the numbers and limits.
 
 ## Honest limits
 
@@ -140,14 +141,14 @@ For repository workflow and contribution conventions, see CONTRIBUTING.md.
 
 ## Testing
 
-- **API:** pytest against a fake Firestore, so tests need no credentials and make no cloud calls; the engines also self-check with `python3 api/acuity.py` and friends.
+- **API:** pytest against a fake Firestore, so tests need no credentials and make no cloud calls; the agent tests run against a scripted runner in CI, so the routing agent's import path and guard are exercised without Vertex AI; the engines also self-check with `python3 api/acuity.py` and friends.
 - **Web:** vitest unit tests, including the replay maths and the scenario minutes-saved total; ESLint and Prettier checks.
 - **Contract and property tests:** `make contract` runs schemathesis (every check, 20 examples per operation) against the API on an in-memory Firestore, and hypothesis checks the engines' invariants for any input (`api/tests/test_properties.py`). `make openapi` rewrites `api/openapi.json`; CI fails if it is stale.
 - **Gate:** CI runs lint, format, tests and the production build, and enforces a minimum coverage threshold on the API. Run the same commands locally before opening a PR.
 
 ### Performance (offline, single instance)
 
-`make loadtest` (needs `pip install -r api/loadtest/requirements.txt`) replays the scenario's three vehicles at 20x for 60 s against one
+This is an offline, single-instance measurement, not a deployed-service benchmark. `make loadtest` (needs `pip install -r api/loadtest/requirements.txt`) replays the scenario's three vehicles at 20x for 60 s against one
 uvicorn worker on an in-memory Firestore, with a client polling `/health`; nothing leaves the machine and no paid call is made.
 On an Apple M4 laptop, `/location` answered in 17 ms at p50 and 37 ms at p95 (720 requests at about 12 a second, no failures)
 and `/health` in 4 ms and 21 ms (a quieter run gave 14 / 26 ms and 4 / 9 ms). That is the application code alone: a deployed instance adds the Firestore round trips and the
@@ -223,11 +224,11 @@ To replace these with real clips, record 10 clips as described in [data/eval/REA
 
 ```
 api/        FastAPI app; acuity.py, priority.py, leadtime.py, signal_adapter.py; agent.py + hospitals.py (routing agent)
-web/        Vite React PWA, six routes, replay maths, vitest tests
+web/        Vite React PWA, eight routes, replay maths, vitest tests
 jobs/       traffic_logger.py (Cloud Run Job) and bqml/ (BigQuery ML jam forecast)
 data/       corridors/{blr,hyd}.json, scenarios/*.json, eval/ clips and labels
 scripts/    demo_seed.py, demo_reset.py, eval_run.py, make_scenario.py
-deck/       Marp slides, video plan and voiceover, architecture diagram
+deck/       submission deck (build_deck.py), Marp appendix, video plan and voiceover, architecture diagram
 infra/      terraform/ (mirror of the hand-built project, validate only) and monitoring/ (dashboard, uptime check, alert)
 .github/    checks and deploy workflows
 ```
