@@ -1,0 +1,10 @@
+# Uptime check on corridor-api /health. Flat key: value pairs read by apply.sh (gcloud monitoring uptime create takes
+# flags, not a file). Free tier: the first million executions a month.
+display_name: corridor-api /health
+host: corridor-api-919512130399.asia-south1.run.app
+path: /health
+protocol: https
+port: 443
+period_minutes: 5
+timeout_seconds: 10
+content_match: '"ok":true'
