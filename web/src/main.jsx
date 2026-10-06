@@ -7,6 +7,7 @@ import Hospital from "./pages/Hospital.jsx";
 import Sim from "./pages/Sim.jsx";
 import Control from "./pages/Control.jsx";
 import Vehicle from "./pages/Vehicle.jsx";
+import Story from "./pages/Story.jsx";
 import { registerSW } from "./pwa.jsx";
 
 // ponytail: path switch instead of react-router; the corridor is chosen by ?corridor=blr|hyd
@@ -18,6 +19,7 @@ const routes = {
   "/control": ["Control room", Control],
   "/sim": ["Sim", Sim],
   "/dispatch": ["Dispatch", Dispatch],
+  "/story": ["Story", Story],
 };
 
 const path = window.location.pathname.replace(/\/$/, "") || "/";

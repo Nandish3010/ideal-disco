@@ -9,6 +9,7 @@ import { AfterAction } from "./Hospital.jsx";
 import { RunLabel } from "../samples.jsx";
 import { withMethod } from "../pick.js";
 import { mmss, plural } from "../format.js";
+import { presence } from "../story.js";
 import { ErrCard, Offline, StateBadge, useListen, useNow } from "../ui.jsx";
 import "../control.css";
 
@@ -93,13 +94,9 @@ export default function Control() {
   const rq = useActiveRuns(cid),
     runs = rq.data;
   // escalations come only from runs still moving (arrived runs are history)
-  const aq = useRunAlerts(
-      runs
-        .filter((r) => LIVE.includes(r.state))
-        .map((r) => r.id)
-        .sort(),
-    ),
-    alerts = aq.rows;
+  const aq = useRunAlerts(runs.map((r) => r.id).sort()),
+    liveIds = runs.filter((r) => LIVE.includes(r.state)).map((r) => r.id),
+    alerts = aq.rows.filter((a) => liveIds.includes(a.run_id));
   const dq = useCol("duty", `${cid}_`);
   const duty = Object.fromEntries(dq.data.map((d) => [d.id, d]));
   const pq = useCol("reports");
@@ -279,7 +276,11 @@ export default function Control() {
                 const mine = alerts.filter((a) => a.junction_id === key || a.junction_id === j.id);
                 const a = mine[0];
                 const hot = mine.some((x) => late(x) && age(x) <= RECENT_S);
-                const d = duty[key];
+                const pres = presence(
+                  duty[key],
+                  aq.rows.filter((x) => x.junction_id === key || x.junction_id === j.id),
+                  now,
+                );
                 return (
                   <div key={j.id} className={`jcard${hot ? " hot" : ""}`}>
                     <div className="jh">
@@ -292,11 +293,7 @@ export default function Control() {
                       {green ? `GREEN for ${ph.approach} until ${clock(ph.until)}` : "Normal cycle"}
                     </div>
                     {green && <Rationale phase={ph} runs={runs} />}
-                    <div className="muted">
-                      {d
-                        ? `Cop: ${d.name ?? d.cop ?? d.cop_name ?? "on duty"}`
-                        : "no cop registered"}
-                    </div>
+                    <div className={pres.on ? "" : "muted"}>{pres.text}</div>
                     {a ? (
                       <div className="ja">
                         <Badge cls={`s-${a.stage}`}>{dash(a.stage)}</Badge>{" "}
