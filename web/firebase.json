@@ -28,6 +28,23 @@
         "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
       },
       {
+        "source": "/deck.pdf",
+        "headers": [
+          { "key": "Content-Type", "value": "application/pdf" },
+          { "key": "Cache-Control", "value": "public, max-age=300" }
+        ]
+      },
+      {
+        "source": "/deck.pptx",
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+          },
+          { "key": "Cache-Control", "value": "public, max-age=300" }
+        ]
+      },
+      {
         "source": "/index.html",
         "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
       }
