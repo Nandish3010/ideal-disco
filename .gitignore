@@ -29,4 +29,6 @@ infra/terraform/.terraform/
 *.tfstate
 *.tfstate.*
 *.tfvars
+
+# Tooling
 .schemathesis/
