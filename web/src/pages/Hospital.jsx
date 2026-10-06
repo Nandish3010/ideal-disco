@@ -3,6 +3,7 @@ import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase.js";
 import { api } from "../api.js";
 import { corridors } from "../data.js";
+import { HOSPITALS } from "../hospitals.js";
 import { ErrCard, store, useDoc, when } from "../ui.jsx";
 import { ms, useEnRoute, useNow } from "./Cop.jsx";
 import { Chips, Thumb } from "./Vehicle.jsx";
@@ -11,8 +12,13 @@ import "../cop.css";
 
 // The hospital desk token (POST /hospital/duty) lets this page regenerate briefs and reports; the roster id is the server's.
 const HOSPITAL_ID = { blr: "blr_jayadeva", hyd: "hyd_continental" };
-const deskId = () =>
-  HOSPITAL_ID[new URLSearchParams(location.search).get("corridor")] ?? HOSPITAL_ID.blr;
+const deskId = () => {
+  const p = new URLSearchParams(location.search);
+  const picked = Object.values(HOSPITALS)
+    .flat()
+    .find((h) => h.id === p.get("hospital"));
+  return picked?.id ?? HOSPITAL_ID[p.get("corridor")] ?? HOSPITAL_ID.blr; // ?hospital= wins, else the corridor's own
+};
 const deskToken = () => store.get(`hospital_token_${deskId()}`) || undefined; // undefined: api() falls back to the vehicle token
 
 const eta = (r, now) =>
@@ -244,8 +250,25 @@ function Selected({ run }) {
 }
 
 export default function Hospital() {
-  const q = new URLSearchParams(location.search).get("corridor");
-  const hospital = (corridors[q] ?? corridors.blr).hospital.name;
+  const params = new URLSearchParams(location.search);
+  const q = params.get("corridor");
+  // ?hospital=<roster id> picks the hospital (and so its corridor); without it, the corridor's own hospital
+  const fromId = Object.entries(HOSPITALS).find(([, hs]) =>
+    hs.some((h) => h.id === params.get("hospital")),
+  );
+  const cid = fromId?.[0] ?? (corridors[q] ? q : "blr");
+  const roster = HOSPITALS[cid];
+  const [hid, setHid] = useState(
+    (fromId && params.get("hospital")) ??
+      roster.find((h) => h.name === corridors[cid].hospital.name)?.id ??
+      roster[0].id,
+  );
+  const hospital = roster.find((h) => h.id === hid).name;
+  const choose = (id) => {
+    history.replaceState(null, "", `?corridor=${cid}&hospital=${id}`);
+    setHid(id);
+    setDesk(!!deskToken()); // the desk token is per hospital
+  };
   const { runs, error } = useEnRoute();
   const now = useNow();
   const [pick, setPick] = useState(null);
@@ -266,14 +289,26 @@ export default function Hospital() {
     .filter((r) =>
       r.destination
         ? r.destination.name === hospital
-        : r.vehicle_type === "ambulance" && (r.corridor ?? "blr") === (corridors[q] ? q : "blr"),
+        : r.vehicle_type === "ambulance" &&
+          (r.corridor ?? "blr") === cid &&
+          hospital === corridors[cid].hospital.name,
     )
     .sort((a, b) => (eta(a, now) ?? 1e9) - (eta(b, now) ?? 1e9));
   const sel = inbound.find((r) => r.id === pick) ?? inbound[0];
   return (
     <>
       <p className="banner">Demo: synthetic patients only</p>
-      <h2 style={{ marginTop: 0 }}>{hospital}</h2>
+      <label>
+        Hospital
+        <select value={hid} onChange={(e) => choose(e.target.value)}>
+          {roster.map((h) => (
+            <option key={h.id} value={h.id}>
+              {h.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <h2>{hospital}</h2>
       <button onClick={signIn} disabled={desk}>
         {desk ? "Signed in to this hospital desk" : "Sign in to this hospital desk"}
       </button>

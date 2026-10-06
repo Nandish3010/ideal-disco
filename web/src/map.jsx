@@ -60,13 +60,15 @@ function scene({ corridor, junctions, phases, spans, vehicles }, now) {
     const key = `${corridor.id}_${j.id}`;
     const phase =
       phases?.[key] ?? phases?.[j.id] ?? junctions?.[key]?.phase ?? junctions?.[j.id]?.phase;
+    const green = ms(phase?.until) > now;
+    const jid = j.id.toUpperCase();
     dots.push({
       key,
       lat: j.lat,
       lng: j.lng,
       title: j.name,
-      fill: ms(phase?.until) > now ? GREEN : GREY,
-      text: phase?.approach ?? j.id.replace(/\D/g, ""),
+      fill: green ? GREEN : GREY,
+      text: green && phase?.approach ? `${jid}·${phase.approach}` : jid, // J3, or J3·E while that approach is green
     });
     const iv = intervals(spans?.[key] ?? spans?.[j.id]);
     for (const a of j.approaches ?? []) {
@@ -105,7 +107,7 @@ const icon = (fill, text, { fg = "#000", square = false, size = 32 } = {}) =>
       (square
         ? `<rect x="2" y="2" width="28" height="28" rx="5" fill="${fill}" stroke="#fff" stroke-width="2"/>`
         : `<circle cx="16" cy="16" r="14" fill="${fill}" stroke="#fff" stroke-width="2"/>`) +
-      `<text x="16" y="21.5" text-anchor="middle" font-size="16" font-weight="700" font-family="sans-serif" fill="${fg}">${text}</text></svg>`,
+      `<text x="16" y="21.5" text-anchor="middle" font-size="${text.length > 2 ? 11 : 16}" font-weight="700" font-family="sans-serif" fill="${fg}">${text}</text></svg>`,
   );
 
 // ---- Maps JS loader: one script tag per page ----
@@ -309,7 +311,14 @@ function SvgMap(props) {
       ) : (
         <circle cx={X(lng)} cy={Y(lat)} r={r} fill={fill} stroke="#fff" strokeWidth="2" />
       )}
-      <text x={X(lng)} y={Y(lat) + 5} textAnchor="middle" fontSize="14" fontWeight="700" fill={fg}>
+      <text
+        x={X(lng)}
+        y={Y(lat) + 5}
+        textAnchor="middle"
+        fontSize={text.length > 2 ? 10 : 14}
+        fontWeight="700"
+        fill={fg}
+      >
         {text}
       </text>
     </g>

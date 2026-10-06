@@ -48,6 +48,9 @@ export function vehicleLabel(type, tier) {
   return t ? `${kind} · ${t}` : kind;
 }
 
+// "1 junction" / "2 junctions" (pass `many` for an irregular plural).
+export const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
 // "2 min" / "90 s" for a number of seconds.
 export const dur = (s) => (s % 60 === 0 ? `${s / 60} min` : `${s} s`);
 

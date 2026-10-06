@@ -4,6 +4,7 @@ import {
   currentAlert,
   dur,
   mmss,
+  plural,
   seqLine,
   traceLine,
   vehicleLabel,
@@ -93,5 +94,14 @@ describe("cop note on the vehicle page", () => {
     expect(currentAlert(alerts, null).created_at.toMillis()).toBe(3);
     expect(currentAlert(alerts, "blr_j9").created_at.toMillis()).toBe(3); // nothing there: the newest overall
     expect(currentAlert([], "blr_j3")).toBeUndefined();
+  });
+});
+
+describe("plural", () => {
+  it("agrees with the count", () => {
+    expect(plural(1, "junction")).toBe("1 junction");
+    expect(plural(0, "junction")).toBe("0 junctions");
+    expect(plural(5, "junction")).toBe("5 junctions");
+    expect(plural(2, "person", "people")).toBe("2 people");
   });
 });

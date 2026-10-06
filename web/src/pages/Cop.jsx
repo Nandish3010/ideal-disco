@@ -531,21 +531,29 @@ export default function Cop() {
   const [corridor, setCorridor] = useState(
     corridors[q] ? q : corridors[saved?.corridor] ? saved.corridor : "blr",
   );
-  const [jn, setJn] = useState(saved?.junction);
+  const [jn, setJn] = useState(saved?.junction ?? (corridor === "blr" ? "j3" : undefined)); // J3, BTM Udupi Garden, when none is stored
   const js = corridors[corridor].junctions;
   const j = js.find((x) => x.id === jn) ?? js[0];
 
+  const about = (
+    <p className="muted">
+      Junction constable view: hear and acknowledge approaching emergency vehicles
+    </p>
+  );
   if (duty) {
     return (
-      <Duty
-        corridor={duty.corridor}
-        junction={find(duty.corridor, duty.junction)}
-        onOff={() => {
-          duty_(duty.corridor, duty.junction, false);
-          store.set("cop_duty", null);
-          setDuty(null);
-        }}
-      />
+      <>
+        {about}
+        <Duty
+          corridor={duty.corridor}
+          junction={find(duty.corridor, duty.junction)}
+          onOff={() => {
+            duty_(duty.corridor, duty.junction, false);
+            store.set("cop_duty", null);
+            setDuty(null);
+          }}
+        />
+      </>
     );
   }
   const go = () => {
@@ -558,6 +566,7 @@ export default function Cop() {
   };
   return (
     <>
+      {about}
       <Offline />
       <label>
         Corridor
