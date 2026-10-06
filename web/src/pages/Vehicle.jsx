@@ -17,7 +17,7 @@ import {
 } from "../ui.jsx";
 import { LastRouting } from "../samples.jsx";
 import { collection, getDocs, limit, onSnapshot, orderBy, query } from "firebase/firestore";
-import { copNoteText, currentAlert, tierLabel } from "../format.js";
+import { copNoteText, currentAlert, shortId, tierLabel } from "../format.js";
 import { db } from "../firebase.js";
 import { latestOpen } from "../pick.js";
 import Coach from "../a11y/Coach.jsx";
@@ -628,7 +628,9 @@ function Run({ bound }) {
               <div className={"tierpill " + (confirmed ? "t-" + confirmed : "")}>
                 {confirmed ? tierLabel(confirmed).toUpperCase() : t("vehicle.tier_unconfirmed")}
               </div>
-              <div className="muted">{t("vehicle.run", { id: runId })}</div>
+              <div className="muted" title={runId}>
+                {t("vehicle.run", { id: shortId(runId) })}
+              </div>
               {run.loading && <p>{t("vehicle.loading_run")}</p>}
               {run.error && (
                 <p className="bad" role="alert">

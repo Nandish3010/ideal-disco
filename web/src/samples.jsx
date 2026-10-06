@@ -11,7 +11,7 @@ import {
   query,
 } from "firebase/firestore";
 import { db } from "./firebase.js";
-import { vehicleLabel } from "./format.js";
+import { shortId, vehicleLabel } from "./format.js";
 import { ErrCard, useDoc, useListen, useLog, when } from "./ui.jsx";
 import { TraceCard } from "./trace.jsx";
 import { handover, routedRun, sampleAlert } from "./pick.js";
@@ -145,7 +145,9 @@ export function LastHandover({ Chips, hospital }) {
         <p className="muted">{t("sample.no_handover")}</p>
       ) : (
         <>
-          <p className="muted">{t("sample.run_gen", { id: b.id, at: when(b.generated_at) })}</p>
+          <p className="muted" title={b.id}>
+            {t("sample.run_gen", { id: shortId(b.id), at: when(b.generated_at) })}
+          </p>
           <dl className="atmist">
             {ATMIST.map((k) => (
               <div key={k} style={{ display: "contents" }}>
@@ -184,8 +186,8 @@ export function LastRouting() {
         <p className="muted">{t("sample.no_routing")}</p>
       ) : (
         <>
-          <p className="muted">
-            {t("sample.plate_run", { plate: r.vehicle_plate ?? r.id, id: r.id })}
+          <p className="muted" title={r.id}>
+            {t("sample.plate_run", { plate: r.vehicle_plate ?? shortId(r.id), id: shortId(r.id) })}
           </p>
           <TraceCard routing={r.routing} />
         </>
@@ -200,8 +202,8 @@ export function RunLabel({ id, tier, type }) {
   const t = tier ?? r?.confirmed_tier ?? r?.acuity_tier;
   const ty = type ?? r?.vehicle_type;
   return (
-    <b>
-      {r?.vehicle_plate ?? id}
+    <b title={id}>
+      {r?.vehicle_plate ?? shortId(id)}
       {ty || t ? ` · ${vehicleLabel(ty, t)}` : ""}
     </b>
   );

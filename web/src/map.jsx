@@ -25,6 +25,12 @@ const DARK = [
   { featureType: "water", elementType: "geometry", stylers: [{ color: "#0b0d10" }] },
   { featureType: "poi", stylers: [{ visibility: "off" }] },
   { featureType: "transit", stylers: [{ visibility: "off" }] },
+  // language=en still draws local-script (Kannada) area names; hide them, keep road labels.
+  ...["administrative.neighborhood", "administrative.locality", "landscape"].map((featureType) => ({
+    featureType,
+    elementType: "labels",
+    stylers: [{ visibility: "off" }],
+  })),
 ];
 
 // ---- geometry (pure; shared by both renderers) ----

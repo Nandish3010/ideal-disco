@@ -5,7 +5,15 @@ import { corridors } from "../data.js";
 import CorridorMap from "../map.jsx";
 import { LastSequence, TraceCard } from "../trace.jsx";
 import { ErrCard, Offline } from "../ui.jsx";
-import { copNoteText, mmss, seqLine, tierLabel, traceLine, vehicleLabel } from "../format.js";
+import {
+  copNoteText,
+  mmss,
+  seqLine,
+  shortId,
+  tierLabel,
+  traceLine,
+  vehicleLabel,
+} from "../format.js";
 import { buildTimeline, chooseRun, mapState, ms } from "../story.js";
 import "../story.css";
 
@@ -77,8 +85,9 @@ function Item({ it, d, play, playing, jname }) {
       return (
         <>
           <h3>Run started</h3>
-          <p>
-            {vehicleLabel(run.vehicle_type, run.confirmed_tier)} · {run.vehicle_plate ?? run.id}
+          <p title={run.id}>
+            {vehicleLabel(run.vehicle_type, run.confirmed_tier)} ·{" "}
+            {run.vehicle_plate ?? shortId(run.id)}
             {run.incident_id ? ` · incident ${run.incident_id}` : ""}
           </p>
         </>
@@ -312,9 +321,10 @@ function Timeline({ d }) {
       <div className="smap">
         <CorridorMap corridor={corridor} junctions={{}} phases={m.phases} vehicles={m.vehicles} />
       </div>
-      <p className="muted">
-        {run.vehicle_plate ?? run.id} · {vehicleLabel(run.vehicle_type, run.confirmed_tier)} ·{" "}
-        {new Date(items[0].t).toLocaleString()} · run {run.id}
+      <p className="muted" title={run.id}>
+        {run.vehicle_plate ?? shortId(run.id)} ·{" "}
+        {vehicleLabel(run.vehicle_type, run.confirmed_tier)} ·{" "}
+        {new Date(items[0].t).toLocaleString()} · run {shortId(run.id)}
       </p>
       {blocked && <p className="banner">Sound is blocked by the browser. Tap Play again.</p>}
       <ol className="tl">
