@@ -157,8 +157,8 @@ def full(jam, slow=0):
     return iv
 
 
-def snaps(items):
-    return [{"ts": stamp(ts), "intervals": iv} for ts, iv in items]
+def snaps(approach, items):  # each snapshot is for one approach: the API picks the one the run arrives on
+    return [{"ts": stamp(ts), "approach": approach, "intervals": iv} for ts, iv in items]
 
 
 def j3snap(ts, jam):  # the 500 m tail is on the corridor (E) approach only
@@ -207,11 +207,14 @@ out = {
         },
     ],
     "recorded_spans": {
-        "blr_j1": snaps([("00:00", full(0, 60))]),
-        "blr_j2": snaps([("00:00", full(0))]),
-        "blr_j3": [j3snap("00:00", 380), j3snap("01:30", 500), j3snap("04:00", 500)],
-        "blr_j4": snaps([("00:00", full(100)), ("02:00", full(100))]),
-        "blr_j5": snaps([("00:00", full(0, 40))]),
+        "blr_j1": snaps("E", [("00:00", full(0, 60))]),
+        "blr_j2": snaps("SE", [("00:00", full(0))]),
+        # the cross street is clear. Its snapshot is stamped after the scenario ends and listed last: the web replay takes
+        # the latest snapshot in force (it ignores approach), and the report reads the first snapshot's approach as the corridor's
+        "blr_j3": [j3snap("00:00", 380), j3snap("01:30", 500), j3snap("04:00", 500)]
+        + snaps("S", [("59:00", full(0))]),
+        "blr_j4": snaps("E", [("00:00", full(100)), ("02:00", full(100))]),
+        "blr_j5": snaps("E", [("00:00", full(0, 40))]),
     },
 }
 

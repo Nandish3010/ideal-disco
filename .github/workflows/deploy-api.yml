@@ -6,6 +6,9 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
 permissions:
   id-token: write
   contents: read

@@ -178,6 +178,15 @@ def test_j3_fire_goes_first_and_the_ambulances_share_a_slot(replay: dict) -> Non
     )  # fire first, ambulances one gap later
 
 
+def test_scenario_spans_follow_the_runs_own_approach(replay: dict) -> None:
+    def j3(tier: str) -> list[dict]:
+        return [t for t in replay[tier]["ticks"] if t["next_junction"] == "blr_j3"]
+
+    fire, amb = j3("fire_with_trapped"), j3("critical")
+    assert fire and {t["approach"] for t in fire} == {"S"} and {t["jam_m"] for t in fire} == {0}
+    assert amb and {t["approach"] for t in amb} == {"E"} and all(380 <= t["jam_m"] <= 500 for t in amb)
+
+
 def test_phase_is_written_to_the_junction(replay: dict) -> None:
     j3 = replay["audit"]["junctions"]["blr_j3"]
     assert j3["phase"]["approach"] and j3["phase"]["sequence"] and j3["lang"] == "kn"

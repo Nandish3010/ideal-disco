@@ -246,6 +246,7 @@
     "blr_j1": [
       {
         "ts": "2026-10-05T09:00:00+05:30",
+        "approach": "E",
         "intervals": [
           {
             "from_m": 0,
@@ -263,6 +264,7 @@
     "blr_j2": [
       {
         "ts": "2026-10-05T09:00:00+05:30",
+        "approach": "SE",
         "intervals": [
           {
             "from_m": 0,
@@ -335,11 +337,23 @@
             "speed": "TRAFFIC_JAM"
           }
         ]
+      },
+      {
+        "ts": "2026-10-05T09:59:00+05:30",
+        "approach": "S",
+        "intervals": [
+          {
+            "from_m": 0,
+            "to_m": 600,
+            "speed": "NORMAL"
+          }
+        ]
       }
     ],
     "blr_j4": [
       {
         "ts": "2026-10-05T09:00:00+05:30",
+        "approach": "E",
         "intervals": [
           {
             "from_m": 0,
@@ -355,6 +369,7 @@
       },
       {
         "ts": "2026-10-05T09:02:00+05:30",
+        "approach": "E",
         "intervals": [
           {
             "from_m": 0,
@@ -372,6 +387,7 @@
     "blr_j5": [
       {
         "ts": "2026-10-05T09:00:00+05:30",
+        "approach": "E",
         "intervals": [
           {
             "from_m": 0,

@@ -887,7 +887,14 @@ def location(loc: Loc, bg: BackgroundTasks, x_device_token: str = Header("")):
         jid, jc, dist = j["doc_id"], (j["lat"], j["lng"]), j["ahead_m"]
         if scenario:  # recorded spans, no Routes call; a junction with none recorded is NORMAL
             rec = SCENARIOS[run["scenario"]].get("recorded_spans", {}).get(jid) or [{"intervals": []}]
-            intervals, routes_eta, traffic = rec[0]["intervals"], dist / max(observed, 3), "scenario"
+            snap = next(
+                (s for s in rec if s.get("approach") == ap["id"]), None
+            )  # the run's own approach, not the corridor's
+            if snap is None:
+                snap = rec[0]
+                if rec[0].get("approach"):
+                    log(event="scenario_span_fallback", run_id=loc.run_id, junction_id=jid, approach=ap["id"])
+            intervals, routes_eta, traffic = snap["intervals"], dist / max(observed, 3), "scenario"
         else:
             # the queue is the stretch of the route's speed spans up to this junction's stop line (the end of its approach
             # polyline, projected onto the route), at most 600 m back and never behind the vehicle; the ETA is the distance
