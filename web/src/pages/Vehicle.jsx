@@ -26,7 +26,7 @@ import { t } from "../i18n/index.js";
 // Demo vehicles seeded in the registry (see the sim scenarios).
 const DEMO_PLATES = [
   ["KA01AB1234", "ambulance, critical"],
-  ["KA01AB4321", "ambulance, urgent"],
+  ["KA01AB4321", "ambulance, critical stroke"],
   ["KA01FE5678", "fire engine"],
 ];
 // Indian plate: state code, 1-2 digit district, 1-3 letter series, up to 4 digits (KA01AB1234); incident: INC- + 6 hex.
