@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { cloneElement, useEffect, useId, useRef, useState } from "react";
 import { collection, doc, onSnapshot } from "firebase/firestore";
 import { db } from "./firebase.js";
+import { t } from "./i18n/index.js";
 
 // localStorage can throw (private mode); fall back to memory-less defaults.
 export const store = {
@@ -75,17 +76,43 @@ export const when = (v) =>
 
 export const Err = ({ e, retry }) =>
   e ? (
-    <p className="card bad">
-      Error: {e.message}
+    <p className="card bad" role="alert">
+      {t("common.error")}: {e.message}
       {e.status ? ` (${e.status})` : ""}
       {retry && (
         <>
           {" "}
-          <button onClick={retry}>Retry</button>
+          <button onClick={retry}>{t("common.retry")}</button>
         </>
       )}
     </p>
   ) : null;
+
+// Label + control + inline help/error. The control gets id, aria-invalid and aria-describedby; the error sits right under it.
+export function Field({ label, hint, error, children }) {
+  const id = useId();
+  const by = [hint && `${id}-h`, error && `${id}-e`].filter(Boolean).join(" ") || undefined;
+  return (
+    <div className="field">
+      <label htmlFor={id}>{label}</label>
+      {cloneElement(children, {
+        id,
+        "aria-invalid": error ? true : undefined,
+        "aria-describedby": by,
+      })}
+      {hint && (
+        <p id={`${id}-h`} className="muted field-hint">
+          {hint}
+        </p>
+      )}
+      {error && (
+        <p id={`${id}-e`} className="field-err" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
 
 // ---- shared UI states (loading / error / offline / stale) ----
 export function useNow(step = 1000) {
@@ -115,7 +142,8 @@ export function useListen(subscribe, deps) {
 export const ErrCard = ({ what, error, retry }) =>
   error ? (
     <div className="card bad" role="alert">
-      Could not load {what}: {error} <button onClick={retry}>Retry</button>
+      {t("common.load_failed", { what, error })}{" "}
+      <button onClick={retry}>{t("common.retry")}</button>
     </div>
   ) : null;
 
@@ -134,39 +162,39 @@ export function Offline() {
   }, []);
   return on ? null : (
     <div className="offline" role="status">
-      Reconnecting…
+      {t("common.reconnecting")}
     </div>
   );
 }
 
-const t = (v) => (v?.toMillis ? v.toMillis() : v ? new Date(v).getTime() : 0);
+const ts = (v) => (v?.toMillis ? v.toMillis() : v ? new Date(v).getTime() : 0);
 export const rel = (v, now) => {
-  if (!t(v)) return "";
-  const s = Math.max(0, Math.round((now - t(v)) / 1000));
+  if (!ts(v)) return "";
+  const s = Math.max(0, Math.round((now - ts(v)) / 1000));
   return s < 5
-    ? "just now"
+    ? t("rel.now")
     : s < 60
-      ? `${s} s ago`
+      ? t("rel.s", { n: s })
       : s < 3600
-        ? `${Math.floor(s / 60)} min ago`
+        ? t("rel.min", { n: Math.floor(s / 60) })
         : s < 86400
-          ? `${Math.floor(s / 3600)} h ago`
-          : `${Math.floor(s / 86400)} d ago`;
+          ? t("rel.h", { n: Math.floor(s / 3600) })
+          : t("rel.d", { n: Math.floor(s / 86400) });
 };
 
 // Run state badge: STALE (grey) / OFF ROUTE (amber) / ARRIVED (green) / EN ROUTE.
 export const StateBadge = ({ run, now }) => {
   const s = run.state,
-    tick = t(run.last_tick_at);
+    tick = ts(run.last_tick_at);
   const label =
     s === "stale"
-      ? `STALE · last tick ${tick ? Math.max(0, Math.round((now - tick) / 1000)) : "?"} s ago`
+      ? t("state.stale", { s: tick ? Math.max(0, Math.round((now - tick) / 1000)) : "?" })
       : s === "off_route"
-        ? "OFF ROUTE"
+        ? t("state.off_route")
         : s === "arrived"
-          ? "ARRIVED"
+          ? t("state.arrived")
           : s === "en_route"
-            ? "EN ROUTE"
+            ? t("state.en_route")
             : (s ?? "—");
   return <span className={`cb st-${s}`}>{label}</span>;
 };

@@ -13,6 +13,7 @@ import { vehicleLabel } from "./format.js";
 import { ErrCard, useDoc, useListen, useLog, when } from "./ui.jsx";
 import { TraceCard } from "./trace.jsx";
 import { firstWithAudio, lastBrief, lastRouted } from "./pick.js";
+import { t } from "./i18n/index.js";
 
 // Read-only panels so a judge sees the AI output without any POST. Firestore reads only.
 
@@ -59,7 +60,7 @@ export function SampleAlert({ play }) {
   return (
     <section className="card" ref={el}>
       <button onClick={go} disabled={busy}>
-        {busy ? "Loading…" : "▶ Sample alert"}
+        {busy ? t("common.loading") : `▶ ${t("sample.play")}`}
       </button>
       <div role="status">
         {a && (
@@ -68,9 +69,9 @@ export function SampleAlert({ play }) {
             {a.text_local && <p className="alert-en">{a.text}</p>}
           </>
         )}
-        {blocked && <p className="muted">Sound is blocked by the browser. Tap again.</p>}
+        {blocked && <p className="muted">{t("sample.blocked")}</p>}
       </div>
-      <p className="muted">Plays the latest recorded alert. Nothing is sent.</p>
+      <p className="muted">{t("sample.note")}</p>
     </section>
   );
 }
@@ -87,14 +88,7 @@ const useNewest = (name, field, n) =>
     [name],
   );
 
-const ATMIST = [
-  ["age", "Age"],
-  ["time", "Time"],
-  ["mechanism", "Mechanism"],
-  ["injuries", "Injuries"],
-  ["signs", "Signs"],
-  ["treatment", "Treatment"],
-];
+const ATMIST = ["age", "time", "mechanism", "injuries", "signs", "treatment"];
 
 // "Last handover": newest briefs/* written by a model (not the offline stub), with that run's logged interventions.
 export function LastHandover({ Chips }) {
@@ -111,21 +105,19 @@ export function LastHandover({ Chips }) {
     });
   return (
     <section className="card" ref={el}>
-      <h2 style={{ marginTop: 0 }}>Last handover</h2>
-      <ErrCard what="the last handover" error={s.error} retry={s.retry} />
+      <h2 style={{ marginTop: 0 }}>{t("sample.handover")}</h2>
+      <ErrCard what={t("what.handover")} error={s.error} retry={s.retry} />
       {s.loading ? (
-        <p className="muted">Loading…</p>
+        <p className="muted">{t("common.loading")}</p>
       ) : s.error ? null : !b ? (
-        <p className="muted">No handover yet</p>
+        <p className="muted">{t("sample.no_handover")}</p>
       ) : (
         <>
-          <p className="muted">
-            Run {b.id} · generated {when(b.generated_at)}
-          </p>
+          <p className="muted">{t("sample.run_gen", { id: b.id, at: when(b.generated_at) })}</p>
           <dl className="atmist">
-            {ATMIST.map(([k, l]) => (
+            {ATMIST.map((k) => (
               <div key={k} style={{ display: "contents" }}>
-                <dt>{l}</dt>
+                <dt>{t(`hospital.a_${k}`)}</dt>
                 <dd>{b.atmist?.[k] ?? "—"}</dd>
               </div>
             ))}
@@ -137,7 +129,7 @@ export function LastHandover({ Chips }) {
               <li key={i}>{c}</li>
             ))}
           </ul>
-          <p className="banner">{b.disclaimer ?? "A clinician confirms these values."}</p>
+          <p className="banner">{b.disclaimer ?? t("hospital.disclaimer")}</p>
         </>
       )}
     </section>
@@ -150,16 +142,16 @@ export function LastRouting() {
   const r = s.data ? lastRouted(s.data) : null;
   return (
     <section>
-      <h2>Last routing decision</h2>
-      <ErrCard what="the last routing decision" error={s.error} retry={s.retry} />
+      <h2>{t("sample.routing")}</h2>
+      <ErrCard what={t("what.routing")} error={s.error} retry={s.retry} />
       {s.loading ? (
-        <p className="muted">Loading…</p>
+        <p className="muted">{t("common.loading")}</p>
       ) : s.error ? null : !r ? (
-        <p className="muted">No routing decision yet</p>
+        <p className="muted">{t("sample.no_routing")}</p>
       ) : (
         <>
           <p className="muted">
-            {r.vehicle_plate ?? r.id} · run {r.id}
+            {t("sample.plate_run", { plate: r.vehicle_plate ?? r.id, id: r.id })}
           </p>
           <TraceCard routing={r.routing} />
         </>

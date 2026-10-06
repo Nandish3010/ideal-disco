@@ -29,6 +29,9 @@ import {
   when,
 } from "../ui.jsx";
 import { dur } from "../format.js";
+import Coach from "../a11y/Coach.jsx";
+import { buzz, useBigType } from "../a11y/cop.js";
+import { t } from "../i18n/index.js";
 import "../cop.css";
 
 export const ms = (v) => v?.toMillis?.() ?? (v ? Date.parse(v) : null);
@@ -197,25 +200,31 @@ const duty_ = (corridor, junction_id, on) =>
 
 const ARROW = { left: "←", straight: "↑", right: "→" };
 const left = (s) =>
-  s >= 60 ? `in ${Math.ceil(s / 60)} min` : s > 0 ? `in ${Math.ceil(s)} s` : "now";
+  s >= 60
+    ? t("cop.in_min", { n: Math.ceil(s / 60) })
+    : s > 0
+      ? t("cop.in_s", { n: Math.ceil(s) })
+      : t("cop.now");
 const STALE_MS = 10 * 60 * 1000; // an unacked alert older than this is history, not a live call
 const SOUND_MS = 2 * 60 * 1000; // audio only for alerts younger than this
 const PLAYS = 3,
   GAP_MS = 20000; // at most 3 plays per alert, 20 s apart
 
-function Current({ a, t0, now, onAck }) {
+function Current({ a, t0, now, onAck, big }) {
   const run = useDoc(`runs/${a.run_id}`).data;
   const tier = run?.confirmed_tier ?? run?.acuity_tier;
   const rem = Math.max(0, (a.eta_s ?? 0) - (now - t0) / 1000);
   return (
-    <section className={`alert-full ${a.stage}`} aria-live="assertive">
+    <section className={`alert-full ${a.stage}${big ? " bigtype" : ""}`}>
       <div>
         <h2 className="stage">{a.stage}</h2>
-        {now - t0 > 20000 || a.escalated ? <span className="pill escalated">ESCALATED</span> : null}
+        {now - t0 > 20000 || a.escalated ? (
+          <span className="pill escalated">{t("cop.escalated")}</span>
+        ) : null}
         <p className="alert-text">{a.text_local || a.text}</p>
         {a.text_local && <p className="alert-en">{a.text}</p>}
         <p className="muted">
-          {run?.vehicle_type ?? "vehicle"}
+          {run?.vehicle_type ?? t("cop.vehicle")}
           {tier ? ` · ${tier}` : ""}
           {run && run.state !== "en_route" ? (
             <>
@@ -223,19 +232,21 @@ function Current({ a, t0, now, onAck }) {
               · <StateBadge run={run} now={now} />
             </>
           ) : null}
-          {a.approach ? ` · ${a.approach} approach` : ""}
-          {a.jam_m ? ` · ${a.jam_m} m queue` : ""}
+          {a.approach ? ` · ${t("cop.approach", { a: a.approach })}` : ""}
+          {a.jam_m ? ` · ${t("cop.queue", { m: a.jam_m })}` : ""}
         </p>
-        <p className="eta" aria-live="off">
-          arrives {left(rem)}
-        </p>
+        <p className="eta">{t("cop.arrives", { when: left(rem) })}</p>
         {a.exit_move && (
           <p className="move">
-            {ARROW[a.exit_move]} turning {a.exit_move.toUpperCase()}
+            {ARROW[a.exit_move]} {t("cop.turning", { move: a.exit_move.toUpperCase() })}
           </p>
         )}
       </div>
-      <button className="ack" onClick={() => onAck(a)} aria-label={`Acknowledge ${a.stage} alert`}>
+      <button
+        className="ack"
+        onClick={() => onAck(a)}
+        aria-label={t("cop.ack_label", { stage: a.stage })}
+      >
         ACK
       </button>
     </section>
@@ -244,7 +255,7 @@ function Current({ a, t0, now, onAck }) {
 
 // Hold to report: the cop's voice (or typed) note to control. The server extracts {kind, extra_seconds, reason} and its
 // rules act on it (green extended, alert acknowledged, escalation); action_text says what happened.
-const KIND = { delay: "Delay", cleared: "Cleared", cannot_clear: "Cannot clear", other: "Note" };
+const KIND = ["delay", "cleared", "cannot_clear", "other"];
 function Report({ corridor, junction }) {
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState(null);
@@ -265,7 +276,7 @@ function Report({ corridor, junction }) {
     setBusy(false);
   }
   const hold = useHold(async (blob) => {
-    if (!blob) return setNote("Too short. Hold the button while you speak.");
+    if (!blob) return setNote(t("cop.too_short"));
     send({ audio_b64: await b64(blob), mime: blob.type.split(";")[0] || "audio/webm" });
   });
   return (
@@ -273,25 +284,35 @@ function Report({ corridor, junction }) {
       <button
         className={"giant report" + (hold.on ? " live" : "")}
         disabled={busy}
+        aria-describedby="hold-hint"
         {...holdProps(hold)}
       >
-        {busy ? "Thinking…" : hold.on ? `Listening ${Math.floor(hold.s)} s` : "Hold to report"}
+        {busy
+          ? t("cop.thinking")
+          : hold.on
+            ? t("cop.listening", { n: Math.floor(hold.s) })
+            : t("cop.hold")}
         {hold.on && (
           <small>
-            {Math.max(0, Math.ceil(MAX_S - hold.s))} s left
+            {t("cop.s_left", { n: Math.max(0, Math.ceil(MAX_S - hold.s)) })}
             <span className="meter">
               <i style={{ width: Math.min(100, (hold.s / MAX_S) * 100) + "%" }} />
             </span>
           </small>
         )}
       </button>
-      {note && <p className="muted">{note}</p>}
+      <p id="hold-hint" className="sr-only">
+        {t("cop.hold_hint")}
+      </p>
+      {note && (
+        <p className="muted" role="status">
+          {note}
+        </p>
+      )}
       {hold.mic && (
-        <p className="card bad">
-          {hold.mic === "denied"
-            ? "Microphone is blocked for this site."
-            : "Voice recording is not available on this device."}{" "}
-          Type it below instead.
+        <p className="card bad" role="alert">
+          {hold.mic === "denied" ? t("cop.mic_denied") : t("cop.mic_unavailable")}{" "}
+          {t("cop.type_instead")}
         </p>
       )}
       <form
@@ -304,29 +325,35 @@ function Report({ corridor, junction }) {
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="or type: bus stalled, need 2 more minutes"
-          aria-label="Report to control"
+          placeholder={t("cop.type_ph")}
+          aria-label={t("cop.type_label")}
           required
         />
-        <button disabled={busy}>Send</button>
+        <button disabled={busy}>{t("cop.send")}</button>
       </form>
       {res && (
         <div className="card" role="status">
           <p className="big">
-            {KIND[res.kind] ?? res.kind}
+            {KIND.includes(res.kind) ? t(`cop.k_${res.kind}`) : res.kind}
             {res.extra_seconds ? ` · +${dur(res.extra_seconds)}` : ""}
           </p>
           <p>{res.reason}</p>
           <p>
             <b>{res.action_text}</b>
           </p>
-          {res.transcript_en && <p className="muted">Heard: {res.transcript_en}</p>}
+          {res.transcript_en && (
+            <p className="muted">{t("cop.heard", { text: res.transcript_en })}</p>
+          )}
         </div>
       )}
       {err?.body?.error === "extraction_failed" ? (
-        <p className="card bad">Could not understand that. Type it instead.</p>
+        <p className="card bad" role="alert">
+          {t("cop.not_understood")}
+        </p>
       ) : err && [401, 403].includes(err.status) ? (
-        <p className="card bad">Not allowed: go off duty, then on again.</p>
+        <p className="card bad" role="alert">
+          {t("cop.not_allowed")}
+        </p>
       ) : (
         <Err e={err} />
       )}
@@ -345,6 +372,7 @@ function Duty({ corridor, junction, onOff }) {
   const [seen] = useState({}); // first-seen time for alerts whose created_at has not resolved yet
   const [onDutyAt] = useState(Date.now); // alerts created before this are shown but never spoken
   const [muted, setMuted] = useState(() => store.get("cop_muted") === "1");
+  const [big, toggleBig] = useBigType();
   const [visible, setVisible] = useState(document.visibilityState === "visible");
   const quiet = useRef({}); // alerts silenced by mute/hide: they do not resume when sound returns
 
@@ -370,6 +398,11 @@ function Duty({ corridor, junction, onOff }) {
   // Audio policy: only the newest alert, if unacked, created after going on duty and under 2 min old.
   // created_at missing means old. Any change of playKey (ack, stale, newer alert, mute, hidden) stops the sound.
   const top = sorted[0];
+
+  // a new alert (one that arrived after going on duty) buzzes once, even when sound is muted
+  useEffect(() => {
+    if (cur && t0(cur) > onDutyAt) buzz();
+  }, [cur?.key]); // eslint-disable-line react-hooks/exhaustive-deps
   const created = top && ms(top.created_at);
   const fresh =
     top && !acked(top) && created != null && created > onDutyAt && now - created < SOUND_MS;
@@ -422,29 +455,38 @@ function Duty({ corridor, junction, onOff }) {
   }
   const state = (a) =>
     a.acked_at
-      ? `ACKED ${when(a.acked_at)}`
+      ? t("cop.acked", { at: when(a.acked_at) })
       : local[a.key]?.s === "ok"
         ? `ACK${local[a.key].latency != null ? ` · ${local[a.key].latency} s` : ""}`
         : local[a.key]
-          ? "sent"
+          ? t("cop.sent")
           : now - t0(a) < STALE_MS
-            ? "waiting"
-            : "no ACK";
+            ? t("cop.waiting")
+            : t("cop.no_ack");
   const since = useDoc(`duty/${jid}`).data;
   const n = runs.filter((r) => (r.corridor ?? corridor) === corridor).length;
 
   return (
     <>
       <Offline />
-      <button className="mute" onClick={toggleMute} aria-pressed={muted}>
-        {muted ? "🔇 Sound off" : "🔊 Sound on"}
-      </button>
+      <div className="toolbar">
+        <button className="mute" onClick={toggleMute} aria-pressed={muted}>
+          {muted ? t("cop.sound_off") : t("cop.sound_on")}
+        </button>
+        <button className="mute" onClick={toggleBig} aria-pressed={big}>
+          {t("cop.bigtype")}
+        </button>
+      </div>
+      {/* One assertive announcement per alert, stage word first, then the line; the visible card is not itself live. */}
+      <div className="sr-only" aria-live="assertive" aria-atomic="true">
+        {cur ? `${cur.stage}. ${cur.text_local || cur.text}` : ""}
+      </div>
       {denied && (
-        <p className="banner pulse">
-          ACK refused: another device is on duty here. Go off duty, then on again.
+        <p className="banner pulse" role="alert">
+          {t("cop.denied")}
         </p>
       )}
-      {muted && cur && <p className="banner pulse">SOUND OFF · ALERT ON SCREEN</p>}
+      {muted && cur && <p className="banner pulse">{t("cop.muted_banner")}</p>}
       {blocked && (
         <button
           className="primary"
@@ -453,28 +495,28 @@ function Duty({ corridor, junction, onOff }) {
             setBlocked(false);
           }}
         >
-          Sound is blocked. Tap to enable.
+          {t("cop.blocked")}
         </button>
       )}
-      <div aria-live="assertive">
-        {cur ? (
-          <Current a={cur} t0={t0(cur)} now={now} onAck={ack} />
-        ) : (
-          <section className="card idle" aria-live="off">
-            <p className="big">On duty at {junction.name} · no vehicles approaching</p>
-            <p className="eta" role="status">
-              {runsLoading ? "Loading…" : `${n} en route on ${corridors[corridor].name}`}
-            </p>
-          </section>
-        )}
-      </div>
+      {cur ? (
+        <Current a={cur} t0={t0(cur)} now={now} onAck={ack} big={big} />
+      ) : (
+        <section className="card idle">
+          <p className="big">{t("cop.idle", { name: junction.name })}</p>
+          <p className="eta">
+            {runsLoading
+              ? t("common.loading")
+              : t("cop.en_route", { n, name: corridors[corridor].name })}
+          </p>
+        </section>
+      )}
       <Report corridor={corridor} junction={junction} />
-      <ErrCard what="alerts" error={error} retry={retry} />
+      <ErrCard what={t("what.alerts")} error={error} retry={retry} />
       <SampleAlert play={speak} />
-      <h2>Last alerts here</h2>
-      {loading && <p className="muted">Loading…</p>}
+      <h2>{t("cop.last_h")}</h2>
+      {loading && <p className="muted">{t("common.loading")}</p>}
       {!loading && !error && sorted.length === 0 && (
-        <p className="muted">No alerts yet for {junction.name}</p>
+        <p className="muted">{t("cop.none", { name: junction.name })}</p>
       )}
       <ul className="list">
         {sorted.slice(0, 10).map((a) => (
@@ -486,10 +528,10 @@ function Duty({ corridor, junction, onOff }) {
               {when(a.created_at)} · {a.run_id}
               <button
                 className="replay"
-                aria-label={`Replay ${a.stage} alert`}
+                aria-label={t("cop.replay_label", { stage: a.stage })}
                 onClick={() => speak(a, () => setBlocked(true))}
               >
-                ▶ Replay
+                ▶ {t("cop.replay")}
               </button>
             </div>
           </li>
@@ -497,22 +539,16 @@ function Duty({ corridor, junction, onOff }) {
       </ul>
       {since && since.on !== false && (
         <p className="muted">
-          On duty since {when(since.since ?? since.updated_at ?? since.created_at)}
+          {t("cop.since", { at: when(since.since ?? since.updated_at ?? since.created_at) })}
         </p>
       )}
       <details className="muted">
-        <summary>Feed diagnostics</summary>Feed: {mode}
+        <summary>{t("cop.diag")}</summary>
+        {t("cop.feed", { mode })}
       </details>
-      <a
-        className="duty-off"
-        href="#"
-        onClick={(e) => {
-          e.preventDefault();
-          onOff();
-        }}
-      >
-        Off duty
-      </a>
+      <button type="button" className="duty-off" onClick={onOff}>
+        {t("cop.off_duty")}
+      </button>
     </>
   );
 }
@@ -538,9 +574,8 @@ export default function Cop() {
 
   const about = (
     <>
-      <p className="muted">
-        Junction constable view: hear and acknowledge approaching emergency vehicles
-      </p>
+      <p className="muted">{t("cop.about")}</p>
+      <Coach role="cop" />
       <InstallApp />
     </>
   );
@@ -573,7 +608,7 @@ export default function Cop() {
       {about}
       <Offline />
       <label>
-        Corridor
+        {t("cop.corridor")}
         <select value={corridor} onChange={(e) => setCorridor(e.target.value)}>
           {Object.entries(corridors).map(([k, c]) => (
             <option key={k} value={k}>
@@ -583,7 +618,7 @@ export default function Cop() {
         </select>
       </label>
       <label>
-        Junction
+        {t("cop.junction")}
         <select value={j.id} onChange={(e) => setJn(e.target.value)}>
           {js.map((x) => (
             <option key={x.id} value={x.id}>
@@ -593,8 +628,8 @@ export default function Cop() {
         </select>
       </label>
       <button className="primary giant" onClick={go}>
-        GO ON DUTY at {j.name}
-        <small>Turns on sound and keeps the screen awake</small>
+        {t("cop.go", { name: j.name })}
+        <small>{t("cop.go_small")}</small>
       </button>
       <SampleAlert play={speak} />
     </>

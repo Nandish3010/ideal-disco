@@ -3,7 +3,8 @@ import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestor
 import { db } from "../firebase.js";
 import { api } from "../api.js";
 import { typeLabel, within } from "../pick.js";
-import { Err, ErrCard, Offline, rel, useListen, useNow, when } from "../ui.jsx";
+import { Err, ErrCard, Field, Offline, rel, useListen, useNow, when } from "../ui.jsx";
+import { t } from "../i18n/index.js";
 
 function Recent({ showClosed }) {
   const s = useListen(
@@ -16,13 +17,11 @@ function Recent({ showClosed }) {
     [],
   );
   const now = useNow(10000);
-  if (s.loading) return <p className="muted">Loading…</p>;
-  if (s.error) return <ErrCard what="incidents" error={s.error} retry={s.retry} />;
+  if (s.loading) return <p className="muted">{t("common.loading")}</p>;
+  if (s.error) return <ErrCard what={t("what.incidents")} error={s.error} retry={s.retry} />;
   const rows = within(s.data, now).filter((r) => showClosed || r.state !== "closed");
   if (!rows.length)
-    return (
-      <p className="muted">{showClosed ? "No incidents" : "No open incidents"} in the last 24 h</p>
-    );
+    return <p className="muted">{showClosed ? t("dispatch.none") : t("dispatch.none_open")}</p>;
   return (
     <ul className="list">
       {rows.map((r) => (
@@ -30,7 +29,8 @@ function Recent({ showClosed }) {
           <b>{r.id}</b> <span className="pill">{typeLabel(r.type)}</span>{" "}
           <span className="pill">{r.state}</span>
           <div className="muted">
-            {rel(r.created_at, now) || "time pending"} · {when(r.created_at)} {r.severity_note}
+            {rel(r.created_at, now) || t("dispatch.time_pending")} · {when(r.created_at)}{" "}
+            {r.severity_note}
           </div>
         </li>
       ))}
@@ -72,25 +72,29 @@ export default function Dispatch() {
     <>
       <Offline />
       <form className="card" onSubmit={submit}>
-        <label>
-          Incident type
-          <select value={type} onChange={(e) => setType(e.target.value)}>
-            <option value="medical">medical</option>
-            <option value="fire">fire</option>
-            <option value="police">police</option>
+        <Field label={t("dispatch.type")}>
+          <select value={type} onChange={(e) => setType(e.target.value)} autoFocus>
+            {["medical", "fire", "police"].map((k) => (
+              <option key={k} value={k}>
+                {t(`dispatch.t_${k}`)}
+              </option>
+            ))}
           </select>
-        </label>
-        <label>
-          Severity note
+        </Field>
+        <Field label={t("dispatch.note")} hint={t("dispatch.note_hint")}>
           <input
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="chest pain, adult"
+            placeholder={t("dispatch.note_ph")}
+            maxLength={200}
+            enterKeyHint="go"
+            autoComplete="off"
           />
-        </label>
+        </Field>
         <button className="primary" disabled={busy}>
-          {busy ? "Issuing…" : "Issue incident ID"}
+          {busy ? t("dispatch.issuing") : t("dispatch.issue")}
         </button>
+        <Err e={err} retry={submit} />
       </form>
       <button
         type="button"
@@ -99,19 +103,18 @@ export default function Dispatch() {
           submit(null, { type: "medical", severity_note: "Demo: chest pain, Silk Board" })
         }
       >
-        Seed demo incident
+        {t("dispatch.seed")}
       </button>
-      <Err e={err} retry={submit} />
       {id && (
         <div className="card good" role="status">
-          <div className="muted">Incident ID</div>
+          <div className="muted">{t("dispatch.id")}</div>
           <div className="big">{id}</div>
-          <button onClick={copy}>{copied ? "Copied" : "Copy"}</button>
+          <button onClick={copy}>{copied ? t("dispatch.copied") : t("dispatch.copy")}</button>
         </div>
       )}
-      <h2>Incidents, last 24 h</h2>
+      <h2>{t("dispatch.recent_h")}</h2>
       <button type="button" aria-pressed={showClosed} onClick={() => setShowClosed(!showClosed)}>
-        {showClosed ? "Hide closed" : "Show closed"}
+        {showClosed ? t("dispatch.hide_closed") : t("dispatch.show_closed")}
       </button>
       <Recent showClosed={showClosed} />
     </>

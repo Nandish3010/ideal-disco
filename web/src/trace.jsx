@@ -1,14 +1,15 @@
 import { mmss, seqLine, traceLine } from "./format.js";
+import { t } from "./i18n/index.js";
 
 // Hospital routing decision for a run (runs.routing). Pending: the tier is confirmed but the agent has not written yet.
 export function TraceCard({ routing, pending }) {
-  if (!routing) return pending ? <p className="muted trace">Choosing hospital…</p> : null;
+  if (!routing) return pending ? <p className="muted trace">{t("trace.choosing")}</p> : null;
   return (
     <div className="card trace">
       <h2>
         {routing.destination} · {mmss(routing.eta_s)}{" "}
         <span className="pill" title={routing.reason}>
-          {routing.applied ? "applied" : "recommendation only (scenario run)"}
+          {routing.applied ? t("trace.applied") : t("trace.recommend")}
         </span>
       </h2>
       <ul>
