@@ -19,7 +19,10 @@ function Recent({ showClosed }) {
   const now = useNow(10000);
   if (s.loading) return <p className="muted">{t("common.loading")}</p>;
   if (s.error) return <ErrCard what={t("what.incidents")} error={s.error} retry={s.retry} />;
-  const rows = within(s.data, now).filter((r) => showClosed || r.state !== "closed");
+  const isTest = (r) => /test|eval|rehearsal/i.test((r.severity_note || "").toLowerCase());
+  const rows = within(s.data, now).filter(
+    (r) => showClosed || (r.state !== "closed" && !isTest(r)),
+  );
   if (!rows.length)
     return <p className="muted">{showClosed ? t("dispatch.none") : t("dispatch.none_open")}</p>;
   return (

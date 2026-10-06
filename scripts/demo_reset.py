@@ -56,7 +56,7 @@ plan(
 plan(
     "junction phases cleared",
     [j.reference for j in db.collection("junctions").stream() if j.to_dict().get("phase") is not None],
-    {"phase": None},
+    {"phase": None, "last_sequence": None, "replan": None, "cop_block_until": None},
 )
 plan(
     "vehicles unbound",
