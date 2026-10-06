@@ -17,8 +17,8 @@ def mint() -> tuple[str, str]:
 
 
 def disabled() -> bool:
-    """DEVICE_TOKENS_DISABLED=1 (offline_replay only): protected calls need no token."""
-    return os.environ.get("DEVICE_TOKENS_DISABLED") == "1"
+    """DEVICE_TOKENS_DISABLED=1 (offline_replay only): protected calls need no token. Ignored when PRODUCTION_MODE=1."""
+    return os.environ.get("DEVICE_TOKENS_DISABLED") == "1" and os.environ.get("PRODUCTION_MODE") != "1"
 
 
 def problem(token: str, hashes: list[str | None]) -> tuple[int, str] | None:

@@ -8,7 +8,7 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import { db } from "../firebase.js";
+import { db, pushToken } from "../firebase.js";
 import { api, copTokenKey } from "../api.js";
 import { corridors } from "../data.js";
 import { SampleAlert } from "../samples.jsx";
@@ -193,8 +193,14 @@ function useAlerts(jid) {
 
 // Fire and forget: when offline, duty stays a local-only state. Going on duty returns the junction's device token
 // (api.js sends it on /ack and /duty off); going off drops it.
-const duty_ = (corridor, junction_id, on) =>
-  api("/duty", { corridor, junction_id, device_id: deviceId(), on })
+const duty_ = (corridor, junction_id, on, fcm_token) =>
+  api("/duty", {
+    corridor,
+    junction_id,
+    device_id: deviceId(),
+    on,
+    ...(fcm_token && { fcm_token }),
+  })
     .then((r) => store.set(copTokenKey(corridor, junction_id), on ? r.device_token : null))
     .catch(() => {});
 
@@ -599,7 +605,11 @@ export default function Cop() {
     unlock();
     wake(); // inside the tap: audio unlock and wake lock need the gesture
     const d = { corridor, junction: j.id };
-    duty_(corridor, j.id, true);
+    const push = pushToken(); // permission prompt, started inside the tap
+    // push token second, after the first call has stored the junction token: each go-on-duty rotates it
+    duty_(corridor, j.id, true)
+      .then(() => push)
+      .then((t) => t && duty_(corridor, j.id, true, t));
     store.set("cop_duty", JSON.stringify(d));
     setDuty(d);
   };

@@ -11,3 +11,8 @@ google-cloud-storage==2.19.0
 httpx==0.28.1
 pydantic==2.13.5
 google-adk==1.14.1
+opentelemetry-sdk==1.45.0
+opentelemetry-exporter-gcp-trace==1.15.0
+opentelemetry-instrumentation-fastapi==0.66b0
+opentelemetry-instrumentation-httpx==0.66b0
+firebase-admin==6.9.0

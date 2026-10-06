@@ -88,6 +88,9 @@ Google products actually wired:
 - **Cloud Scheduler, Cloud Build, Artifact Registry:** traffic logger schedule and image.
 - **BigQuery:** traffic spans and run reports. **BigQuery ML:** a jam-forecast pipeline is in place and is retrained before submission; it is a pipeline proof, not a deployed forecast (see Real data).
 - **Workload Identity Federation:** keyless CI deploys.
+- **Cloud Trace, Cloud Monitoring and Cloud Logging:** request and engine spans, a dashboard, an uptime check and log-based metrics.
+- **Firebase Cloud Messaging:** a push to the on-duty cop's phone when an alert is written.
+- **Terraform:** a module that mirrors the hand-built project (`infra/`).
 
 Signal preemption sits behind a one-method `SignalAdapter` (`api/signal_adapter.py`). Today `SimAdapter` writes the junction phase to Firestore; a real controller implements the same method.
 
@@ -156,6 +159,18 @@ Runtime configuration (set by the workflows): project `green-corridor-2026`, ser
 | `MEDIA_BUCKET` | spoken-alert MP3s |
 | `ALERT_LANG` | `en` (default), `kn`, `te`, or `corridor` for the corridor's own language |
 
+## Operations
+
+**Demo mode and production mode.** The deployed demo is public on purpose: anyone can create an incident, bind a registered plate or sign in a hospital desk, and Firestore is public read so every screen is live. `PRODUCTION_MODE=1` on the API closes the demo conveniences: `POST /incidents` needs `X-Dispatch-Token` (env `DISPATCH_TOKEN`), `POST /vehicles/bind` and `POST /hospital/duty` need `X-Agency-Key` (env `AGENCY_KEY`), the first brief and the stored after-action report need a vehicle or hospital desk token, and `DEVICE_TOKENS_DISABLED` is ignored. A credential that is not configured refuses every call. `web/firestore.rules.production` then denies browser reads of the transit log, briefs, after-action reports, vehicles and hospital sign-ins; `GET /runs/{id}/log` and `GET /briefs/{id}` serve the first two to a vehicle or hospital token. To switch: set the three env vars (secrets) on the Cloud Run service, then `cp web/firestore.rules.production web/firestore.rules && firebase deploy --only firestore:rules` (restore the demo file afterwards). The hospital page still reads Firestore directly, so it needs those two GETs wired in before it works under the production rules. Contract details are in SCHEMA.md, Production mode.
+
+**Tracing.** `OTEL_ENABLED=1` (set by `deploy-api.yml`) sends OpenTelemetry spans to Cloud Trace: each request (not `/health`), each outgoing Gemini and Routes call, and `leadtime`, `priority`, `brief`, `agent.route`, `tts` and `push.send` spans around the engine steps. Every JSON log line carries `trace_id`, and `logging.googleapis.com/trace` so Logs Explorer links a line to its trace. Unset, it is a no-op. `OTEL_SAMPLE_RATIO` (default 1) thins it if the free tier ever matters. The service account needs `roles/cloudtrace.agent`.
+
+**Dashboard, uptime check, alerts.** `infra/monitoring/apply.sh` creates the Cloud Monitoring dashboard (requests and p50 and p95 latency, 5xx share, instances, traffic logger executions, and `alert_fired`, `escalation`, `rationale_template`, `brief_error` log-based metrics) and a 5-minute uptime check on `/health`; `apply.sh metrics` creates the four log-based metrics, `NOTIFICATION_CHANNEL=... apply.sh alert` the alert policy (uptime failing, or 5xx above 2%). See [infra/README.md](infra/README.md).
+
+**Terraform.** [infra/terraform](infra/terraform) describes the project as it was built by hand: APIs, Cloud Run service and job, Scheduler jobs, Firestore, bucket, BigQuery dataset, secrets (no values), service accounts and IAM, the GitHub Workload Identity pool, the Hosting site and the Maps keys. It is a mirror: it has been validated, never applied, and `infra/README.md` lists the `terraform import` commands to adopt the live resources first.
+
+**Push notifications.** A cop who goes on duty on `/cop` is asked for notification permission; the browser's FCM token goes to `POST /duty` as `fcm_token`, and every alert written for that junction is also sent as a push (text, spoken-language text, `audio_url`), so the phone rings with the screen off. It needs the web push key in the `VITE_FIREBASE_VAPID_KEY` repository variable (Firebase console, Project settings, Cloud Messaging, Web Push certificates, Generate key pair) and `roles/firebasecloudmessaging.admin` on the API service account; without the key the page works as before. Failures are logged as `push_error` and never block an alert.
+
 ## Evaluation
 
 `scripts/eval_run.py` posts voice clips to `/triage` (intervention notes to `/log`) and scores each against `data/eval/labels.json`: exact match per field (strings case-insensitive, vitals within ±5, trapped persons not stated counts as none) and the suggested tier against the expected one. A clip that fails extraction (422) counts as wrong. Preview with `python3 scripts/eval_run.py --dry-run`.
@@ -202,6 +217,7 @@ jobs/       traffic_logger.py (Cloud Run Job) and bqml/ (BigQuery ML jam forecas
 data/       corridors/{blr,hyd}.json, scenarios/*.json, eval/ clips and labels
 scripts/    demo_seed.py, demo_reset.py, eval_run.py, make_scenario.py
 deck/       Marp slides, video plan and voiceover, architecture diagram
+infra/      terraform/ (mirror of the hand-built project, validate only) and monitoring/ (dashboard, uptime check, alert)
 .github/    checks and deploy workflows
 ```
 

@@ -6,6 +6,7 @@ from google.genai import types
 from pydantic import BaseModel, Field
 
 from gemini import LONG_TIMEOUT_MS, NO_THINKING, generate_json, offline, text_models
+from telemetry import traced
 
 DISCLAIMER = "Synthetic patient. Clinician confirms."
 SYSTEM = (
@@ -43,6 +44,7 @@ OFFLINE_BRIEF = {
 }
 
 
+@traced("brief")
 def generate(run, log_entries, lang="en", run_id=None):
     """Returns ({atmist, checklist, summary}, model). Raises gemini.ExtractionFailed when no model gives a valid brief."""
     if offline():

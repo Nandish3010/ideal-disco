@@ -34,6 +34,7 @@ import routes_api
 from corridor import CORRIDORS, distance_m
 from gemini import log, offline
 from hospitals import CAPS, HOSPITALS, by_id, on_diversion
+from telemetry import traced
 
 TIMEOUT_S = 20
 FALLBACK_SPEED_MPS = 8  # straight-line ETA when Routes has no answer
@@ -406,6 +407,7 @@ def route(run: dict) -> dict:
         return _fallback(run, baseline, origin, type(e).__name__)
 
 
+@traced("agent.route")
 def apply(ref):
     """Route the run at `ref` and write runs/{id}.routing (plus destination if it was empty or itself routed).
     Returns the routing, or None when the run is not a confirmed ambulance run on a corridor with a roster."""

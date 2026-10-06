@@ -2,6 +2,8 @@
 
 import re
 
+from telemetry import traced
+
 # ponytail: config, lowest rank passes first. Tune from report cards.
 TIER_RANK = {
     "fire_with_trapped": 0,
@@ -20,6 +22,7 @@ def key(c: dict) -> str:
     return t if t in TIER_RANK else f"{c['vehicle_type']}_{t}"
 
 
+@traced("priority")
 def sequence(contenders: list[dict]) -> list[dict]:
     """contenders: [{run_id, vehicle_type, tier, eta_s, approach}] -> same dicts sorted, each with offset_s. A vehicle on the
     same approach as a slot's leader, within PLATOON_S of the leader's eta, takes the leader's offset (no extra gap)."""

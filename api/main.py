@@ -23,12 +23,16 @@ import acuity
 import agent
 import brief
 import copnote
+import desk_reads
 import gemini
 import leadtime
 import priority
+import production
+import push
 import ratelimit
 import report
 import routes_api
+import telemetry
 import tokens
 from corridor import CORRIDORS, MATCH_M, SCENARIOS, bearing, distance_m, junctions_ahead, locate
 from firestore_client import db
@@ -86,6 +90,12 @@ def duty_hash(jid: str) -> str | None:
     return d.get("device_token_hash") if d.get("on") else None
 
 
+app.middleware("http")(
+    production.guard
+)  # registered before request_context so a refusal still gets a request id and an access line
+app.include_router(desk_reads.router)
+
+
 @app.middleware("http")
 async def request_context(request: Request, call_next):
     """Request id (X-Request-Id or a new uuid4) on every log line and the response; one access line per request. The
@@ -127,6 +137,9 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["X-Request-Id"],
 )
+telemetry.setup(
+    app
+)  # after the middleware above, so the request span is outermost; a no-op unless OTEL_ENABLED=1
 
 
 @app.exception_handler(GoogleAPIError)
@@ -600,6 +613,7 @@ def finish_alert(alert_ref, text, lang, path):
     """Voice for an alert already written: speech and the spoken-language text patched in (None, None when synthesis fails)."""
     audio_url, text_local = speak(text, lang, path)
     alert_ref.update({"audio_url": audio_url, "text_local": text_local})
+    push.send_alert(alert_ref, audio_url)  # FCM to the cop on duty; failures are logged inside
 
 
 def brief_from_tick(run_id, run_ref, run, entries):
@@ -912,8 +926,9 @@ def location(loc: Loc, bg: BackgroundTasks, x_device_token: str = Header("")):
         clear_s = leadtime.clear_seconds(jam_m) * (
             2 if blocked else 1
         )  # the cop said it cannot clear: warn earlier, hold longer
-        eta_s = leadtime.blended_eta(routes_eta, dist, observed)
-        stage = leadtime.stage(eta_s, clear_s)
+        with telemetry.span("leadtime"):  # not a decorator: the logger job image bundles leadtime.py alone
+            eta_s = leadtime.blended_eta(routes_eta, dist, observed)
+            stage = leadtime.stage(eta_s, clear_s)
         if stage is None and jam_m > 0 and jam_m >= dist - 25:  # vehicle is inside the queue: alert now
             stage = "PREPARE"
         if distance_m(me, jc) <= ap["radius_m"]:  # at the stop line
@@ -1081,6 +1096,7 @@ class Duty(BaseModel):
     device_id: str
     on: bool
     name: str | None = None
+    fcm_token: str | None = Field(None, max_length=4096)  # web push token of the cop's browser; see push.py
 
 
 def junction_key(corridor: str, junction_id: str) -> str | JSONResponse:
@@ -1105,12 +1121,13 @@ def duty(d: Duty, x_device_token: str = Header("")):
     extra: dict[str, Any] = {}
     if d.on:  # going on duty rotates the junction's token: the previous cop's calls then get 403
         token, h = tokens.mint()
-        ref.set({**doc, "device_token_hash": h}, merge=True)  # merge keeps note_count
+        # merge keeps note_count; the previous cop's push token goes unless this device sent its own
+        ref.set({**doc, "device_token_hash": h, "fcm_token": d.fcm_token or DELETE_FIELD}, merge=True)
         extra["device_token"] = token
     else:
         if bad := deny(x_device_token, duty_hash(key)):
             return bad
-        ref.set({**doc, "device_token_hash": DELETE_FIELD}, merge=True)
+        ref.set({**doc, "device_token_hash": DELETE_FIELD, "fcm_token": DELETE_FIELD}, merge=True)
     log(event="duty", junction_id=key, device_id=d.device_id, on=d.on)
     return {**doc, "since": since.isoformat(), **extra}
 

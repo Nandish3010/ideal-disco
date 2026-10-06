@@ -1,0 +1,55 @@
+# One alert policy, two conditions (either fires an incident): the /health uptime check failing, and 5xx above 2% of
+# requests. ${UPTIME_CHECK_ID} is filled in by apply.sh from the check it creates. It needs a notification channel
+# (apply.sh adds NOTIFICATION_CHANNEL when set), so it is not created by default.
+displayName: corridor-api down or erroring
+combiner: OR
+documentation:
+  mimeType: text/markdown
+  content: |
+    corridor-api is failing its /health check or more than 2% of requests are 5xx.
+    Logs: Cloud Run > corridor-api > Logs, filter `jsonPayload.event="unhandled_error"` or `severity>=ERROR`.
+    Runbook: README, Operations.
+conditions:
+  - displayName: /health uptime check failing
+    conditionThreshold:
+      filter: >-
+        metric.type="monitoring.googleapis.com/uptime_check/check_passed"
+        AND metric.label.check_id="${UPTIME_CHECK_ID}"
+        AND resource.type="uptime_url"
+      aggregations:
+        - alignmentPeriod: 300s
+          perSeriesAligner: ALIGN_NEXT_OLDER
+          crossSeriesReducer: REDUCE_COUNT_FALSE
+          groupByFields:
+            - resource.label.*
+      comparison: COMPARISON_GT
+      thresholdValue: 1
+      duration: 60s
+      trigger:
+        count: 1
+  - displayName: 5xx rate above 2%
+    conditionThreshold:
+      filter: >-
+        metric.type="run.googleapis.com/request_count"
+        AND resource.type="cloud_run_revision"
+        AND resource.label.service_name="corridor-api"
+        AND metric.label.response_code_class="5xx"
+      denominatorFilter: >-
+        metric.type="run.googleapis.com/request_count"
+        AND resource.type="cloud_run_revision"
+        AND resource.label.service_name="corridor-api"
+      aggregations:
+        - alignmentPeriod: 300s
+          perSeriesAligner: ALIGN_RATE
+          crossSeriesReducer: REDUCE_SUM
+      denominatorAggregations:
+        - alignmentPeriod: 300s
+          perSeriesAligner: ALIGN_RATE
+          crossSeriesReducer: REDUCE_SUM
+      comparison: COMPARISON_GT
+      thresholdValue: 0.02
+      duration: 300s
+      trigger:
+        count: 1
+alertStrategy:
+  autoClose: 1800s

@@ -23,3 +23,9 @@ web/.firebase/
 .ruff_cache/
 .coverage
 htmlcov/
+
+# terraform
+infra/terraform/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
