@@ -10,6 +10,7 @@ import {
   mmss,
   seqLine,
   shortId,
+  shortIds,
   tierLabel,
   traceLine,
   vehicleLabel,
@@ -189,7 +190,7 @@ function Item({ it, d, play, playing, jname }) {
             {jname(it.jid)}: green requested{it.approach ? ` for the ${it.approach} approach` : ""}
           </h3>
           {seqLine(it.sequence, d.runs) && <p>{seqLine(it.sequence, d.runs)}</p>}
-          {it.rationale && <p className="muted">{it.rationale}</p>}
+          {it.rationale && <p className="muted">{shortIds(it.rationale)}</p>}
           {!seqLine(it.sequence, d.runs) && (
             <LastSequence last={d.junctions[it.jid]?.last_sequence} runs={d.runs} />
           )}

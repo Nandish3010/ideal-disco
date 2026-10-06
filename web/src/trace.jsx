@@ -1,4 +1,4 @@
-import { mmss, seqLine, traceLine } from "./format.js";
+import { mmss, seqLine, shortIds, traceLine } from "./format.js";
 import { t } from "./i18n/index.js";
 import { ms } from "./story.js";
 
@@ -15,14 +15,14 @@ export function TraceCard({ routing, pending }) {
     <div className="card trace">
       <h2>
         {routing.destination} · {mmss(routing.eta_s)}{" "}
-        <span className="pill" title={routing.reason}>
+        <span className="pill" title={shortIds(routing.reason)}>
           {routing.applied ? t("trace.applied") : t("trace.recommend")}
         </span>
       </h2>
       {hhmm(routing.decided_at) && <p className="muted">decided at {hhmm(routing.decided_at)}</p>}
       <ul>
         {routing.reasons?.map((r) => (
-          <li key={r}>{r}</li>
+          <li key={r}>{shortIds(r)}</li>
         ))}
       </ul>
       <ol className="muted">
@@ -41,7 +41,7 @@ export function LastSequence({ last, runs }) {
     <div className="rat">
       <div className="muted">last sequence{hhmm(last.at) ? ` · ${hhmm(last.at)}` : ""}</div>
       <div>{line}</div>
-      {last.rationale && <i>{last.rationale}</i>}
+      {last.rationale && <i>{shortIds(last.rationale)}</i>}
     </div>
   ) : null;
 }
@@ -52,7 +52,7 @@ export function Rationale({ phase, runs, last }) {
   return line ? (
     <div className="rat">
       <div>{line}</div>
-      {phase.rationale && <i>{phase.rationale}</i>}
+      {phase.rationale && <i>{shortIds(phase.rationale)}</i>}
     </div>
   ) : (
     <LastSequence last={last} runs={runs} />
@@ -68,10 +68,10 @@ export function PlanCard({ replan }) {
   return (
     <div className="rat plan">
       <div>
-        <b>Re-planner</b> · {replan.action_text ?? plan.action}
+        <b>Re-planner</b> · {shortIds(replan.action_text ?? plan.action)}
         {hhmm(replan.decided_at) && <span className="muted"> · {hhmm(replan.decided_at)}</span>}
       </div>
-      {plan.reason && <i>{plan.reason}</i>}
+      {plan.reason && <i>{shortIds(plan.reason)}</i>}
       <ol className="muted">
         {replan.trace
           ?.filter((e) => !e.guard)

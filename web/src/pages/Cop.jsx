@@ -28,7 +28,7 @@ import {
   useNow,
   when,
 } from "../ui.jsx";
-import { dur, vehicleLabel } from "../format.js";
+import { dur, shortId, shortIds, vehicleLabel } from "../format.js";
 import Coach from "../a11y/Coach.jsx";
 import { buzz, useBigType } from "../a11y/cop.js";
 import { t } from "../i18n/index.js";
@@ -343,11 +343,11 @@ function Report({ corridor, junction }) {
             {KIND.includes(res.kind) ? t(`cop.k_${res.kind}`) : res.kind}
             {res.extra_seconds ? ` · +${dur(res.extra_seconds)}` : ""}
           </p>
-          <p>{res.reason}</p>
+          <p>{shortIds(res.reason)}</p>
           <p>
-            <b>{res.action_text}</b>
+            <b>{shortIds(res.action_text)}</b>
           </p>
-          {replan?.note_n === res.n && <p>Re-planner: {replan.action_text}</p>}
+          {replan?.note_n === res.n && <p>Re-planner: {shortIds(replan.action_text)}</p>}
           {res.transcript_en && (
             <p className="muted">{t("cop.heard", { text: res.transcript_en })}</p>
           )}
@@ -532,7 +532,7 @@ function Duty({ corridor, junction, onOff }) {
             {a.exit_move && ARROW[a.exit_move]}
             <b style={{ float: "right" }}>{state(a)}</b>
             <div className="muted">
-              {when(a.created_at)} · {a.run_id}
+              {when(a.created_at)} · {shortId(a.run_id)}
               <button
                 className="replay"
                 aria-label={t("cop.replay_label", { stage: a.stage })}

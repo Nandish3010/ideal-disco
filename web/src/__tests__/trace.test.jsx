@@ -54,4 +54,14 @@ describe("trace card", () => {
     const h = await mount(<TraceCard routing={routing} />);
     expect(h.textContent).toContain("decided at 14:05");
   });
+
+  it("shows run ids in step text as #xxxx", async () => {
+    const routing = {
+      destination: "J",
+      eta_s: 60,
+      trace: [{ text: "called alt(run-95f477bb) -> none" }],
+    };
+    const h = await mount(<TraceCard routing={routing} />);
+    expect(h.textContent).toContain("alt(#95f4) → none");
+  });
 });

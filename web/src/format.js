@@ -7,14 +7,17 @@ export const mmss = (s) => {
 // "run-4f1446b1" → "#4f14": the run id as people see it (keep the full id in a title= for debugging).
 export const shortId = (id) => (id ? `#${String(id).replace(/^run-/, "").slice(0, 4)}` : "");
 
+// Server text can embed raw run ids ("alternative_route(run-95f477bb)"): show them as #95f4 too.
+export const shortIds = (s) => String(s ?? "").replace(/run-([0-9a-f]{4})[0-9a-f]*/g, "#$1");
+
 // One trace entry as a line: the backend's `text` when present, else tool(args) → result, else the fallback marker.
 export function traceLine(e) {
-  if (e.text) return e.text.replace("->", "→");
+  if (e.text) return shortIds(e.text).replace("->", "→");
   if (e.tool) {
     const args = Object.values(e.args ?? {}).map((v) =>
       typeof v === "object" ? JSON.stringify(v) : v,
     );
-    return `called ${e.tool}(${args.join(", ")}) → ${e.result ?? "—"}`;
+    return shortIds(`called ${e.tool}(${args.join(", ")}) → ${e.result ?? "—"}`);
   }
   return e.fallback ? `fallback used (${e.fallback})` : JSON.stringify(e);
 }

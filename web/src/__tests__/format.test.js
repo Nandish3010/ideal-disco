@@ -7,6 +7,7 @@ import {
   plural,
   seqLine,
   shortId,
+  shortIds,
   tierLabel,
   traceLine,
   vehicleLabel,
@@ -17,6 +18,15 @@ describe("shortId", () => {
     expect(shortId("run-4f1446b1")).toBe("#4f14");
     expect(shortId("abcdef")).toBe("#abcd");
     expect(shortId(undefined)).toBe("");
+  });
+});
+
+describe("shortIds", () => {
+  it("shortens run ids embedded in text", () => {
+    expect(shortIds("called alternative_route(run-95f477bb) → none")).toBe(
+      "called alternative_route(#95f4) → none",
+    );
+    expect(shortIds(undefined)).toBe("");
   });
 });
 
