@@ -62,7 +62,7 @@ Session 1, the hero ambulance (shots 2 to 6, 10): the brief is only generated wh
 Session 2, the junction and sequencing beats (shots 7, 8, 9, 11): all vehicles, one continuous take.
 
 1. Reset again. Phone B back on duty.
-2. Laptop `/sim` Live: under the feeder card choose **All vehicles**, make sure "Create runs" is ticked (it is by default; it starts each run and confirms the ambulance tier for you), speed **1x**, **Start**. The scenario is about 7.5 min long: the fire engine enters at +311 s and the second ambulance at +40 s. Record `/sim` full time; record `/control` in a second window or run a second pass.
+2. Laptop `/sim` Live: under the feeder card choose **All vehicles**, make sure "Create runs" is ticked (it is by default; it starts each run and confirms the ambulance tier for you), speed **1x**, **Start**. The scenario is about 7.5 min long: the fire engine enters at +311 s and the second ambulance (KA01AB4321, urgent) at +40 s. If you triage that one by voice, the line is a stroke case, so the agent and the scenario agree on Jayadeva (it has a stroke unit): "68 year old female, sudden left-side weakness and slurred speech 20 minutes ago, BP 170 over 100, conscious." Record `/sim` full time; record `/control` in a second window or run a second pass.
 3. Leave J4 without a cop (nobody goes on duty there) so its alert goes unacknowledged and escalates after 20 s.
 
 Replay and Hyderabad (shots 1, 12): need no reset. `/sim?mode=replay&scenario=blr-two-vehicles`, pick **50x** for shot 1; shot 9 is recorded from the live `/sim` or `/control` card during Session 2; shot 12 is a click on the Corridor select in `/control`.

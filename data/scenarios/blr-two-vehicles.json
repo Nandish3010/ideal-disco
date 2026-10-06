@@ -3,7 +3,7 @@
   "seed": 20261005,
   "baseline_cycle": {
     "red_fraction": 0.5,
-    "note": "Today lane: each junction runs a fixed signal cycle (cycle_s from the corridor file, first red_fraction of it red). A vehicle is assumed to arrive at a uniformly random but seeded phase of that cycle, waits out the remaining red, then the queue ahead drains at 2.0 m/s (jam_m / 2.0). Spans are in route order: the stop line is the largest to_m. Simulated estimate on recorded traffic, not a field measurement."
+    "note": "Today lane, deterministic: per junction passed, the wait is cycle/4 (arrival at mid-red of the fixed signal cycle, cycle_s from the corridor file) plus queue/2 m/s (the queue ahead, jam_m, draining at 2.0 m/s). Spans are in route order: the stop line is the largest to_m. Simulated estimate on recorded traffic, not a field measurement."
   },
   "vehicles": [
     {
@@ -139,6 +139,7 @@
       "plate": "KA01AB4321",
       "type": "ambulance",
       "tier": "urgent",
+      "patient": "68 year old female, sudden left-side weakness and slurred speech 20 minutes ago, BP 170 over 100, conscious",
       "start_offset_s": 40,
       "approaches": {
         "j1": "E",

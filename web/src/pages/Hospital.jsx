@@ -3,6 +3,7 @@ import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase.js";
 import { api } from "../api.js";
 import { corridors } from "../data.js";
+import { HOSPITALS } from "../hospitals.js";
 import { ErrCard, useDoc, when } from "../ui.jsx";
 import { ms, useEnRoute, useNow } from "./Cop.jsx";
 import { Chips, Thumb } from "./Vehicle.jsx";
@@ -238,8 +239,24 @@ function Selected({ run }) {
 }
 
 export default function Hospital() {
-  const q = new URLSearchParams(location.search).get("corridor");
-  const hospital = (corridors[q] ?? corridors.blr).hospital.name;
+  const params = new URLSearchParams(location.search);
+  const q = params.get("corridor");
+  // ?hospital=<roster id> picks the hospital (and so its corridor); without it, the corridor's own hospital
+  const fromId = Object.entries(HOSPITALS).find(([, hs]) =>
+    hs.some((h) => h.id === params.get("hospital")),
+  );
+  const cid = fromId?.[0] ?? (corridors[q] ? q : "blr");
+  const roster = HOSPITALS[cid];
+  const [hid, setHid] = useState(
+    (fromId && params.get("hospital")) ??
+      roster.find((h) => h.name === corridors[cid].hospital.name)?.id ??
+      roster[0].id,
+  );
+  const hospital = roster.find((h) => h.id === hid).name;
+  const choose = (id) => {
+    setHid(id);
+    history.replaceState(null, "", `?corridor=${cid}&hospital=${id}`);
+  };
   const { runs, error } = useEnRoute();
   const now = useNow();
   const [pick, setPick] = useState(null);
@@ -248,14 +265,26 @@ export default function Hospital() {
     .filter((r) =>
       r.destination
         ? r.destination.name === hospital
-        : r.vehicle_type === "ambulance" && (r.corridor ?? "blr") === (corridors[q] ? q : "blr"),
+        : r.vehicle_type === "ambulance" &&
+          (r.corridor ?? "blr") === cid &&
+          hospital === corridors[cid].hospital.name,
     )
     .sort((a, b) => (eta(a, now) ?? 1e9) - (eta(b, now) ?? 1e9));
   const sel = inbound.find((r) => r.id === pick) ?? inbound[0];
   return (
     <>
       <p className="banner">Demo: synthetic patients only</p>
-      <h2 style={{ marginTop: 0 }}>{hospital}</h2>
+      <label>
+        Hospital
+        <select value={hid} onChange={(e) => choose(e.target.value)}>
+          {roster.map((h) => (
+            <option key={h.id} value={h.id}>
+              {h.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <h2>{hospital}</h2>
       {error && <p className="card bad">Could not load runs: {error}</p>}
       {inbound.length === 0 && <p className="muted">No inbound ambulances.</p>}
       <div className="runs">

@@ -3,7 +3,7 @@
 import os
 from datetime import UTC, datetime
 
-from corridor import CORRIDORS
+from corridor import CORRIDORS, SCENARIOS
 from logctx import log
 
 PROJECT = os.environ.get("GCP_PROJECT", "green-corridor-2026")
@@ -31,11 +31,21 @@ DRAIN_MPS = 2.0  # queue drain rate, same constant as leadtime.clear_seconds
 _table_ready = False
 
 
+def _own_jam(run, a):
+    """jam_m on this run's own alert, 0 when it is a scenario queue recorded for another approach of the junction (a
+    cross-approach vehicle is not credited with the corridor approach's queue)."""
+    recorded = (SCENARIOS.get(run.get("scenario")) or {}).get("recorded_spans", {}).get(
+        a["junction_id"]
+    ) or []
+    rec = next((r.get("approach") for r in recorded if r.get("approach")), None)
+    return 0 if rec and a.get("approach") and a["approach"] != rec else a.get("jam_m", 0)
+
+
 def compute(run_id, run, alerts, audits, ended_at):
     """alerts: alert dicts; audits: audit dicts for this run. A junction is cleared when the vehicle actually passed it
     (run.passed_junctions) and preemption was requested for it; a request for a junction still ahead when the run ended earns
     nothing. Baseline per junction cleared: remaining red (arrival at mid-red = cycle_s / 4) plus the queue drain time
-    jam_m / 2.0, jam_m from that junction's PREPARE alert (0 if none)."""
+    jam_m / 2.0, jam_m from this run's own PREPARE alert for that junction (STOP if no PREPARE, 0 if none; see _own_jam)."""
     started = (
         run.get("first_tick_at") or run["started_at"]
     )  # the drive starts at the first tick, not at run creation
@@ -45,11 +55,12 @@ def compute(run_id, run, alerts, audits, ended_at):
     cycles = {f"{run['corridor']}_{j['id']}": j["cycle_s"] for j in CORRIDORS[run["corridor"]]["junctions"]}
     # PREPARE's jam_m wins; a junction with only a STOP alert uses that one
     jam = {
-        a["junction_id"]: a.get("jam_m", 0)
+        a["junction_id"]: _own_jam(run, a)
         for a in sorted(alerts, key=lambda a: a["stage"] == "PREPARE")
         if a["stage"] != "UPDATE"
     }
     stops = sum(cycles.get(j, 0) / 4 + jam.get(j, 0) / DRAIN_MPS for j in cleared)
+    escalated = {(a["junction_id"], a.get("alert_n")) for a in audits if a.get("action") == "escalation"}
     acks = [a["ack_latency_s"] for a in alerts if a.get("ack_latency_s") is not None]
     return {
         "corridor": run["corridor"],
@@ -65,7 +76,9 @@ def compute(run_id, run, alerts, audits, ended_at):
         "alerts": len(alerts),
         "ack_latency_s": acks,
         "avg_ack_latency_s": round(sum(acks) / len(acks), 1) if acks else None,
-        "escalations": sum(a.get("action") == "escalation" for a in audits),
+        "escalations": min(
+            len(escalated), len(alerts)
+        ),  # distinct escalated alerts, never more than the alerts
         "distance_m": run.get("distance_m", 0),
         "method": "simulated-baseline",
     }

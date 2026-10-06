@@ -72,6 +72,32 @@ def test_update_alerts_do_not_set_the_queue() -> None:
     assert r["baseline_s"] - r["actual_s"] == round(CYCLE["j3"] / 4)
 
 
+def test_cross_approach_vehicle_gets_its_own_approachs_queue() -> None:
+    """blr-two-vehicles records a j3 queue on the corridor approach (E) only; a fire engine on the cross approach (S) is not
+    credited with it, an ambulance on E is, and a live run's own queue always counts."""
+    pre = [{"action": "preempt_requested", "junction_id": "blr_j3"}]
+    run = {**RUN, "scenario": "blr-two-vehicles", "passed_junctions": ["blr_j3"]}
+
+    def saved(approach: str, r: dict = run) -> int:
+        alerts = [{"junction_id": "blr_j3", "stage": "PREPARE", "approach": approach, "jam_m": 380}]
+        c = report.compute("r", r, alerts, pre, T1)
+        return c["baseline_s"] - c["actual_s"]
+
+    assert saved("S") == round(CYCLE["j3"] / 4)
+    assert saved("E") == round(CYCLE["j3"] / 4 + 380 / 2)
+    live = {k: v for k, v in run.items() if k != "scenario"}
+    assert saved("S", live) == round(CYCLE["j3"] / 4 + 380 / 2)
+
+
+def test_escalations_never_exceed_alerts() -> None:
+    alerts = [{"junction_id": "blr_j3", "stage": "PREPARE"}, {"junction_id": "blr_j4", "stage": "STOP"}]
+    dup = [{"action": "escalation", "junction_id": "blr_j3", "alert_n": 0}] * 3
+    assert report.compute("r", RUN, alerts, dup, T1)["escalations"] == 1  # one alert escalated three times
+    many = [{"action": "escalation", "junction_id": "blr_j3", "alert_n": n} for n in range(5)]
+    assert report.compute("r", RUN, alerts, many, T1)["escalations"] == 2  # capped at the alerts
+    assert report.compute("r", RUN, [], many, T1)["escalations"] == 0
+
+
 def test_drive_starts_at_the_first_tick() -> None:
     first = datetime(2026, 10, 5, 9, 4, tzinfo=UTC)
     r = report.compute("r", {**RUN, "first_tick_at": first}, [], [], T1)

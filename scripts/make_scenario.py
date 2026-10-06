@@ -5,7 +5,7 @@ Ticks are interpolated along the corridor's approach polylines, so rerun this af
 Ambulance KA01AB1234 (critical) starts LEAD_M (900 m) of straight lead-in before the origin of j1's approach
 polyline, driven at 11 m/s, then runs all 5 junctions to the hospital; fire engine KA01FE5678
 (fire_with_trapped) comes in on j3's cross approach and reaches the stop line ~3 s ahead of it; a second
-ambulance KA01AB4321 (urgent) is the first one's whole trace, lead-in included, 40 s later (platoon).
+ambulance KA01AB4321 (urgent, a stroke case: stroke_unit, so Jayadeva) is the first one's whole trace, lead-in included, 40 s later (platoon).
 Span intervals use route order (stop line = largest to_m), like api/leadtime.py and the traffic logger.
 """
 
@@ -174,7 +174,7 @@ out = {
     "seed": 20261005,
     "baseline_cycle": {
         "red_fraction": 0.5,
-        "note": "Today lane: each junction runs a fixed signal cycle (cycle_s from the corridor file, first red_fraction of it red). A vehicle is assumed to arrive at a uniformly random but seeded phase of that cycle, waits out the remaining red, then the queue ahead drains at 2.0 m/s (jam_m / 2.0). Spans are in route order: the stop line is the largest to_m. Simulated estimate on recorded traffic, not a field measurement.",
+        "note": "Today lane, deterministic: per junction passed, the wait is cycle/4 (arrival at mid-red of the fixed signal cycle, cycle_s from the corridor file) plus queue/2 m/s (the queue ahead, jam_m, draining at 2.0 m/s). Spans are in route order: the stop line is the largest to_m. Simulated estimate on recorded traffic, not a field measurement.",
     },
     "vehicles": [
         {
@@ -200,6 +200,7 @@ out = {
             "plate": "KA01AB4321",
             "type": "ambulance",
             "tier": "urgent",
+            "patient": "68 year old female, sudden left-side weakness and slurred speech 20 minutes ago, BP 170 over 100, conscious",
             "start_offset_s": amb2_start,
             "approaches": {"j1": "E", "j2": "SE", "j3": "E", "j4": "E", "j5": "E"},
             "ticks": clean(amb2),
