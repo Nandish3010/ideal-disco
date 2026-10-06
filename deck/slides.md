@@ -168,12 +168,17 @@ Hallucination risk is removed from the safety path by construction. The model si
 </div>
 <div>
 
-![h:330 img-shadow](img/triage-gemini.png)
+![h:200 img-shadow](img/triage-gemini.png)
+
+<div class="stats two" style="gap:10px;margin:6px 0 0">
+<div class="stat" style="padding:8px 10px"><b style="font-size:38px">87%</b><span style="font-size:14px">field accuracy</span></div>
+<div class="stat" style="padding:8px 10px"><b style="font-size:38px">73%</b><span style="font-size:14px">tier accuracy</span></div>
+</div>
 
 </div>
 </div>
 
-<p class="cite">Extraction runs on <code>gemini-3.1-flash-lite</code> with <code>gemini-3-flash-preview</code> as fallback; the brief, report, sequencing sentence and agent text use <code>gemini-3-flash-preview</code>. Synthetic patients only; a clinician confirms every extracted value.</p>
+<p class="cite">Accuracy: synthetic voices (Cloud Text-to-Speech), 12 clips (11 scored), 6 Oct 2026; not field recordings, replaced by real EMT clips when recorded. Extraction: <code>gemini-3.1-flash-lite</code>, fallback <code>gemini-3-flash-preview</code>. Synthetic patients only; a clinician confirms every extracted value.</p>
 
 <!--
 Each use changes what a human sees or hears next, and each has a form or template fallback if the model fails. Extraction runs on gemini-3.1-flash-lite with gemini-3-flash-preview as the fallback; the brief, the report, the sequencing sentence and the agent text use gemini-3-flash-preview. Extraction reads values visible on a monitor or ECG photo using the same schema, null where unreadable. Cop voice notes fill a fixed schema and plain rules act on it, so a misheard report can at worst extend a green by three minutes.
