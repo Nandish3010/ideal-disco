@@ -133,4 +133,4 @@ def test_category_schema() -> None:
     assert e.model_dump()["complaint_category"] == "burns"
     assert Extraction(transcript_en="x").complaint_category is None
     with pytest.raises(ValueError):
-        Extraction(transcript_en="x", complaint_category="made_up")
+        Extraction.model_validate({"transcript_en": "x", "complaint_category": "made_up"})
