@@ -14,11 +14,12 @@ Live preview: `npx -y @marp-team/marp-cli -s deck/ --theme deck/theme.css`. Spea
 
 ## Before export
 
-Fill or confirm each of these, then export and re-read the PDF:
+The submission deck is `Green-Corridor-Deck.pdf`, built by `build_deck.py` (the template-based `Green-Corridor-Submission.pdf` is the fallback). `slides.md` is an appendix of longer Marp notes: it is not submitted and its numbers are not kept current. Check each of these before you export or submit:
 
-- [ ] **Placeholders to replace** (all of them, in one pass):
-  - `[fill at freeze]` (3 places, the BigQuery `traffic_spans` row count N at freeze; retrain the BigQuery ML model first): `README.md` "Real data", the architecture slide's footnote, and slide 10 ("Rows so far").
-  - `[link, 3 minutes]` (2 places, the unlisted video URL): the last slide of `slides.md` and the upload step in `VIDEO.md`.
-  - The minutes-saved figure (`<!-- update from replay test -->` notes): slide 3 and `README.md`, copied from the replay test (`web/src/__tests__/replay.test.js`); also write it in the shot 1 caption in `VIDEO.md`.
-- [ ] Screenshots in `img/` captured from the deployed app (they are placeholders until then).
-- [ ] The agent-trace slide still matches the live trace in `/vehicle` (currently the Jayadeva, 373 s trace).
+- [ ] **Row count and date range.** `bq query --nouse_legacy_sql 'SELECT COUNT(*), MIN(ts), MAX(ts), COUNTIF(jam_m>0) FROM corridor.traffic_spans'`; put the real count (and the non-zero count, stated honestly) in `README.md` "Real data" and on the deck's data slide. Retrain the BigQuery ML model first (`jobs/bqml/run.sh`).
+- [ ] **Video link.** After the unlisted YouTube upload, set it in the Links slide of the submission deck (the `DATA` entry in `build_deck.py`), rebuild, and paste it into the submission form.
+- [ ] **Minutes-saved figure** copied from the replay test (`web/src/__tests__/replay.test.js`) into the deck, `README.md` and the beat 2 caption in `VIDEO.md`.
+- [ ] **Recording prep done in order** (see `VIDEO.md` section 3): warm `/health`, `python3 scripts/demo_reset.py --apply`, one scenario run with the cop ACKing, `python3 scripts/pin_showcase.py --apply`, then record.
+- [ ] Screenshots in `img/` captured from the deployed app (placeholders until then).
+- [ ] The routing-trace slide still matches the live TraceCard in `/vehicle`.
+- [ ] Re-read the exported PDF end to end.
