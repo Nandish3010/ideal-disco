@@ -143,7 +143,7 @@ For repository workflow and contribution conventions, see CONTRIBUTING.md.
 
 ## Deploy
 
-Deploys run on push to `main`, path-filtered: `api/` to Cloud Run, `web/` to Firebase Hosting, and `jobs/` (build image, update the Cloud Run Job, run it once to verify). All authenticate to Google Cloud with Workload Identity Federation, so no keys are stored in GitHub. `main` is branch-protected: checks gate merges to `main`, so changes land through pull requests with `checks` passing. Firestore rules are deployed manually with `firebase deploy --only firestore:rules`.
+Every push to main runs the checks workflow; the deploy workflows run only after checks succeed and only for the paths that changed (`api/` to Cloud Run, `web/` to Firebase Hosting, and `jobs/`: build image, update the Cloud Run Job, run it once to verify). Branch protection also requires checks before merge. All authenticate to Google Cloud with Workload Identity Federation, so no keys are stored in GitHub. Firestore rules are deployed manually with `firebase deploy --only firestore:rules`.
 
 Runtime configuration (set by the workflows): project `green-corridor-2026`, service `corridor-api` in `asia-south1`, Gemini on the `global` location, and these variables.
 
