@@ -48,6 +48,7 @@ def no_network() -> Iterator[None]:
 def db() -> Iterator[FakeFirestore]:
     fake.clear()
     ratelimit._buckets.clear()
+    ratelimit._down_until = 0.0
     yield fake
 
 

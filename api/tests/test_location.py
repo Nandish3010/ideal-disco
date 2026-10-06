@@ -91,8 +91,8 @@ def send(rid: str, seq: int, pos: tuple[float, float], speed: float = PACE) -> t
     """One tick, 5 s after the last; returns the response and the background tasks it queued, not yet run."""
     bg = BackgroundTasks()
     t = T0 + timedelta(seconds=5 * seq)
-    out = main.location(main.Loc(run_id=rid, lat=pos[0], lng=pos[1], speed_mps=speed, t=t, source="sim"), bg)
-    return out, bg
+    loc = main.Loc(run_id=rid, lat=pos[0], lng=pos[1], speed_mps=speed, t=t, source="sim")
+    return main.location(loc, bg, idempotency_key=None), bg
 
 
 def finish(bg: BackgroundTasks) -> None:
@@ -246,6 +246,9 @@ def test_the_real_call_is_throttled_to_one_per_20_seconds(
     posts: list[str] = []
     clock = [100.0]
     monkeypatch.setattr(routes_api, "_cache", {})
+    monkeypatch.setattr(
+        routes_api, "_read_shared", lambda key, ctx: None
+    )  # this is the memory layer's throttle
     monkeypatch.setattr(routes_api.time, "monotonic", lambda: clock[0])
     monkeypatch.setattr(routes_api, "parse", lambda r: route_result())
 

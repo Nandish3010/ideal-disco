@@ -1,10 +1,12 @@
-"""Per-IP rate limits, the per-run caps (triage + log calls, briefs) and the atomic log counter."""
+"""Per-IP rate limits (shared Firestore windows, in-memory fallback), the per-run caps (triage + log calls, briefs) and the atomic log counter."""
 
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from google.api_core.exceptions import ServiceUnavailable
 
 import main
 import ratelimit
@@ -17,11 +19,33 @@ def limits(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("RATE_LIMIT_DISABLED")
 
 
+class Broken:
+    """A Firestore that is down."""
+
+    def collection(self, name: str) -> Any:
+        raise ServiceUnavailable("firestore is down")
+
+    def transaction(self, **_: Any) -> Any:
+        raise ServiceUnavailable("firestore is down")
+
+
+@pytest.fixture
+def memory_only(limits: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Firestore errors, so the per-instance token bucket is what counts."""
+    monkeypatch.setattr(ratelimit, "db", Broken())
+
+
 def ip(n: int) -> dict[str, str]:
     return {"X-Forwarded-For": f"10.0.0.{n}"}
 
 
-# ---- token buckets ---------------------------------------------------------------------------------------------------
+def clock_at(monkeypatch: pytest.MonkeyPatch, now: float) -> list[float]:
+    t = [now]
+    monkeypatch.setattr(ratelimit.time, "time", lambda: t[0])
+    return t
+
+
+# ---- shared fixed-window counter (Firestore) -------------------------------------------------------------------------
 
 
 def test_heavy_endpoints_allow_10_a_minute_then_429(client: TestClient, limits: None) -> None:
@@ -32,6 +56,39 @@ def test_heavy_endpoints_allow_10_a_minute_then_429(client: TestClient, limits: 
     assert int(r.headers["Retry-After"]) >= 1 and r.headers["X-Request-Id"]
     assert client.post("/brief", json={"run_id": "run-nope"}, headers=ip(2)).status_code == 404  # per IP
     assert client.get("/health", headers=ip(1)).status_code == 200  # health is never limited
+
+
+def test_the_count_lives_in_one_document_per_bucket_ip_and_window(
+    client: TestClient, limits: None, db: FakeFirestore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock_at(monkeypatch, 1_800_000_030.0)  # 30 s into window 30_000_000
+    for _ in range(3):
+        client.post("/brief", json={"run_id": "x"}, headers=ip(7))
+    doc = db.docs["ratelimits/heavy:10.0.0.7:30000000"]
+    assert doc["count"] == 3
+    assert doc["expires_at"] == datetime.fromtimestamp(
+        30_000_002 * 60, UTC
+    )  # a TTL policy deletes it after two windows
+    assert len(db.docs) == 1 and not ratelimit._buckets  # nothing counted in memory while Firestore works
+
+
+def test_the_budget_is_shared_by_every_instance(client: TestClient, limits: None) -> None:
+    for _ in range(10):
+        client.post("/brief", json={"run_id": "x"}, headers=ip(8))
+    ratelimit._buckets.clear()  # another instance has no memory of those calls: the shared counter still does
+    assert client.post("/brief", json={"run_id": "x"}, headers=ip(8)).status_code == 429
+
+
+def test_the_counter_starts_over_with_the_next_window(
+    client: TestClient, limits: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    t = clock_at(monkeypatch, 1_800_000_015.0)  # 15 s into the window
+    for _ in range(10):
+        client.post("/brief", json={"run_id": "x"}, headers=ip(9))
+    r = client.post("/brief", json={"run_id": "x"}, headers=ip(9))
+    assert r.status_code == 429 and r.headers["Retry-After"] == "45"  # to the end of the window
+    t[0] += 45
+    assert client.post("/brief", json={"run_id": "x"}, headers=ip(9)).status_code == 404
 
 
 def test_every_heavy_path_shares_the_budget(client: TestClient, limits: None) -> None:
@@ -50,8 +107,64 @@ def test_other_endpoints_allow_60_a_minute(client: TestClient, limits: None) -> 
     assert client.post("/brief", json={"run_id": "x"}, headers=ip(4)).status_code == 404  # its own bucket
 
 
+def test_a_forged_forwarded_for_prefix_does_not_buy_a_new_budget(client: TestClient, limits: None) -> None:
+    for n in range(10):
+        client.post("/brief", json={"run_id": "x"}, headers={"X-Forwarded-For": f"6.6.6.{n}, 9.9.9.9"})
+    r = client.post("/brief", json={"run_id": "x"}, headers={"X-Forwarded-For": "1.2.3.4, 9.9.9.9"})
+    assert r.status_code == 429
+
+
+def test_an_address_cannot_escape_the_document_path(
+    client: TestClient, limits: None, db: FakeFirestore
+) -> None:
+    assert (
+        client.post("/brief", json={"run_id": "x"}, headers={"X-Forwarded-For": "a/b/c"}).status_code == 404
+    )
+    assert any(k.startswith("ratelimits/heavy:a_b_c:") for k in db.docs)
+
+
+def test_disabled_never_limits(client: TestClient) -> None:  # conftest sets RATE_LIMIT_DISABLED=1
+    assert all(client.post("/brief", json={"run_id": "x"}).status_code == 404 for _ in range(30))
+
+
+# ---- fallback: per-instance token buckets ----------------------------------------------------------------------------
+
+
+def fallback_logs(capsys: pytest.CaptureFixture[str]) -> list[dict]:
+    lines = [json.loads(x) for x in capsys.readouterr().out.splitlines() if x.startswith("{")]
+    return [x for x in lines if x["event"] == "ratelimit_fallback"]
+
+
+def test_when_firestore_errors_the_in_memory_limit_still_holds(
+    client: TestClient, memory_only: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    for _ in range(10):
+        assert client.post("/brief", json={"run_id": "run-nope"}, headers=ip(1)).status_code == 404
+    r = client.post("/brief", json={"run_id": "run-nope"}, headers=ip(1))
+    assert_envelope(r, 429, "rate_limited")  # the same envelope and Retry-After as the shared limiter
+    assert int(r.headers["Retry-After"]) >= 1
+    assert client.post("/brief", json={"run_id": "run-nope"}, headers=ip(2)).status_code == 404  # per IP
+    (line,) = fallback_logs(capsys)  # logged once, then Firestore is skipped for FALLBACK_S
+    assert line["error"] == "ServiceUnavailable"
+
+
+def test_firestore_is_tried_again_after_the_pause(
+    client: TestClient, memory_only: None, monkeypatch: pytest.MonkeyPatch, db: FakeFirestore
+) -> None:
+    clock = [1000.0]
+    monkeypatch.setattr(ratelimit.time, "monotonic", lambda: clock[0])
+    client.get("/nope", headers=ip(1))
+    assert ratelimit._down_until == 1000 + ratelimit.FALLBACK_S
+    monkeypatch.setattr(ratelimit, "db", db)  # Firestore is back
+    client.get("/nope", headers=ip(1))
+    assert not any(k.startswith("ratelimits/") for k in db.docs)  # still paused
+    clock[0] += ratelimit.FALLBACK_S
+    client.get("/nope", headers=ip(1))
+    assert any(k.startswith("ratelimits/general:10.0.0.1:") for k in db.docs)
+
+
 def test_tokens_come_back_with_time(
-    client: TestClient, limits: None, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, memory_only: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     clock = [1000.0]
     monkeypatch.setattr(ratelimit.time, "monotonic", lambda: clock[0])
@@ -63,22 +176,11 @@ def test_tokens_come_back_with_time(
     assert client.post("/brief", json={"run_id": "run-nope"}, headers=ip(5)).status_code == 429
 
 
-def test_a_forged_forwarded_for_prefix_does_not_buy_a_new_budget(client: TestClient, limits: None) -> None:
-    for n in range(10):
-        client.post("/brief", json={"run_id": "x"}, headers={"X-Forwarded-For": f"6.6.6.{n}, 9.9.9.9"})
-    r = client.post("/brief", json={"run_id": "x"}, headers={"X-Forwarded-For": "1.2.3.4, 9.9.9.9"})
-    assert r.status_code == 429
-
-
-def test_the_bucket_table_is_bounded(limits: None, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_bucket_table_is_bounded(memory_only: None, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ratelimit, "MAX_KEYS", 3)
     for n in range(10):
         ratelimit.retry_after(f"ip-{n}", "/nope")
     assert len(ratelimit._buckets) <= 4
-
-
-def test_disabled_never_limits(client: TestClient) -> None:  # conftest sets RATE_LIMIT_DISABLED=1
-    assert all(client.post("/brief", json={"run_id": "x"}).status_code == 404 for _ in range(30))
 
 
 # ---- per-run caps ----------------------------------------------------------------------------------------------------

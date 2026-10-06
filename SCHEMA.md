@@ -163,6 +163,27 @@ Written once per run when it ends (`POST /runs` end) or arrives (`/location` wit
 The baseline is a simulation, not a measurement (`method: "simulated-baseline"`): at each cleared (passed and preempted) junction a vehicle without preemption would stop for the remaining red, assumed to be `cycle_s / 4` (arrival at mid-red), plus the queue drain time `jam_m / 2.0` with `jam_m` from that junction's PREPARE alert (STOP-only alert: that alert's; none: 0). `baseline_s = actual_s + sum(stops)`, `minutes_saved = sum(stops) / 60`.
 The same row is inserted into BigQuery `corridor.run_reports` (created on first use; `ack_latency_s` is REPEATED FLOAT, timestamps are TIMESTAMP). A BigQuery failure logs `report_bq_error` and never fails the request.
 
+### `ratelimits/{bucket}:{ip}:{window}`
+```json
+{ "count": 7, "expires_at": "2026-10-06T09:03:00Z" }
+```
+The shared per-IP counters behind Rate limits and caps. `bucket` is `heavy | location | general`, `ip` the client address (at most 64 characters, `/` replaced by `_`), `window` the Unix minute (`floor(time / 60)`). One Firestore transaction per limited request reads the count, refuses at the limit and otherwise writes `Increment(1)`. `expires_at` is two windows after the window started.
+
+### `route_cache/{run_id}`
+```json
+{ "result": { "duration_s": 412, "intervals": [{ "from_m": 0, "to_m": 900, "speed": "NORMAL" }], "steps": [], "polyline_points": [12.91, 77.62, 12.92, 77.63] },
+  "fetched_at": "2026-10-06T09:02:30Z", "expires_at": "2026-10-07T09:02:30Z" }
+```
+The run's one Routes result (see Routes call budget), shared by every API instance. `polyline_points` is stored flat (`[lat, lng, lat, lng, ...]`) because Firestore has no nested arrays. A document is reused for 20 s after `fetched_at` (the off-route route stays pinned and is reused for as long as the run lives). `expires_at` is a day after the fetch.
+
+### `idempotency/{run_id}/keys/{key}`
+```json
+{ "response": { "state": "en_route", "next_junction": "blr_j3", "stage": "PREPARE" }, "expires_at": "2026-10-06T09:12:30Z" }
+```
+The first successful `POST /location` response for an `Idempotency-Key` (or `tick_id`), kept 10 minutes. Refused ticks (403, 404) are not stored.
+
+TTL: `ratelimits`, `route_cache` and the `keys` collection group of `idempotency` expire by their `expires_at` field. Create the policies once per project, they are not part of any deploy: `gcloud firestore fields ttls update expires_at --collection-group=ratelimits --enable-ttl` (and likewise `route_cache` and `keys`). Nothing depends on the deletion: every reader checks the time itself.
+
 ## API
 
 All bodies JSON. Errors: `{"error": "<code>", "detail": "..."}` with 4xx/5xx. Request bodies that fail validation return 422 `{"error": "validation_error", "detail": "<field>: <message>; ..."}`; `detail` is always text, and some errors add keys (`state`, `fallback`). Firestore failures return 503 `{"error": "store_unavailable"}`, anything unexpected 500 `{"error": "internal_error"}`. Every response carries an `X-Request-Id` header (the caller's, else a new uuid4) that is also on every server log line; with `OTEL_ENABLED=1` each line also has `trace_id` and `logging.googleapis.com/trace`, which links it to its Cloud Trace span. CORS allows only the two Firebase Hosting origins, `localhost:5173` / `127.0.0.1:5173` and the comma-separated env `EXTRA_ORIGINS`.
@@ -197,7 +218,7 @@ Env `DEVICE_TOKENS_DISABLED=1` turns the check off (for `api/offline_replay.py` 
 Written by `POST /hospital/duty` (doc id from the roster, like `blr_jayadeva`). Only the sha256 of the desk token is kept. The web hospital page keeps the token in `localStorage` as `hospital_token_<hospital_id>`.
 
 ### Rate limits and caps
-The endpoints are unauthenticated apart from the device tokens above, so they are limited per client. Per client IP (the last `X-Forwarded-For` entry, else the socket address), an in-memory token bucket per Cloud Run instance, refilled continuously:
+The endpoints are unauthenticated apart from the device tokens above, so they are limited per client. Per client IP (the last `X-Forwarded-For` entry, else the socket address), in fixed one-minute windows counted in Firestore (`ratelimits/{bucket}:{ip}:{window}`), so every Cloud Run instance spends one shared budget. If Firestore errors, that instance logs `{"event": "ratelimit_fallback"}` and counts in memory (a token bucket per instance, refilled continuously) for 30 s before trying Firestore again, so a store outage never blocks requests and never lifts the limits.
 
 | Bucket | Paths | Limit |
 |---|---|---|
@@ -205,8 +226,11 @@ The endpoints are unauthenticated apart from the device tokens above, so they ar
 | location | `/location` | 900 per minute (three simulated vehicles at 20x send 720) |
 | general | everything else except `/health` (never limited) | 60 per minute |
 
-Over the limit: 429 `{"error": "rate_limited", "detail": "rate limited"}` with a `Retry-After` header (seconds). Env `RATE_LIMIT_DISABLED=1` switches the limits off (tests and `api/offline_replay.py`, which sends a few hundred ticks without sleeping).
+Over the limit: 429 `{"error": "rate_limited", "detail": "rate limited"}` with a `Retry-After` header (seconds; to the next window). Env `RATE_LIMIT_DISABLED=1` switches the limits off (tests and `api/offline_replay.py`, which sends a few hundred ticks without sleeping).
 Per-run caps, whatever the IP: at most 20 `/triage` plus `/log` calls per run (`runs/{id}.extract_calls`; the 21st is 429 `{"error": "run_cap_reached"}`), and at most one `/brief` per run per 10 minutes unless the body has `"regenerate": true` (otherwise 429 `{"error": "brief_cooldown", "retry_after_s": 412}`).
+
+### Documentation
+`GET /docs` (Swagger UI) and `GET /openapi.json` describe every endpoint: tags, request and response examples, and one shared `Error` response (the envelope above, with `X-Request-Id`) for 429, 500 and 503. The version is the first seven characters of env `GIT_SHA` (`dev` when unset). `api/openapi.json` is the committed copy: `make openapi` regenerates it and CI runs `python -m api.export_openapi --check`, failing if it is stale. `make contract` runs schemathesis (every check, 20 examples per operation) against the API on an in-memory Firestore.
 
 ### `GET /health`
 Response `{"ok": true, "model": "gemini-3.1-flash-lite"}`
@@ -340,7 +364,7 @@ No body. Generates the after-action report for a finished run (Gemini on `GEMINI
 ```json
 { "run_id": "run-amb-1", "lat": 12.9197, "lng": 77.6204, "speed_mps": 13.2, "heading": 231, "t": "2026-10-05T09:02:30Z", "source": "sim" }
 ```
-`heading` (degrees) and `t` are optional (derived from the previous tick / server time); `source`: `gps | sim`.
+`heading` (degrees) and `t` are optional (derived from the previous tick / server time); `source`: `gps | sim`. Optional `tick_id` (`[A-Za-z0-9_.:-]`, 1 to 128 characters), or the same value in an `Idempotency-Key` header (the header wins): a repeat with a key seen for this run in the last 10 minutes returns the first response again with `Idempotent-Replayed: true` and changes nothing (`idempotency/{run_id}/keys/{key}`); the device token is still checked first. A malformed key is 422.
 200:
 ```json
 {
@@ -400,7 +424,7 @@ An alert the 20 s timer already escalated is not flagged twice. The note is stor
 
 ## Routes call budget
 
-A live run makes **one** Routes `computeRoutes` call (vehicle to hospital, `TRAFFIC_AWARE`, `TRAFFIC_ON_POLYLINE`, with steps) at most every 20 s, cached per run; `/location` ticks in between reuse it (`ROUTE_TTL_S`). That one response carries the hospital ETA, the polyline used for junction and off-route detection, the exit manoeuvres and the `speedReadingIntervals` of the whole route, and every junction ahead reads its own queue out of it (the intervals sliced to the 600 m before its stop line). While `off_route` the route stays pinned and no new call is made. When a call fails, the cached route and spans are reused for 60 s, then the queue reads as NORMAL (`traffic: "stale"`).
+A live run makes **one** Routes `computeRoutes` call (vehicle to hospital, `TRAFFIC_AWARE`, `TRAFFIC_ON_POLYLINE`, with steps) at most every 20 s, cached per run in `route_cache/{run_id}` (shared by every instance, with a short in-memory copy in front; a Firestore error just means a fetch); `/location` ticks in between reuse it (`ROUTE_TTL_S`). That one response carries the hospital ETA, the polyline used for junction and off-route detection, the exit manoeuvres and the `speedReadingIntervals` of the whole route, and every junction ahead reads its own queue out of it (the intervals sliced to the 600 m before its stop line). While `off_route` the route stays pinned and no new call is made. When a call fails, the cached route and spans are reused for 60 s, then the queue reads as NORMAL (`traffic: "stale"`).
 
 | | calls per vehicle-minute |
 |---|---|
