@@ -4,11 +4,22 @@ import { db } from "../firebase.js";
 import { api } from "../api.js";
 import { corridors } from "../data.js";
 import { HOSPITALS } from "../hospitals.js";
-import { ErrCard, useDoc, when } from "../ui.jsx";
+import { ErrCard, store, useDoc, when } from "../ui.jsx";
 import { ms, useEnRoute, useNow } from "./Cop.jsx";
 import { Chips, Thumb } from "./Vehicle.jsx";
 import { LastHandover } from "../samples.jsx";
 import "../cop.css";
+
+// The hospital desk token (POST /hospital/duty) lets this page regenerate briefs and reports; the roster id is the server's.
+const HOSPITAL_ID = { blr: "blr_jayadeva", hyd: "hyd_continental" };
+const deskId = () => {
+  const p = new URLSearchParams(location.search);
+  const picked = Object.values(HOSPITALS)
+    .flat()
+    .find((h) => h.id === p.get("hospital"));
+  return picked?.id ?? HOSPITAL_ID[p.get("corridor")] ?? HOSPITAL_ID.blr; // ?hospital= wins, else the corridor's own
+};
+const deskToken = () => store.get(`hospital_token_${deskId()}`) || undefined; // undefined: api() falls back to the vehicle token
 
 const eta = (r, now) =>
   r.eta_hospital_s == null
@@ -97,7 +108,7 @@ function Brief({ runId }) {
     setBusy(true);
     setNote("");
     try {
-      setFresh(await api("/brief", { run_id: runId, regenerate: true }));
+      setFresh(await api("/brief", { run_id: runId, regenerate: true }, deskToken()));
     } catch (e) {
       setNote(`Could not generate: ${e.message}`);
     }
@@ -158,7 +169,7 @@ export function AfterAction({ runId }) {
     setBusy(true);
     setError("");
     try {
-      setDoc(await api(`/runs/${runId}/after-action`));
+      setDoc(await api(`/runs/${runId}/after-action`, {}, deskToken()));
     } catch (e) {
       setError(e.message);
     }
@@ -254,12 +265,25 @@ export default function Hospital() {
   );
   const hospital = roster.find((h) => h.id === hid).name;
   const choose = (id) => {
-    setHid(id);
     history.replaceState(null, "", `?corridor=${cid}&hospital=${id}`);
+    setHid(id);
+    setDesk(!!deskToken()); // the desk token is per hospital
   };
   const { runs, error } = useEnRoute();
   const now = useNow();
   const [pick, setPick] = useState(null);
+  const [desk, setDesk] = useState(!!deskToken());
+  async function signIn() {
+    try {
+      store.set(
+        `hospital_token_${deskId()}`,
+        (await api("/hospital/duty", { hospital_id: deskId() })).hospital_token,
+      );
+      setDesk(true);
+    } catch {
+      setDesk(false);
+    }
+  }
   // ponytail: /runs destination is optional; an ambulance run with none is taken to be bound for its corridor's hospital
   const inbound = runs
     .filter((r) =>
@@ -285,6 +309,9 @@ export default function Hospital() {
         </select>
       </label>
       <h2>{hospital}</h2>
+      <button onClick={signIn} disabled={desk}>
+        {desk ? "Signed in to this hospital desk" : "Sign in to this hospital desk"}
+      </button>
       {error && <p className="card bad">Could not load runs: {error}</p>}
       {inbound.length === 0 && <p className="muted">No inbound ambulances.</p>}
       <div className="runs">

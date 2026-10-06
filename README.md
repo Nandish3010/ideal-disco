@@ -30,7 +30,7 @@ A crew binds a registered vehicle, starts a run against a dispatched incident, s
 
 Pick a corridor with `?corridor=blr` or `?corridor=hyd`; a corridor is one JSON file in `data/corridors/`.
 
-The replay on the current scenario (`blr-two-vehicles`: a critical ambulance, a platoon ambulance behind it, and a fire engine) saves ≈ 16.5 min <!-- update from replay test --> across the three vehicles. The scenario is a scripted demo scenario: GPS ticks generated along the real corridor roads, with hand-authored traffic spans (a 500 m queue at junction 3, 100 m at junction 4). The saving is one simulated baseline, not a field measurement: per junction passed, the "Today" lane waits `cycle_s / 4 + queue_m / 2` seconds (expected remaining red for an arrival at a random point of the cycle, plus the queue draining at 2 m/s). The replay and the run report cards use the same formula.
+The replay on the current scenario (`blr-two-vehicles`: a critical ambulance, a platoon ambulance behind it, and a fire engine) saves ≈ 16.5 min <!-- update from replay test --> across the three vehicles. The scenario is a scripted demo scenario: GPS ticks generated along the real corridor roads, with hand-authored traffic spans (a 500 m queue at junction 3, 100 m at junction 4). The saving is one simulated baseline, not a field measurement: per junction passed, the "Today" lane waits `cycle_s / 4 + queue_m / 2` seconds (the expected remaining red, a quarter of the cycle, plus the queue draining at 2 m/s). The replay and the run report cards use the same formula.
 
 ## How a cop gets warned
 
@@ -53,19 +53,23 @@ Nothing a language model says sets a tier or a signal.
 1. **Acuity.** Gemini extracts fields (complaint, vitals) into a fixed schema. `api/acuity.py` maps them to critical, urgent or stable with a deterministic lookup, and the crew confirms with one tap. Preemption needs a confirmed tier.
 2. **Sequencing.** `api/priority.py` orders vehicles by (tier, ETA). It is a sequence, not a hold: fire first, ambulance a fixed 12 s later, and everyone passes.
 3. **Platoon.** Vehicles on the same approach arriving within 45 s of a leader share the leader's green slot instead of queuing for their own.
-4. **Explanation.** Gemini then writes one line in the cop's language ("Fire engine first, ambulance 12 s later") and stores it on the junction phase. It never reorders anything.
+4. **Explanation.** The rules build a template sentence ("Fire engine first, ambulance 12 s later"); Gemini may reword it in the cop's language, the result is validated, and the template is used if it fails. The sentence is stored on the junction phase and never reorders anything.
 
 `acuity.py`, `priority.py`, `leadtime.py` and `report.py` carry assert-based self-checks and are exercised in CI.
 
 ## Where Gemini is used
 
-All calls go through Vertex AI (`google-genai`, global endpoint). Each has a template or rule-based fallback, and values extracted from speech or photos are transcription support that a clinician confirms.
+All calls go through Vertex AI (`google-genai`, global endpoint). Each has a template or rule-based fallback, and values extracted from speech or photos are transcription support that a clinician confirms. Extraction runs on `gemini-3.1-flash-lite` with `gemini-3-flash-preview` as the fallback; the brief, the report, the sequencing sentence and the agent text use `gemini-3-flash-preview`.
 
-- **Extraction.** Speech (any Indian language) or typed text to a fixed JSON schema, with no tools and no free-form output. The same path serves triage and transit-log notes.
-- **Photo to vitals.** A photo of a monitor or ECG is read with the same schema; unreadable values stay null.
-- **ATMIST brief.** A hospital handover brief with prep checklist, generated at ETA minus 5 minutes.
-- **Rationale.** The one-line sequencing explanation above, and the wording of the spoken alert.
-- **Routing agent.** An agent built on Agent Development Kit picks the destination hospital with four tools: `list_hospitals` (a mock capability and bed roster), `eta_to` (traffic-aware Routes ETA), `check_diversion` (a mock diversion feed), and `required_capabilities`, which is a keyword-table baseline used for validation, not an answer. The agent returns the chosen hospital with up to two rejected alternatives and a confidence. A code guard re-checks the choice (known hospital, no diversion, a bed, every required capability, no critical baseline capability dropped) and falls back to the nearest eligible hospital on any failure or 20 s timeout. The tool trace, including any guard that tripped, is shown on `/vehicle`; the alternatives and confidence come back in the `/route` response. The agent never changes acuity or signal priority.
+- **Voice and photo extraction:** speech, typed text or a monitor photo into a fixed schema, with no tools.
+- **ATMIST handover:** the hospital brief and prep checklist, generated at ETA minus 5 minutes.
+- **Alert phrasing:** the short spoken line each junction cop hears.
+- **Sequencing sentence:** Gemini rewords a rule-built template into one line; the result is validated and the template is used if it fails.
+- **Cop voice notes to rule actions:** a spoken report from the junction fills a fixed schema, and plain rules act on it.
+- **After-action report:** a plain summary of each finished run, with the timeline built in code.
+- **Hospital routing agent:** built on Agent Development Kit, with four tools and a code guard that checks its choice before it is applied.
+
+The routing agent picks the destination hospital with four tools: `list_hospitals` (a mock capability and bed roster), `eta_to` (traffic-aware Routes ETA), `check_diversion` (a mock diversion feed), and `required_capabilities`, which is a keyword-table baseline used for validation, not an answer. It returns the chosen hospital with up to two rejected alternatives and a confidence. A code guard re-checks the choice (known hospital, no diversion, a bed, every required capability, no critical baseline capability dropped) and falls back to the nearest eligible hospital on any failure or 20 s timeout. The tool trace, including any guard that tripped, is shown on `/vehicle`; the alternatives and confidence come back in the `/route` response. The agent never changes acuity or signal priority.
 
 ## Architecture
 
@@ -73,7 +77,7 @@ All calls go through Vertex AI (`google-genai`, global endpoint). Each has a tem
 
 Google products actually wired:
 
-- **Vertex AI, Gemini:** extraction, photo vitals, briefs, rationale.
+- **Vertex AI, Gemini:** extraction, ATMIST brief, alert and sequencing wording, cop voice notes, after-action report.
 - **Agent Development Kit:** hospital routing agent.
 - **Cloud Run:** `corridor-api` (FastAPI) and the traffic logger job.
 - **Firestore:** event bus and store; every screen subscribes.
@@ -95,7 +99,7 @@ Be clear about what that is today: the logger has run on Cloud Scheduler for Ben
 
 ## Honest limits
 
-Traffic signals are simulated behind an adapter; the demo scenario uses hand-authored traffic spans; patients are synthetic; no authentication in the demo; demo endpoints are rate-limited but public.
+Traffic signals are simulated behind an adapter; the demo scenario uses hand-authored traffic spans; patients are synthetic; no user accounts; device-scoped tokens protect vehicle, cop and run actions; demo endpoints are rate-limited but reachable.
 
 - Cop alerts are deployable today; real signal data is phase 2.
 - The hospital roster is invented demo data, and a clinician confirms every extracted value. Identity is a mock plate registry that visibly rejects unknown plates.
@@ -104,7 +108,7 @@ Traffic signals are simulated behind an adapter; the demo scenario uses hand-aut
 
 ## Security posture for the demo
 
-Firestore is public read, and every write goes through the API's service account. The API is unauthenticated so judges can open every screen; it is protected by per-IP rate limits (10 Gemini, Routes or agent calls a minute, 60 general) and a per-run cap of 20 triage and log calls. There are no per-device credentials yet; moving ACK, duty and end-run behind device-scoped credentials is on the roadmap.
+Firestore is public read, and every write goes through the API's service account. There are no user accounts. A device that binds a vehicle or goes on duty at a junction receives a random token, and calls that change a run or a junction (start and end run, triage, log, location, confirm, ACK, go off duty, cop notes) must send it in `X-Device-Token`; only its hash is stored (see SCHEMA.md, Device tokens). This is a demo-grade control, not authentication: binding a registered plate or going on duty stands in for an agency registry and a roster, and both are open. Everything else stays reachable so judges can open every screen, protected by per-IP rate limits (10 Gemini, Routes or agent calls a minute, 60 general) and a per-run cap of 20 triage and log calls.
 
 ## Run locally
 
@@ -139,14 +143,14 @@ For repository workflow and contribution conventions, see CONTRIBUTING.md.
 
 ## Deploy
 
-Pushing to `main` runs `checks`, then the path-filtered workflows deploy: `api/` to Cloud Run, `web/` to Firebase Hosting, and `jobs/` (build image, update the Cloud Run Job, run it once to verify). All authenticate to Google Cloud with Workload Identity Federation, so no keys are stored in GitHub. `main` is branch-protected: changes land through pull requests with `checks` passing. Firestore rules are deployed manually with `firebase deploy --only firestore:rules`.
+Deploys run on push to `main`, path-filtered: `api/` to Cloud Run, `web/` to Firebase Hosting, and `jobs/` (build image, update the Cloud Run Job, run it once to verify). All authenticate to Google Cloud with Workload Identity Federation, so no keys are stored in GitHub. `main` is branch-protected: checks gate merges to `main`, so changes land through pull requests with `checks` passing. Firestore rules are deployed manually with `firebase deploy --only firestore:rules`.
 
 Runtime configuration (set by the workflows): project `green-corridor-2026`, service `corridor-api` in `asia-south1`, Gemini on the `global` location, and these variables.
 
 | Env var | Purpose |
 |---|---|
-| `GEMINI_MODEL` / `GEMINI_FALLBACK_MODEL` | extraction from text, audio and photos, and its fallback |
-| `GEMINI_TEXT_MODEL` | hospital brief and sequence rationale |
+| `GEMINI_MODEL` / `GEMINI_FALLBACK_MODEL` | extraction from text, audio and photos (`gemini-3.1-flash-lite`), and its fallback (`gemini-3-flash-preview`) |
+| `GEMINI_TEXT_MODEL` | hospital brief, sequencing sentence, after-action report and agent text (`gemini-3-flash-preview`) |
 | `GEMINI_LOCATION`, `GCP_PROJECT` | Vertex AI location and project |
 | `MAPS_SERVER_KEY` | from Secret Manager `corridor-maps-server-key` |
 | `MEDIA_BUCKET` | spoken-alert MP3s |
@@ -171,6 +175,5 @@ deck/       Marp slides, video plan and voiceover, architecture diagram
 ## Roadmap
 
 1. **Real signal adapter.** A controller implementation of `SignalAdapter`, starting with one pilot junction.
-2. **Device credentials.** Per-device tokens for ACK, duty and end-run.
-3. **Learning controller.** Replace the constant 2 m/s clearance rate with a model trained on logged junction data and run report cards.
-4. **Agency rosters.** Replace the mock plate registry and hospital roster with real agency and bed data, with real authentication.
+2. **Learning controller.** Replace the constant 2 m/s clearance rate with a model trained on logged junction data and run report cards.
+3. **Agency identity and rosters.** Replace the open bind and duty calls (which hand out device tokens), the mock plate registry and the hospital roster with real agency identity and bed data.
