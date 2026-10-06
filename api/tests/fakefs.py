@@ -123,7 +123,7 @@ class Query:
 
     def stream(self, transaction: Any = None) -> list[Snapshot]:
         rows = []
-        for path, data in self.fs.docs.items():
+        for path, data in list(self.fs.docs.items()):  # a copy: another request thread may write meanwhile
             if self.match(path) and all(
                 (v := _get(data, f)) is not MISSING and OPS[op](v, val) for f, op, val in self.filters
             ):
@@ -170,12 +170,15 @@ class Transaction:
     def update(self, ref: Doc, data: dict) -> None:
         ref.update(data)
 
+    def set(self, ref: Doc, data: dict, merge: bool = False) -> None:
+        ref.set(data, merge=merge)
+
 
 class FakeFirestore:
     def __init__(self) -> None:
         self.docs: dict[str, dict] = {}
 
-    def transaction(self) -> Transaction:
+    def transaction(self, **_: Any) -> Transaction:  # max_attempts, read_only
         return Transaction()
 
     def clear(self) -> None:

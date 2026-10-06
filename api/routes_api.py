@@ -1,18 +1,51 @@
-"""Google Routes computeRoutes with live traffic. Cached per key; on failure reuse recent spans, else NORMAL."""
+"""Google Routes computeRoutes with live traffic. Cached per key, shared across instances through Firestore
+(`route_cache/{run_id}`) with a small in-memory layer in front; on failure reuse recent spans, else NORMAL."""
 
 import os
 import time
+from datetime import UTC, datetime, timedelta
 
 import httpx
 
 from corridor import distance_m
+from firestore_client import db
 from gemini import log
 
 URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
 MASK = "routes.polyline.encodedPolyline,routes.duration,routes.travelAdvisory.speedReadingIntervals"
 STEPS_MASK = ",routes.legs.steps.navigationInstruction,routes.legs.steps.startLocation"  # exit manoeuvre
 REUSE_S = 60  # on 429/5xx/timeout, spans this old are still better than nothing
-_cache: dict = {}  # (run_id, what) -> (monotonic ts, result); ponytail: per-instance memory, Cloud Run restarts just refetch
+CACHE_DOC_TTL = timedelta(days=1)  # expires_at on route_cache docs, for a Firestore TTL policy to sweep
+_cache: dict = {}  # (run_id, what) -> (monotonic ts, result): this instance's copy, in front of Firestore
+
+
+def _doc(key):
+    return db.collection("route_cache").document(str(key[0] if isinstance(key, tuple) else key))
+
+
+def _read_shared(key, ctx) -> tuple[float, dict] | None:
+    """(age_s, result) from route_cache/{run_id}, or None (no doc, or Firestore down: the cache is never load-bearing)."""
+    try:
+        d = _doc(key).get().to_dict()
+        if not d:
+            return None
+        flat = d["result"]["polyline_points"]  # Firestore has no nested arrays: stored flat
+        res = {**d["result"], "polyline_points": list(zip(flat[::2], flat[1::2], strict=True))}
+        return max((datetime.now(UTC) - d["fetched_at"]).total_seconds(), 0.0), res
+    except Exception as e:
+        log(event="route_cache_error", op="read", error=type(e).__name__, **ctx)
+        return None
+
+
+def _write_shared(key, res, ctx) -> None:
+    now = datetime.now(UTC)
+    flat = [c for p in res["polyline_points"] for c in p]
+    try:
+        _doc(key).set(
+            {"result": {**res, "polyline_points": flat}, "fetched_at": now, "expires_at": now + CACHE_DOC_TTL}
+        )
+    except Exception as e:
+        log(event="route_cache_error", op="write", error=type(e).__name__, **ctx)
 
 
 def decode(s):  # Google encoded polyline -> [(lat, lng)]
@@ -78,11 +111,20 @@ def exit_move(steps, junction) -> str:
 
 def traffic_to_point(origin, dest, key=None, ttl=20, steps=False, **ctx) -> dict:
     """origin, dest = (lat, lng) -> {polyline_points, duration_s, intervals:[{from_m,to_m,speed}], steps, age_s, stale}.
-    Result is cached under `key` for `ttl` s (throttle). On error: cached result <= 60 s old, else no spans (NORMAL),
-    duration_s None, stale True. ctx (run_id, junction_id) goes on every log line."""
-    now, hit = time.monotonic(), (_cache.get(key) if key is not None else None)
-    if hit and now - hit[0] < ttl:
-        return {**hit[1], "age_s": now - hit[0], "stale": False}
+    Result is cached under `key` for `ttl` s (throttle): in this instance's memory, else from the shared Firestore doc
+    another instance wrote. On error: cached result <= 60 s old, else no spans (NORMAL), duration_s None, stale True.
+    ctx (run_id, junction_id) goes on every log line."""
+    now, hit = time.monotonic(), None
+    if key is not None:
+        mem = _cache.get(key)
+        hit = (now - mem[0], mem[1]) if mem else None
+        if hit is None or hit[0] >= ttl:  # memory can't serve it: another instance may have fetched since
+            shared = _read_shared(key, ctx)
+            if shared and (hit is None or shared[0] < hit[0]):
+                hit = shared
+                _cache[key] = (now - shared[0], shared[1])
+    if hit and hit[0] < ttl:
+        return {**hit[1], "age_s": hit[0], "stale": False}
 
     def ll(p):
         return {"location": {"latLng": {"latitude": p[0], "longitude": p[1]}}}
@@ -113,8 +155,8 @@ def traffic_to_point(origin, dest, key=None, ttl=20, steps=False, **ctx) -> dict
             status=getattr(getattr(e, "response", None), "status_code", None),
             **ctx,
         )
-        if hit and now - hit[0] <= REUSE_S:
-            return {**hit[1], "age_s": now - hit[0], "stale": True}
+        if hit and hit[0] <= REUSE_S:
+            return {**hit[1], "age_s": hit[0], "stale": True}
         log(event="traffic_stale", **ctx)
         return {
             "polyline_points": [],
@@ -126,4 +168,5 @@ def traffic_to_point(origin, dest, key=None, ttl=20, steps=False, **ctx) -> dict
         }
     if key is not None:
         _cache[key] = (now, res)
+        _write_shared(key, res, ctx)
     return {**res, "age_s": 0, "stale": False}

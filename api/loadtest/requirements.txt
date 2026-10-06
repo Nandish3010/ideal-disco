@@ -1,0 +1,2 @@
+# Only for `make loadtest`; CI does not install it.
+locust==2.46.7

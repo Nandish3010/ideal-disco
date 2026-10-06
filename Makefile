@@ -1,5 +1,5 @@
 # Python tooling comes from api/requirements-dev.txt (see CONTRIBUTING.md).
-.PHONY: lint format test cov build run seed reset replay-offline
+.PHONY: lint format test cov build run seed reset replay-offline openapi contract loadtest
 
 lint:
 	ruff check .
@@ -36,3 +36,22 @@ reset:
 replay-offline:
 	(cd api && OFFLINE_AI=1 RATE_LIMIT_DISABLED=1 DEVICE_TOKENS_DISABLED=1 GEMINI_MODEL=offline exec uvicorn main:app --port 8080) & pid=$$!; \
 	sleep 4; (cd api && RATE_LIMIT_DISABLED=1 python offline_replay.py); rc=$$?; kill $$pid; exit $$rc
+
+# api/openapi.json is generated from the app; CI runs `python -m api.export_openapi --check` and fails if it is stale
+openapi:
+	python -m api.export_openapi
+
+# schemathesis against the in-memory app (api/offline_server.py) over loopback: every check, stateless, no Google calls
+contract:
+	(cd api && RATE_LIMIT_DISABLED=1 exec uvicorn offline_server:app --port 8081 --log-level warning) & pid=$$!; \
+	curl -sf --retry 30 --retry-connrefused --retry-delay 1 http://127.0.0.1:8081/health >/dev/null && \
+	schemathesis --config-file api/schemathesis.toml run http://127.0.0.1:8081/openapi.json \
+	  --checks all --max-examples 20 --phases examples,coverage,fuzzing --seed 1; \
+	rc=$$?; kill $$pid; exit $$rc
+
+# 60 s of the scenario's three vehicles at x20 against the in-memory app; needs: pip install -r api/loadtest/requirements.txt
+loadtest:
+	(cd api && RATE_LIMIT_DISABLED=1 exec uvicorn offline_server:app --port 8082 --log-level warning) & pid=$$!; \
+	curl -sf --retry 30 --retry-connrefused --retry-delay 1 http://127.0.0.1:8082/health >/dev/null && \
+	locust -f api/loadtest/locustfile.py --headless -u 4 -r 4 -t 60s --host http://127.0.0.1:8082 --only-summary; \
+	rc=$$?; kill $$pid; exit $$rc

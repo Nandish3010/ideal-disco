@@ -15,12 +15,14 @@ from google.api_core.exceptions import GoogleAPIError
 from google.cloud.firestore import DELETE_FIELD, SERVER_TIMESTAMP, Increment, Query, transactional
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.genai import errors as genai_errors
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool, StrictFloat, StrictInt
+from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import aar
 import acuity
 import agent
+import apidoc
 import brief
 import copnote
 import desk_reads
@@ -34,6 +36,26 @@ import report
 import routes_api
 import telemetry
 import tokens
+from apidoc import (
+    AckOut,
+    AfterActionOut,
+    Bound,
+    BriefOut,
+    ConfirmOut,
+    CopNoteOut,
+    DutyOut,
+    Health,
+    HospitalDutyOut,
+    HousekeepingOut,
+    IncidentOut,
+    LocationOut,
+    LogOut,
+    RoutingOut,
+    RunOut,
+    TriageOut,
+    ex,
+    meta,
+)
 from corridor import CORRIDORS, MATCH_M, SCENARIOS, bearing, distance_m, junctions_ahead, locate
 from firestore_client import db
 from gemini import ExtractionFailed, extract, offline
@@ -42,7 +64,17 @@ from logctx import log, request_id
 from signal_adapter import SimAdapter
 from tts import speak, store_photo, translate
 
-app = FastAPI(title="corridor-api")
+VERSION = (os.environ.get("GIT_SHA") or "dev")[:7]  # the deployed commit; "dev" when run from a checkout
+app = FastAPI(
+    title="Emergency Green Corridor API",
+    version=VERSION,
+    description=apidoc.DESCRIPTION,
+    openapi_tags=apidoc.TAGS,
+    docs_url="/docs",
+    openapi_url="/openapi.json",
+    redoc_url=None,
+)
+apidoc.install_openapi(app)
 if offline():
     log(event="offline_ai")
 ORIGINS = [
@@ -56,9 +88,11 @@ IMAGE_MIMES = {"image/jpeg", "image/png", "image/webp"}
 TIERS = {"critical", "urgent", "stable", "fire", "fire_with_trapped", "police", "police_with_incident"}
 
 
-def err(status: int, code: str, detail: str = "", **kw) -> JSONResponse:
+def err(status: int, code: str, detail: str = "", headers: dict | None = None, **kw) -> JSONResponse:
     """The one error envelope: {"error": code, "detail": text}, plus any extra keys a client reads (state, fallback)."""
-    return JSONResponse({"error": code, "detail": detail or code.replace("_", " "), **kw}, status_code=status)
+    return JSONResponse(
+        {"error": code, "detail": detail or code.replace("_", " "), **kw}, status_code=status, headers=headers
+    )
 
 
 def deny(token: str, *hashes: str | None) -> JSONResponse | None:
@@ -107,7 +141,9 @@ async def request_context(request: Request, call_next):
     ip = request.headers.get("X-Forwarded-For", "").split(",")[-1].strip() or (
         request.client.host if request.client else "-"
     )
-    wait_s = ratelimit.retry_after(ip, request.url.path)
+    wait_s = await run_in_threadpool(
+        ratelimit.retry_after, ip, request.url.path
+    )  # a Firestore transaction: off the event loop
     try:
         if wait_s is None:
             resp = await call_next(request)
@@ -161,23 +197,49 @@ def invalid_request(request, exc):
 def http_error(request, exc):
     return err(
         exc.status_code,
-        {404: "not_found", 405: "method_not_allowed"}.get(exc.status_code, "http_error"),
+        {400: "bad_request", 404: "not_found", 405: "method_not_allowed"}.get(exc.status_code, "http_error"),
         str(exc.detail),
+        headers=exc.headers,
     )
 
 
 class Bind(BaseModel):
+    model_config = ex(
+        {"plate": "KA01AB1234", "device_id": "dev-1"},
+    )
     plate: str
     device_id: str
 
 
 class Incident(BaseModel):
+    model_config = ex(
+        {"type": "cardiac", "severity_note": "Synthetic demo incident"},
+    )
     type: str
     severity_note: str = ""
 
 
 class RunReq(BaseModel):
-    action: str  # start | end
+    model_config = ex(
+        {
+            "action": "start",
+            "plate": "KA01AB1234",
+            "incident_id": "INC-4BC6E7",
+            "corridor": "blr",
+            "source": "gps",
+        },
+        {"action": "end", "run_id": "run-1a2b3c4d"},
+        **{  # a start needs these three (400 bad_request otherwise); the schema says so, so a client can tell
+            "if": {"properties": {"action": {"const": "start"}}},
+            "then": {
+                "required": ["plate", "incident_id", "corridor"],
+                "properties": {
+                    k: {"type": "string", "minLength": 1} for k in ("plate", "incident_id", "corridor")
+                },
+            },
+        },
+    )
+    action: str = Field(json_schema_extra={"enum": ["start", "end"]})  # anything else is 400 bad_request
     plate: str | None = None
     incident_id: str | None = None
     corridor: str | None = None
@@ -188,6 +250,14 @@ class RunReq(BaseModel):
 
 
 class Triage(BaseModel):
+    model_config = ex(
+        {"run_id": "run-amb-1", "vehicle_type": "ambulance", "text": "chest pain, BP 85 over 50"},
+        {"run_id": "run-amb-1", "vehicle_type": "ambulance", "audio_b64": "UklGRg==", "mime": "audio/webm"},
+        anyOf=[  # 400 bad_request otherwise
+            {"required": [k], "properties": {k: {"type": "string", "minLength": 1}}}
+            for k in ("audio_b64", "image_b64", "text")
+        ],
+    )
     run_id: str
     vehicle_type: str | None = None
     text: str | None = None
@@ -199,15 +269,22 @@ class Triage(BaseModel):
 
 
 class Confirm(BaseModel):
-    tier: str
+    model_config = ex(
+        {"tier": "critical"},
+    )
+    # anything else is 400 bad_tier; the enum is for the documentation only
+    tier: str = Field(json_schema_extra={"enum": list[Any](sorted(TIERS))})
 
 
-@app.get("/health")
+@app.get("/health", **meta("ops", "Liveness and active model", Health))
 def health():
     return {"ok": True, "model": os.environ.get("GEMINI_MODEL")}
 
 
-@app.post("/vehicles/bind")
+@app.post(
+    "/vehicles/bind",
+    **meta("dispatch", "Bind a device to a registered vehicle (mock registry)", Bound, 400, 404, 422),
+)
 def vehicles_bind(b: Bind):
     ref = db.collection("vehicles").document(b.plate)
     v = ref.get()
@@ -220,7 +297,7 @@ def vehicles_bind(b: Bind):
     return {"plate": b.plate, **doc, "bound_device_id": b.device_id, "device_token": token}
 
 
-@app.post("/incidents")
+@app.post("/incidents", **meta("dispatch", "Open an incident (mock dispatch console)", IncidentOut, 400, 422))
 def incidents(i: Incident):
     iid = "INC-" + uuid.uuid4().hex[:6].upper()
     db.collection("incidents").document(iid).set(
@@ -229,8 +306,8 @@ def incidents(i: Incident):
     return {"incident_id": iid}
 
 
-@app.post("/runs")
-def runs(r: RunReq, x_device_token: str = Header("")):
+@app.post("/runs", **meta("runs", "Start or end a run", RunOut, 400, 401, 403, 404, 422))
+def runs(r: RunReq, x_device_token: str = Header("", description=apidoc.TOKEN_DOC)):
     if r.action == "end":
         ref = db.collection("runs").document(r.run_id or "-")
         snap = ref.get()
@@ -312,8 +389,11 @@ def _extract_and_log(t: Triage, token: str, interventions=False):
     run = run.to_dict()
     if bad := deny_run(token, run):
         return bad
-    audio = base64.b64decode(t.audio_b64) if t.audio_b64 else None
-    image = base64.b64decode(t.image_b64) if t.image_b64 else None
+    try:
+        audio = base64.b64decode(t.audio_b64) if t.audio_b64 else None
+        image = base64.b64decode(t.image_b64) if t.image_b64 else None
+    except ValueError:  # binascii.Error: bad padding or length
+        return err(400, "bad_request", "audio_b64 and image_b64 must be base64")
     if not (audio or image or t.text):
         return err(400, "bad_request", "audio_b64, image_b64 or text required")
     if image and (audio or t.mime not in IMAGE_MIMES):
@@ -357,8 +437,11 @@ def _extract_and_log(t: Triage, token: str, interventions=False):
     return run, fields, run_ref, n, given, photo_url
 
 
-@app.post("/triage")
-def triage(t: Triage, x_device_token: str = Header("")):
+@app.post(
+    "/triage",
+    **meta("triage", "Extract patient fields and suggest a tier", TriageOut, 400, 401, 403, 404, 422),
+)
+def triage(t: Triage, x_device_token: str = Header("", description=apidoc.TOKEN_DOC)):
     out = _extract_and_log(t, x_device_token)
     if isinstance(out, JSONResponse):
         return out
@@ -375,8 +458,8 @@ def triage(t: Triage, x_device_token: str = Header("")):
     }
 
 
-@app.post("/log")
-def log_entry(t: Triage, x_device_token: str = Header("")):
+@app.post("/log", **meta("triage", "Append a log entry with interventions", LogOut, 400, 401, 403, 404, 422))
+def log_entry(t: Triage, x_device_token: str = Header("", description=apidoc.TOKEN_DOC)):
     out = _extract_and_log(t, x_device_token, interventions=True)
     if isinstance(out, JSONResponse):
         return out
@@ -391,8 +474,16 @@ def log_entry(t: Triage, x_device_token: str = Header("")):
     }
 
 
-@app.post("/runs/{run_id}/confirm")
-def confirm(run_id: str, c: Confirm, bg: BackgroundTasks, x_device_token: str = Header("")):
+@app.post(
+    "/runs/{run_id}/confirm",
+    **meta("runs", "Confirm the tier (the crew's one tap)", ConfirmOut, 400, 401, 403, 404, 422),
+)
+def confirm(
+    run_id: str,
+    c: Confirm,
+    bg: BackgroundTasks,
+    x_device_token: str = Header("", description=apidoc.TOKEN_DOC),
+):
     if c.tier not in TIERS:
         return err(400, "bad_tier", "tier must be one of: " + ", ".join(sorted(TIERS)))
     ref = db.collection("runs").document(run_id)
@@ -410,11 +501,17 @@ def confirm(run_id: str, c: Confirm, bg: BackgroundTasks, x_device_token: str = 
 
 
 class RouteReq(BaseModel):
+    model_config = ex(
+        {"run_id": "run-amb-1"},
+    )
     run_id: str
 
 
-@app.post("/route")
-def route(r: RouteReq, x_device_token: str = Header("")):
+@app.post(
+    "/route",
+    **meta("hospital", "Re-run the hospital routing agent", RoutingOut, 400, 401, 403, 404, 409, 422),
+)
+def route(r: RouteReq, x_device_token: str = Header("", description=apidoc.TOKEN_DOC)):
     ref = db.collection("runs").document(r.run_id)
     if not (snap := ref.get()).exists:
         return err(404, "unknown_run")
@@ -440,12 +537,17 @@ def log_entries(run_ref):
 
 
 class BriefReq(BaseModel):
+    model_config = ex(
+        {"run_id": "run-amb-1", "regenerate": False},
+    )
     run_id: str
-    regenerate: bool = False  # a brief written in the last 10 minutes is refused (429) unless this is set
+    regenerate: StrictBool = (
+        False  # a brief written in the last 10 minutes is refused (429) unless this is set
+    )
 
 
-@app.post("/brief")
-def brief_endpoint(b: BriefReq, x_device_token: str = Header("")):
+@app.post("/brief", **meta("triage", "Generate the hospital brief", BriefOut, 400, 401, 403, 404, 422, 502))
+def brief_endpoint(b: BriefReq, x_device_token: str = Header("", description=apidoc.TOKEN_DOC)):
     run_ref = db.collection("runs").document(b.run_id)
     run = run_ref.get()
     if not run.exists:
@@ -472,8 +574,13 @@ def brief_endpoint(b: BriefReq, x_device_token: str = Header("")):
         return err(502, "brief_failed")
 
 
-@app.post("/runs/{run_id}/after-action")
-def after_action(run_id: str, regenerate: bool = False, x_device_token: str = Header("")):
+@app.post(
+    "/runs/{run_id}/after-action",
+    **meta("runs", "After-action report of a finished run", AfterActionOut, 401, 403, 404, 409, 422, 502),
+)
+def after_action(
+    run_id: str, regenerate: bool = False, x_device_token: str = Header("", description=apidoc.TOKEN_DOC)
+):
     run_ref = db.collection("runs").document(run_id)
     run = run_ref.get()
     if not run.exists:
@@ -501,14 +608,35 @@ def after_action(run_id: str, regenerate: bool = False, x_device_token: str = He
     return doc
 
 
+IDEMPOTENCY_TTL_S = 600
+IDEMPOTENCY_KEY = r"^[A-Za-z0-9_.:-]{1,128}$"  # also a valid Firestore document id (no "/")
+
+
 class Loc(BaseModel):
+    model_config = ex(
+        {
+            "run_id": "run-amb-1",
+            "lat": 12.9197,
+            "lng": 77.6204,
+            "speed_mps": 13.2,
+            "heading": 231,
+            "t": "2026-10-05T09:02:30Z",
+            "source": "sim",
+            "tick_id": "tick-0042",
+        },
+    )
     run_id: str
-    lat: float = Field(ge=-90, le=90)
-    lng: float = Field(ge=-180, le=180)
-    speed_mps: float = Field(ge=0)
-    heading: float | None = None  # degrees; derived from the previous tick when absent
+    lat: StrictFloat = Field(ge=-90, le=90)  # strict: true/false are not numbers
+    lng: StrictFloat = Field(ge=-180, le=180)
+    speed_mps: StrictFloat = Field(ge=0)
+    heading: StrictFloat | None = None  # degrees; derived from the previous tick when absent
     t: datetime | None = None  # tick time; server time when absent
     source: str = Field("gps", pattern="^(gps|sim)$")
+    tick_id: str | None = Field(
+        default=None,
+        pattern=IDEMPOTENCY_KEY,
+        description="Idempotency key; the Idempotency-Key header wins.",
+    )  # a repeat within IDEMPOTENCY_TTL_S returns the first response
 
 
 LIVE = {"en_route", "off_route", "stale"}  # ticks revive stale and off_route runs; ended/arrived get 403
@@ -755,8 +883,11 @@ def escalate(now, mine, others) -> int:
     return flagged
 
 
-@app.post("/housekeeping")
-def housekeeping(x_housekeeping_token: str = Header("")):
+@app.post(
+    "/housekeeping",
+    **meta("ops", "Stale and escalation sweep (Cloud Scheduler)", HousekeepingOut, 403, 404, 422),
+)
+def housekeeping(x_housekeeping_token: str = Header("", description="Must equal env HOUSEKEEPING_TOKEN.")):
     """Cloud Scheduler, once a minute: the stale and escalation sweeps without waiting for a tick. 404 while
     HOUSEKEEPING_TOKEN is unset, 403 on a wrong token."""
     token = os.environ.get("HOUSEKEEPING_TOKEN")
@@ -777,8 +908,35 @@ def housekeeping(x_housekeeping_token: str = Header("")):
     return {"stale": stale, "escalated": escalate(now, live, []), "runs_checked": len(live)}
 
 
-@app.post("/location")
-def location(loc: Loc, bg: BackgroundTasks, x_device_token: str = Header("")):
+@app.post(
+    "/location",
+    **meta(
+        "corridor",
+        "Location tick: alerts, preemption and ETA",
+        LocationOut,
+        400,
+        401,
+        403,
+        404,
+        422,
+        headers={
+            "Idempotent-Replayed": {
+                "description": "true when the stored response of an earlier tick with the same key is returned.",
+                "schema": {"type": "string"},
+            }
+        },
+    ),
+)
+def location(
+    loc: Loc,
+    bg: BackgroundTasks,
+    x_device_token: str = Header("", description=apidoc.TOKEN_DOC),
+    idempotency_key: str | None = Header(
+        None,
+        pattern=IDEMPOTENCY_KEY,
+        description="A repeat with the same key within 10 minutes returns the first response and writes nothing.",
+    ),
+):
     ref = db.collection("runs").document(loc.run_id)
     snap = ref.get()
     if not snap.exists:
@@ -786,12 +944,20 @@ def location(loc: Loc, bg: BackgroundTasks, x_device_token: str = Header("")):
     run = snap.to_dict()
     if bad := deny_run(x_device_token, run):
         return bad
+    now = datetime.now(UTC)
+    key = idempotency_key or loc.tick_id
+    idem = None
+    if key:  # a retried tick whose response was lost: answer from the first one, write nothing
+        idem = db.collection("idempotency").document(loc.run_id).collection("keys").document(key)
+        done = idem.get().to_dict()
+        if done and done["expires_at"] > now:
+            log(event="location_replayed", run_id=loc.run_id)
+            return JSONResponse(done["response"], headers={"Idempotent-Replayed": "true"})
     if run["state"] not in LIVE:
         return err(403, "run_not_active", state=run["state"])
     corridor = CORRIDORS.get(run.get("corridor"))
     if corridor is None:
         return err(400, "unknown_corridor", str(run.get("corridor")))
-    now = datetime.now(UTC)
     t = loc.t if loc.t and loc.t.tzinfo else (loc.t.replace(tzinfo=UTC) if loc.t else now)
     me = (loc.lat, loc.lng)
     first = run.get("first_tick_at") is None
@@ -813,7 +979,7 @@ def location(loc: Loc, bg: BackgroundTasks, x_device_token: str = Header("")):
 
     # hospital route: ETA, polyline for junction and off-route detection, and (TRAFFIC_ON_POLYLINE) the speed spans of the
     # whole route, which the junctions below slice. While off_route the old polyline stays pinned so the state holds until
-    # the vehicle rejoins it (the cache is per instance; a restart heals it).
+    # the vehicle rejoins it (the route cache is shared through Firestore, so every instance pins the same one).
     scenario = (
         run.get("scenario") in SCENARIOS
     )  # replays follow the corridor config, not Google's road choice
@@ -1056,18 +1222,25 @@ def location(loc: Loc, bg: BackgroundTasks, x_device_token: str = Header("")):
     escalate(now, [loc.run_id], upd["contenders"])
     if arrived:
         report.write(loc.run_id, ref)
+    if (
+        idem is not None
+    ):  # expires_at: the 10 minute window, and the field a Firestore TTL policy on `keys` deletes by
+        idem.set({"response": out, "expires_at": now + timedelta(seconds=IDEMPOTENCY_TTL_S)})
     return out
 
 
 class Ack(BaseModel):
+    model_config = ex(
+        {"run_id": "run-amb-1", "junction_id": "blr_j3", "alert_n": 0, "device_id": "dev-cop-1"},
+    )
     run_id: str
-    alert_n: int
+    alert_n: StrictInt
     junction_id: str
     device_id: str | None = None
 
 
-@app.post("/ack")
-def ack(a: Ack, x_device_token: str = Header("")):
+@app.post("/ack", **meta("corridor", "Acknowledge an alert", AckOut, 400, 401, 403, 404, 422))
+def ack(a: Ack, x_device_token: str = Header("", description=apidoc.TOKEN_DOC)):
     run_ref = db.collection("runs").document(a.run_id)
     ref = run_ref.collection("alerts").document(str(a.alert_n))
     snap = ref.get()
@@ -1091,10 +1264,21 @@ def ack(a: Ack, x_device_token: str = Header("")):
 
 
 class Duty(BaseModel):
-    corridor: str
+    model_config = ex(
+        {
+            "corridor": "blr",
+            "junction_id": "blr_j3",
+            "device_id": "dev-cop-1",
+            "on": True,
+            "name": "Constable Rao",
+        },
+    )
+    corridor: str = Field(
+        json_schema_extra={"enum": sorted(CORRIDORS)}
+    )  # anything else is 400 unknown_corridor
     junction_id: str  # "blr_j3" or "j3"
     device_id: str
-    on: bool
+    on: StrictBool
     name: str | None = None
     fcm_token: str | None = Field(None, max_length=4096)  # web push token of the cop's browser; see push.py
 
@@ -1110,8 +1294,8 @@ def junction_key(corridor: str, junction_id: str) -> str | JSONResponse:
     return f"{corridor}_{jid}"
 
 
-@app.post("/duty")
-def duty(d: Duty, x_device_token: str = Header("")):
+@app.post("/duty", **meta("corridor", "A junction cop goes on or off duty", DutyOut, 400, 401, 403, 404, 422))
+def duty(d: Duty, x_device_token: str = Header("", description=apidoc.TOKEN_DOC)):
     key = junction_key(d.corridor, d.junction_id)
     if isinstance(key, JSONResponse):
         return key
@@ -1133,15 +1317,25 @@ def duty(d: Duty, x_device_token: str = Header("")):
 
 
 class CopNoteReq(BaseModel):
-    corridor: str
+    model_config = ex(
+        {"corridor": "blr", "junction_id": "blr_j3", "text": "bus stalled, need two more minutes"},
+        anyOf=[  # 400 bad_request otherwise
+            {"required": ["audio_b64"], "properties": {"audio_b64": {"type": "string", "minLength": 1}}},
+            {"required": ["text"], "properties": {"text": {"type": "string", "minLength": 1}}},
+        ],
+    )
+    corridor: str = Field(json_schema_extra={"enum": sorted(CORRIDORS)})
     junction_id: str
     audio_b64: str | None = None
     mime: str | None = None
     text: str | None = None
 
 
-@app.post("/cop-note")
-def cop_note(n: CopNoteReq, x_device_token: str = Header("")):
+@app.post(
+    "/cop-note",
+    **meta("corridor", "The cop's spoken or typed report to control", CopNoteOut, 400, 401, 403, 404, 422),
+)
+def cop_note(n: CopNoteReq, x_device_token: str = Header("", description=apidoc.TOKEN_DOC)):
     """The on-duty cop's spoken or typed report. Gemini only fills the {kind, extra_seconds, reason} schema; what happens
     next is copnote.apply, plain rules."""
     key = junction_key(n.corridor, n.junction_id)
@@ -1164,10 +1358,13 @@ def cop_note(n: CopNoteReq, x_device_token: str = Header("")):
 
 
 class HospitalDuty(BaseModel):
+    model_config = ex(
+        {"hospital_id": "jayadeva"},
+    )
     hospital_id: str
 
 
-@app.post("/hospital/duty")
+@app.post("/hospital/duty", **meta("hospital", "A hospital desk signs in", HospitalDutyOut, 400, 404, 422))
 def hospital_duty(d: HospitalDuty):
     """A hospital desk signs in: hands out a token that may regenerate briefs and after-action reports. Rotates on each sign-in."""
     if not by_id(d.hospital_id):

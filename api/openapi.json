@@ -1,0 +1,3433 @@
+{
+  "components": {
+    "responses": {
+      "Error": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "The error envelope.",
+        "headers": {
+          "X-Request-Id": {
+            "description": "Echo of the caller's id, else a new uuid4.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Ack": {
+        "examples": [
+          {
+            "alert_n": 0,
+            "device_id": "dev-cop-1",
+            "junction_id": "blr_j3",
+            "run_id": "run-amb-1"
+          }
+        ],
+        "properties": {
+          "alert_n": {
+            "title": "Alert N",
+            "type": "integer"
+          },
+          "device_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Id"
+          },
+          "junction_id": {
+            "title": "Junction Id",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "alert_n",
+          "junction_id"
+        ],
+        "title": "Ack",
+        "type": "object"
+      },
+      "AckOut": {
+        "examples": [
+          {
+            "ack_latency_s": 6.2,
+            "acked_at": "2026-10-05T09:03:26Z",
+            "latency_s": 6.2,
+            "ok": true
+          }
+        ],
+        "properties": {
+          "ack_latency_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ack Latency S"
+          },
+          "acked_at": {
+            "title": "Acked At",
+            "type": "string"
+          },
+          "latency_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency S"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "acked_at",
+          "ack_latency_s",
+          "latency_s"
+        ],
+        "title": "AckOut",
+        "type": "object"
+      },
+      "AfterActionOut": {
+        "examples": [
+          {
+            "generated_at": "2026-10-05T09:12:00Z",
+            "issues": [],
+            "model": "gemini-3-flash-preview",
+            "recommendations": [
+              "Keep the cop at J3 on the radio roster."
+            ],
+            "summary": "Ambulance reached the hospital 4 minutes early; all five alerts were acknowledged.",
+            "timeline": [
+              {
+                "event": "Run started",
+                "offset": "t+0:00",
+                "t": "2026-10-05T09:00:00Z"
+              }
+            ]
+          }
+        ],
+        "properties": {
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "issues": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "recommendations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recommendations",
+            "type": "array"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "timeline": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Timeline",
+            "type": "array"
+          }
+        },
+        "required": [
+          "summary",
+          "timeline",
+          "issues",
+          "recommendations"
+        ],
+        "title": "AfterActionOut",
+        "type": "object"
+      },
+      "Bind": {
+        "examples": [
+          {
+            "device_id": "dev-1",
+            "plate": "KA01AB1234"
+          }
+        ],
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "plate": {
+            "title": "Plate",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plate",
+          "device_id"
+        ],
+        "title": "Bind",
+        "type": "object"
+      },
+      "Bound": {
+        "examples": [
+          {
+            "active": true,
+            "agency": "108 Karnataka",
+            "bound_device_id": "dev-1",
+            "device_token": "kQ3x0m2Yw9n7fVqJ1uZ4hT6sB8cD5eAaLpOiRgNzXyU",
+            "plate": "KA01AB1234",
+            "type": "ambulance"
+          }
+        ],
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "agency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agency"
+          },
+          "bound_device_id": {
+            "title": "Bound Device Id",
+            "type": "string"
+          },
+          "device_token": {
+            "title": "Device Token",
+            "type": "string"
+          },
+          "plate": {
+            "title": "Plate",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plate",
+          "type",
+          "active",
+          "bound_device_id",
+          "device_token"
+        ],
+        "title": "Bound",
+        "type": "object"
+      },
+      "BriefOut": {
+        "examples": [
+          {
+            "atmist": {
+              "age": "58",
+              "injuries": "unknown",
+              "mechanism": "unknown",
+              "time": "09:02"
+            },
+            "checklist": [
+              "Cath lab on standby",
+              "ECG on arrival"
+            ],
+            "disclaimer": "Synthetic patient. Clinician confirms.",
+            "generated_at": "2026-10-05T09:03:00Z",
+            "model": "gemini-3-flash-preview",
+            "summary": "58 year old male, chest pain, BP 85/50."
+          }
+        ],
+        "properties": {
+          "atmist": {
+            "additionalProperties": true,
+            "title": "Atmist",
+            "type": "object"
+          },
+          "checklist": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Checklist",
+            "type": "array"
+          },
+          "disclaimer": {
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "atmist",
+          "checklist",
+          "summary",
+          "disclaimer"
+        ],
+        "title": "BriefOut",
+        "type": "object"
+      },
+      "BriefReq": {
+        "examples": [
+          {
+            "regenerate": false,
+            "run_id": "run-amb-1"
+          }
+        ],
+        "properties": {
+          "regenerate": {
+            "default": false,
+            "title": "Regenerate",
+            "type": "boolean"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id"
+        ],
+        "title": "BriefReq",
+        "type": "object"
+      },
+      "Confirm": {
+        "examples": [
+          {
+            "tier": "critical"
+          }
+        ],
+        "properties": {
+          "tier": {
+            "enum": [
+              "critical",
+              "fire",
+              "fire_with_trapped",
+              "police",
+              "police_with_incident",
+              "stable",
+              "urgent"
+            ],
+            "title": "Tier",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tier"
+        ],
+        "title": "Confirm",
+        "type": "object"
+      },
+      "ConfirmOut": {
+        "examples": [
+          {
+            "confirmed_tier": "critical",
+            "patient_on_board": true,
+            "run_id": "run-amb-1"
+          }
+        ],
+        "properties": {
+          "confirmed_tier": {
+            "title": "Confirmed Tier",
+            "type": "string"
+          },
+          "patient_on_board": {
+            "title": "Patient On Board",
+            "type": "boolean"
+          },
+          "routing": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routing"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "confirmed_tier",
+          "patient_on_board"
+        ],
+        "title": "ConfirmOut",
+        "type": "object"
+      },
+      "CopNoteOut": {
+        "examples": [
+          {
+            "action_text": "Green extended by 2 min, escalated",
+            "effects": {
+              "acked": 0,
+              "blocked_s": 0,
+              "escalated": 1,
+              "phase_extended_s": 120
+            },
+            "extra_seconds": 120,
+            "kind": "delay",
+            "n": 0,
+            "reason": "bus stalled",
+            "transcript_en": "Bus stalled, need two more minutes"
+          }
+        ],
+        "properties": {
+          "action_text": {
+            "title": "Action Text",
+            "type": "string"
+          },
+          "effects": {
+            "additionalProperties": true,
+            "title": "Effects",
+            "type": "object"
+          },
+          "extra_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Seconds"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "transcript_en": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript En"
+          }
+        },
+        "required": [
+          "n",
+          "kind",
+          "effects",
+          "action_text"
+        ],
+        "title": "CopNoteOut",
+        "type": "object"
+      },
+      "CopNoteReq": {
+        "anyOf": [
+          {
+            "properties": {
+              "audio_b64": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "audio_b64"
+            ]
+          },
+          {
+            "properties": {
+              "text": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        ],
+        "examples": [
+          {
+            "corridor": "blr",
+            "junction_id": "blr_j3",
+            "text": "bus stalled, need two more minutes"
+          }
+        ],
+        "properties": {
+          "audio_b64": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio B64"
+          },
+          "corridor": {
+            "enum": [
+              "blr",
+              "hyd"
+            ],
+            "title": "Corridor",
+            "type": "string"
+          },
+          "junction_id": {
+            "title": "Junction Id",
+            "type": "string"
+          },
+          "mime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "corridor",
+          "junction_id"
+        ],
+        "title": "CopNoteReq",
+        "type": "object"
+      },
+      "Duty": {
+        "examples": [
+          {
+            "corridor": "blr",
+            "device_id": "dev-cop-1",
+            "junction_id": "blr_j3",
+            "name": "Constable Rao",
+            "on": true
+          }
+        ],
+        "properties": {
+          "corridor": {
+            "enum": [
+              "blr",
+              "hyd"
+            ],
+            "title": "Corridor",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "fcm_token": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fcm Token"
+          },
+          "junction_id": {
+            "title": "Junction Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "on": {
+            "title": "On",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "corridor",
+          "junction_id",
+          "device_id",
+          "on"
+        ],
+        "title": "Duty",
+        "type": "object"
+      },
+      "DutyOut": {
+        "examples": [
+          {
+            "device_id": "dev-cop-1",
+            "device_token": "kQ3x0m2Yw9n7fVqJ1uZ4hT6sB8cD5eAaLpOiRgNzXyU",
+            "name": "Constable Rao",
+            "on": true,
+            "since": "2026-10-05T09:00:00Z"
+          }
+        ],
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "device_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Token"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "on": {
+            "title": "On",
+            "type": "boolean"
+          },
+          "since": {
+            "title": "Since",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_id",
+          "name",
+          "on",
+          "since"
+        ],
+        "title": "DutyOut",
+        "type": "object"
+      },
+      "ErrorEnvelope": {
+        "description": "The one error body. Some errors add keys: `state`, `fallback`, `retry_after_s`.",
+        "examples": [
+          {
+            "detail": "unknown run",
+            "error": "unknown_run"
+          }
+        ],
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "error": {
+            "title": "Error",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "detail"
+        ],
+        "title": "ErrorEnvelope",
+        "type": "object"
+      },
+      "Fired": {
+        "properties": {
+          "junction": {
+            "title": "Junction",
+            "type": "string"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "junction",
+          "stage"
+        ],
+        "title": "Fired",
+        "type": "object"
+      },
+      "Health": {
+        "examples": [
+          {
+            "model": "gemini-3.1-flash-lite",
+            "ok": true
+          }
+        ],
+        "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "Health",
+        "type": "object"
+      },
+      "HospitalDuty": {
+        "examples": [
+          {
+            "hospital_id": "jayadeva"
+          }
+        ],
+        "properties": {
+          "hospital_id": {
+            "title": "Hospital Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hospital_id"
+        ],
+        "title": "HospitalDuty",
+        "type": "object"
+      },
+      "HospitalDutyOut": {
+        "examples": [
+          {
+            "hospital_id": "jayadeva",
+            "hospital_token": "kQ3x0m2Yw9n7fVqJ1uZ4hT6sB8cD5eAaLpOiRgNzXyU"
+          }
+        ],
+        "properties": {
+          "hospital_id": {
+            "title": "Hospital Id",
+            "type": "string"
+          },
+          "hospital_token": {
+            "title": "Hospital Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hospital_id",
+          "hospital_token"
+        ],
+        "title": "HospitalDutyOut",
+        "type": "object"
+      },
+      "HousekeepingOut": {
+        "examples": [
+          {
+            "escalated": 2,
+            "runs_checked": 5,
+            "stale": 1
+          }
+        ],
+        "properties": {
+          "escalated": {
+            "title": "Escalated",
+            "type": "integer"
+          },
+          "runs_checked": {
+            "title": "Runs Checked",
+            "type": "integer"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stale",
+          "escalated",
+          "runs_checked"
+        ],
+        "title": "HousekeepingOut",
+        "type": "object"
+      },
+      "Incident": {
+        "examples": [
+          {
+            "severity_note": "Synthetic demo incident",
+            "type": "cardiac"
+          }
+        ],
+        "properties": {
+          "severity_note": {
+            "default": "",
+            "title": "Severity Note",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "Incident",
+        "type": "object"
+      },
+      "IncidentOut": {
+        "examples": [
+          {
+            "incident_id": "INC-4BC6E7"
+          }
+        ],
+        "properties": {
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "incident_id"
+        ],
+        "title": "IncidentOut",
+        "type": "object"
+      },
+      "Loc": {
+        "examples": [
+          {
+            "heading": 231,
+            "lat": 12.9197,
+            "lng": 77.6204,
+            "run_id": "run-amb-1",
+            "source": "sim",
+            "speed_mps": 13.2,
+            "t": "2026-10-05T09:02:30Z",
+            "tick_id": "tick-0042"
+          }
+        ],
+        "properties": {
+          "heading": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heading"
+          },
+          "lat": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat",
+            "type": "number"
+          },
+          "lng": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lng",
+            "type": "number"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "source": {
+            "default": "gps",
+            "pattern": "^(gps|sim)$",
+            "title": "Source",
+            "type": "string"
+          },
+          "speed_mps": {
+            "minimum": 0.0,
+            "title": "Speed Mps",
+            "type": "number"
+          },
+          "t": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "T"
+          },
+          "tick_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_.:-]{1,128}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Idempotency key; the Idempotency-Key header wins.",
+            "title": "Tick Id"
+          }
+        },
+        "required": [
+          "run_id",
+          "lat",
+          "lng",
+          "speed_mps"
+        ],
+        "title": "Loc",
+        "type": "object"
+      },
+      "LocationOut": {
+        "examples": [
+          {
+            "alerts_fired": [
+              {
+                "junction": "blr_j3",
+                "stage": "PREPARE"
+              }
+            ],
+            "approach": "NE",
+            "brief_due": false,
+            "eta_hospital_s": 412,
+            "eta_s": 143,
+            "exit_move": "left",
+            "jam_m": 520,
+            "next_junction": "blr_j3",
+            "observed_speed_60s": 13.2,
+            "stage": "PREPARE",
+            "state": "en_route",
+            "traffic": "live"
+          }
+        ],
+        "properties": {
+          "alerts_fired": {
+            "items": {
+              "$ref": "#/components/schemas/Fired"
+            },
+            "title": "Alerts Fired",
+            "type": "array"
+          },
+          "approach": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approach"
+          },
+          "brief_due": {
+            "title": "Brief Due",
+            "type": "boolean"
+          },
+          "eta_hospital_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eta Hospital S"
+          },
+          "eta_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eta S"
+          },
+          "exit_move": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Move"
+          },
+          "jam_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jam M"
+          },
+          "next_junction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Junction"
+          },
+          "observed_speed_60s": {
+            "title": "Observed Speed 60S",
+            "type": "number"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "traffic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Traffic"
+          }
+        },
+        "required": [
+          "state",
+          "next_junction",
+          "approach",
+          "jam_m",
+          "eta_s",
+          "stage",
+          "exit_move",
+          "eta_hospital_s",
+          "alerts_fired",
+          "brief_due",
+          "observed_speed_60s",
+          "traffic"
+        ],
+        "title": "LocationOut",
+        "type": "object"
+      },
+      "LogOut": {
+        "examples": [
+          {
+            "confirmed": false,
+            "fields": {
+              "transcript_en": "Oxygen 4 litres started"
+            },
+            "interventions": [
+              {
+                "dose": "4 litres",
+                "kind": "drug",
+                "name": "oxygen"
+              }
+            ],
+            "n": 3,
+            "transcript_en": "Oxygen 4 litres started"
+          }
+        ],
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "fields": {
+            "additionalProperties": true,
+            "title": "Fields",
+            "type": "object"
+          },
+          "interventions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Interventions",
+            "type": "array"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Url"
+          },
+          "transcript_en": {
+            "title": "Transcript En",
+            "type": "string"
+          }
+        },
+        "required": [
+          "n",
+          "transcript_en",
+          "fields",
+          "interventions",
+          "confirmed"
+        ],
+        "title": "LogOut",
+        "type": "object"
+      },
+      "RouteReq": {
+        "examples": [
+          {
+            "run_id": "run-amb-1"
+          }
+        ],
+        "properties": {
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id"
+        ],
+        "title": "RouteReq",
+        "type": "object"
+      },
+      "RoutingOut": {
+        "additionalProperties": true,
+        "description": "The `runs.routing` object the hospital routing agent writes.",
+        "examples": [
+          {
+            "fallback": false,
+            "hospital_id": "jayadeva",
+            "reason": "Cardiac cath lab, 9 min"
+          }
+        ],
+        "properties": {},
+        "title": "RoutingOut",
+        "type": "object"
+      },
+      "RunLogEntryOut": {
+        "description": "One `runs/{id}/log/{n}` entry as GET /runs/{run_id}/log returns it, oldest first.",
+        "examples": [
+          {
+            "confirmed": true,
+            "fields": {
+              "complaint": "chest pain",
+              "vitals": {
+                "dbp": 50,
+                "sbp": 85
+              }
+            },
+            "interventions": [],
+            "kind": "voice",
+            "n": 1,
+            "t": "2026-10-05T09:02:00+00:00",
+            "transcript_en": "Patient has chest pain, BP 85 over 50"
+          }
+        ],
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "fields": {
+            "additionalProperties": true,
+            "title": "Fields",
+            "type": "object"
+          },
+          "interventions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Interventions",
+            "type": "array"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Url"
+          },
+          "t": {
+            "title": "T",
+            "type": "string"
+          },
+          "transcript_en": {
+            "title": "Transcript En",
+            "type": "string"
+          }
+        },
+        "required": [
+          "n",
+          "t",
+          "kind",
+          "transcript_en",
+          "fields",
+          "interventions",
+          "confirmed"
+        ],
+        "title": "RunLogEntryOut",
+        "type": "object"
+      },
+      "RunOut": {
+        "description": "`start`: just `run_id`. `end`: also `state` and the report card (null when the corridor is unknown).",
+        "examples": [
+          {
+            "run_id": "run-1a2b3c4d"
+          },
+          {
+            "report": {
+              "minutes_saved": 4.2
+            },
+            "run_id": "run-1a2b3c4d",
+            "state": "ended"
+          }
+        ],
+        "properties": {
+          "report": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          }
+        },
+        "required": [
+          "run_id"
+        ],
+        "title": "RunOut",
+        "type": "object"
+      },
+      "RunReq": {
+        "examples": [
+          {
+            "action": "start",
+            "corridor": "blr",
+            "incident_id": "INC-4BC6E7",
+            "plate": "KA01AB1234",
+            "source": "gps"
+          },
+          {
+            "action": "end",
+            "run_id": "run-1a2b3c4d"
+          }
+        ],
+        "if": {
+          "properties": {
+            "action": {
+              "const": "start"
+            }
+          }
+        },
+        "properties": {
+          "action": {
+            "enum": [
+              "start",
+              "end"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "corridor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corridor"
+          },
+          "destination": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination"
+          },
+          "incident_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Incident Id"
+          },
+          "plate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plate"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "scenario": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario"
+          },
+          "source": {
+            "default": "gps",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "then": {
+          "properties": {
+            "corridor": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "incident_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "plate": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "plate",
+            "incident_id",
+            "corridor"
+          ]
+        },
+        "title": "RunReq",
+        "type": "object"
+      },
+      "Triage": {
+        "anyOf": [
+          {
+            "properties": {
+              "audio_b64": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "audio_b64"
+            ]
+          },
+          {
+            "properties": {
+              "image_b64": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "image_b64"
+            ]
+          },
+          {
+            "properties": {
+              "text": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        ],
+        "examples": [
+          {
+            "run_id": "run-amb-1",
+            "text": "chest pain, BP 85 over 50",
+            "vehicle_type": "ambulance"
+          },
+          {
+            "audio_b64": "UklGRg==",
+            "mime": "audio/webm",
+            "run_id": "run-amb-1",
+            "vehicle_type": "ambulance"
+          }
+        ],
+        "properties": {
+          "audio_b64": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio B64"
+          },
+          "image_b64": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image B64"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "lang_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lang Hint"
+          },
+          "mime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "vehicle_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vehicle Type"
+          }
+        },
+        "required": [
+          "run_id"
+        ],
+        "title": "Triage",
+        "type": "object"
+      },
+      "TriageOut": {
+        "examples": [
+          {
+            "fields": {
+              "complaint": "chest pain",
+              "conscious": true,
+              "vitals": {
+                "dbp": 50,
+                "sbp": 85
+              }
+            },
+            "suggested_tier": "critical",
+            "transcript_en": "Patient has chest pain, blood pressure 85 over 50"
+          }
+        ],
+        "properties": {
+          "fields": {
+            "additionalProperties": true,
+            "title": "Fields",
+            "type": "object"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Url"
+          },
+          "suggested_tier": {
+            "title": "Suggested Tier",
+            "type": "string"
+          },
+          "transcript_en": {
+            "title": "Transcript En",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fields",
+          "transcript_en",
+          "suggested_tier"
+        ],
+        "title": "TriageOut",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Preempts traffic signals along an emergency vehicle's route: ticks in, alerts out.\n\n**Errors.** Every 4xx and 5xx body is the same envelope, `{\"error\": \"<code>\", \"detail\": \"<text>\"}`, sometimes with extra keys\n(`state`, `fallback`, `retry_after_s`). Every response carries `X-Request-Id`.\n\n**Device tokens.** Calls that change a run need `X-Device-Token` (handed out by `/vehicles/bind`, `/duty` and\n`/hospital/duty`): 401 without it, 403 with the wrong one.\n\n**Rate limits.** Per IP in one-minute windows shared by every instance: 10 heavy calls (`/triage`, `/log`, `/brief`, `/route`,\n`/cop-note`, `/runs/{run_id}/after-action`), 900 `/location`, 60 everything else. Over the limit: 429 `rate_limited` with\n`Retry-After`.\n\n**Idempotency.** `POST /location` takes an optional `Idempotency-Key` header (or `tick_id` in the body): a repeat within\n10 minutes returns the stored response, with `Idempotent-Replayed: true`, and changes nothing.",
+    "title": "Emergency Green Corridor API",
+    "version": "dev"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/ack": {
+      "post": {
+        "operationId": "ack_ack_post",
+        "parameters": [
+          {
+            "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+            "in": "header",
+            "name": "x-device-token",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+              "title": "X-Device-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Ack"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AckOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad request: a missing or malformed input the schema cannot express."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "A device token is required (`device_token_required`)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed (`device_token_mismatch`, `unregistered_vehicle`, `run_not_active`, `forbidden`)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found (`unknown_run`, `unknown_alert`, `unknown_junction`, `not_found`)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Validation failed (`validation_error`) or the extraction could not read the input (`extraction_failed`)."
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Acknowledge an alert",
+        "tags": [
+          "corridor"
+        ]
+      }
+    },
+    "/brief": {
+      "post": {
+        "operationId": "brief_endpoint_brief_post",
+        "parameters": [
+          {
+            "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+            "in": "header",
+            "name": "x-device-token",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+              "title": "X-Device-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BriefReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad request: a missing or malformed input the schema cannot express."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "A device token is required (`device_token_required`)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed (`device_token_mismatch`, `unregistered_vehicle`, `run_not_active`, `forbidden`)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found (`unknown_run`, `unknown_alert`, `unknown_junction`, `not_found`)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Validation failed (`validation_error`) or the extraction could not read the input (`extraction_failed`)."
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The model call failed (`brief_failed`, `after_action_failed`)."
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Generate the hospital brief",
+        "tags": [
+          "triage"
+        ]
+      }
+    },
+    "/briefs/{run_id}": {
+      "get": {
+        "description": "The stored ATMIST brief (SCHEMA.md, briefs/{run_id}). Same tokens as the log; 404 `no_brief` until one is written.",
+        "operationId": "get_brief_briefs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-device-token",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Device-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "A device token is required (`device_token_required`)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed (`device_token_mismatch`, `unregistered_vehicle`, `run_not_active`, `forbidden`)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found (`unknown_run`, `unknown_alert`, `unknown_junction`, `not_found`)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Validation failed (`validation_error`) or the extraction could not read the input (`extraction_failed`)."
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The stored hospital brief of a run",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/cop-note": {
+      "post": {
+        "description": "The on-duty cop's spoken or typed report. Gemini only fills the {kind, extra_seconds, reason} schema; what happens\nnext is copnote.apply, plain rules.",
+        "operationId": "cop_note_cop_note_post",
+        "parameters": [
+          {
+            "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+            "in": "header",
+            "name": "x-device-token",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+              "title": "X-Device-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopNoteReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CopNoteOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad request: a missing or malformed input the schema cannot express."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "A device token is required (`device_token_required`)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed (`device_token_mismatch`, `unregistered_vehicle`, `run_not_active`, `forbidden`)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found (`unknown_run`, `unknown_alert`, `unknown_junction`, `not_found`)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Validation failed (`validation_error`) or the extraction could not read the input (`extraction_failed`)."
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The cop's spoken or typed report to control",
+        "tags": [
+          "corridor"
+        ]
+      }
+    },
+    "/duty": {
+      "post": {
+        "operationId": "duty_duty_post",
+        "parameters": [
+          {
+            "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+            "in": "header",
+            "name": "x-device-token",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+              "title": "X-Device-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Duty"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DutyOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad request: a missing or malformed input the schema cannot express."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "A device token is required (`device_token_required`)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed (`device_token_mismatch`, `unregistered_vehicle`, `run_not_active`, `forbidden`)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found (`unknown_run`, `unknown_alert`, `unknown_junction`, `not_found`)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Validation failed (`validation_error`) or the extraction could not read the input (`extraction_failed`)."
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "A junction cop goes on or off duty",
+        "tags": [
+          "corridor"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Liveness and active model",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/hospital/duty": {
+      "post": {
+        "description": "A hospital desk signs in: hands out a token that may regenerate briefs and after-action reports. Rotates on each sign-in.",
+        "operationId": "hospital_duty_hospital_duty_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HospitalDuty"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HospitalDutyOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad request: a missing or malformed input the schema cannot express."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found (`unknown_run`, `unknown_alert`, `unknown_junction`, `not_found`)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Validation failed (`validation_error`) or the extraction could not read the input (`extraction_failed`)."
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "A hospital desk signs in",
+        "tags": [
+          "hospital"
+        ]
+      }
+    },
+    "/housekeeping": {
+      "post": {
+        "description": "Cloud Scheduler, once a minute: the stale and escalation sweeps without waiting for a tick. 404 while\nHOUSEKEEPING_TOKEN is unset, 403 on a wrong token.",
+        "operationId": "housekeeping_housekeeping_post",
+        "parameters": [
+          {
+            "description": "Must equal env HOUSEKEEPING_TOKEN.",
+            "in": "header",
+            "name": "x-housekeeping-token",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Must equal env HOUSEKEEPING_TOKEN.",
+              "title": "X-Housekeeping-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HousekeepingOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed (`device_token_mismatch`, `unregistered_vehicle`, `run_not_active`, `forbidden`)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found (`unknown_run`, `unknown_alert`, `unknown_junction`, `not_found`)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Validation failed (`validation_error`) or the extraction could not read the input (`extraction_failed`)."
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Stale and escalation sweep (Cloud Scheduler)",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/incidents": {
+      "post": {
+        "operationId": "incidents_incidents_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Incident"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad request: a missing or malformed input the schema cannot express."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Validation failed (`validation_error`) or the extraction could not read the input (`extraction_failed`)."
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Open an incident (mock dispatch console)",
+        "tags": [
+          "dispatch"
+        ]
+      }
+    },
+    "/location": {
+      "post": {
+        "operationId": "location_location_post",
+        "parameters": [
+          {
+            "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+            "in": "header",
+            "name": "x-device-token",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+              "title": "X-Device-Token",
+              "type": "string"
+            }
+          },
+          {
+            "description": "A repeat with the same key within 10 minutes returns the first response and writes nothing.",
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_.:-]{1,128}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A repeat with the same key within 10 minutes returns the first response and writes nothing.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Loc"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationOut"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Idempotent-Replayed": {
+                "description": "true when the stored response of an earlier tick with the same key is returned.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad request: a missing or malformed input the schema cannot express."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "A device token is required (`device_token_required`)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed (`device_token_mismatch`, `unregistered_vehicle`, `run_not_active`, `forbidden`)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found (`unknown_run`, `unknown_alert`, `unknown_junction`, `not_found`)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Validation failed (`validation_error`) or the extraction could not read the input (`extraction_failed`)."
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Location tick: alerts, preemption and ETA",
+        "tags": [
+          "corridor"
+        ]
+      }
+    },
+    "/log": {
+      "post": {
+        "operationId": "log_entry_log_post",
+        "parameters": [
+          {
+            "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+            "in": "header",
+            "name": "x-device-token",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+              "title": "X-Device-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Triage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad request: a missing or malformed input the schema cannot express."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "A device token is required (`device_token_required`)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed (`device_token_mismatch`, `unregistered_vehicle`, `run_not_active`, `forbidden`)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found (`unknown_run`, `unknown_alert`, `unknown_junction`, `not_found`)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Validation failed (`validation_error`) or the extraction could not read the input (`extraction_failed`)."
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Append a log entry with interventions",
+        "tags": [
+          "triage"
+        ]
+      }
+    },
+    "/route": {
+      "post": {
+        "operationId": "route_route_post",
+        "parameters": [
+          {
+            "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+            "in": "header",
+            "name": "x-device-token",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+              "title": "X-Device-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RouteReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutingOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad request: a missing or malformed input the schema cannot express."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "A device token is required (`device_token_required`)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed (`device_token_mismatch`, `unregistered_vehicle`, `run_not_active`, `forbidden`)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found (`unknown_run`, `unknown_alert`, `unknown_junction`, `not_found`)."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The run is not in a state that allows this (`run_not_finished`, `not_routable`)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Validation failed (`validation_error`) or the extraction could not read the input (`extraction_failed`)."
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Re-run the hospital routing agent",
+        "tags": [
+          "hospital"
+        ]
+      }
+    },
+    "/runs": {
+      "post": {
+        "operationId": "runs_runs_post",
+        "parameters": [
+          {
+            "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+            "in": "header",
+            "name": "x-device-token",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+              "title": "X-Device-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad request: a missing or malformed input the schema cannot express."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "A device token is required (`device_token_required`)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed (`device_token_mismatch`, `unregistered_vehicle`, `run_not_active`, `forbidden`)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found (`unknown_run`, `unknown_alert`, `unknown_junction`, `not_found`)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Validation failed (`validation_error`) or the extraction could not read the input (`extraction_failed`)."
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Start or end a run",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/runs/{run_id}/after-action": {
+      "post": {
+        "operationId": "after_action_runs__run_id__after_action_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "regenerate",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Regenerate",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+            "in": "header",
+            "name": "x-device-token",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+              "title": "X-Device-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AfterActionOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "A device token is required (`device_token_required`)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed (`device_token_mismatch`, `unregistered_vehicle`, `run_not_active`, `forbidden`)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found (`unknown_run`, `unknown_alert`, `unknown_junction`, `not_found`)."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The run is not in a state that allows this (`run_not_finished`, `not_routable`)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Validation failed (`validation_error`) or the extraction could not read the input (`extraction_failed`)."
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The model call failed (`brief_failed`, `after_action_failed`)."
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "After-action report of a finished run",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/runs/{run_id}/confirm": {
+      "post": {
+        "operationId": "confirm_runs__run_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+            "in": "header",
+            "name": "x-device-token",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+              "title": "X-Device-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Confirm"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad request: a missing or malformed input the schema cannot express."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "A device token is required (`device_token_required`)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed (`device_token_mismatch`, `unregistered_vehicle`, `run_not_active`, `forbidden`)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found (`unknown_run`, `unknown_alert`, `unknown_junction`, `not_found`)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Validation failed (`validation_error`) or the extraction could not read the input (`extraction_failed`)."
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Confirm the tier (the crew's one tap)",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/runs/{run_id}/log": {
+      "get": {
+        "description": "The transit log, oldest first: [{n, t, kind, transcript_en, fields, interventions, confirmed, photo_url?}]. Needs the\nrun's vehicle token or a hospital desk token.",
+        "operationId": "run_log_runs__run_id__log_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-device-token",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Device-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RunLogEntryOut"
+                  },
+                  "title": "Response 200 Run Log Runs  Run Id  Log Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "A device token is required (`device_token_required`)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed (`device_token_mismatch`, `unregistered_vehicle`, `run_not_active`, `forbidden`)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found (`unknown_run`, `unknown_alert`, `unknown_junction`, `not_found`)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Validation failed (`validation_error`) or the extraction could not read the input (`extraction_failed`)."
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The transit log of a run",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/triage": {
+      "post": {
+        "operationId": "triage_triage_post",
+        "parameters": [
+          {
+            "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+            "in": "header",
+            "name": "x-device-token",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Device token from /vehicles/bind (vehicle), /duty (junction cop) or /hospital/duty (hospital desk).",
+              "title": "X-Device-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Triage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriageOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad request: a missing or malformed input the schema cannot express."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "A device token is required (`device_token_required`)."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed (`device_token_mismatch`, `unregistered_vehicle`, `run_not_active`, `forbidden`)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found (`unknown_run`, `unknown_alert`, `unknown_junction`, `not_found`)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Validation failed (`validation_error`) or the extraction could not read the input (`extraction_failed`)."
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Extract patient fields and suggest a tier",
+        "tags": [
+          "triage"
+        ]
+      }
+    },
+    "/vehicles/bind": {
+      "post": {
+        "operationId": "vehicles_bind_vehicles_bind_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Bind"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Bound"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad request: a missing or malformed input the schema cannot express."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found (`unknown_run`, `unknown_alert`, `unknown_junction`, `not_found`)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Validation failed (`validation_error`) or the extraction could not read the input (`extraction_failed`)."
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Bind a device to a registered vehicle (mock registry)",
+        "tags": [
+          "dispatch"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "Mock registry and dispatch console: bind a device to a vehicle, open an incident.",
+      "name": "dispatch"
+    },
+    {
+      "description": "A vehicle's run from start to end: confirmation, report cards and after-action reports.",
+      "name": "runs"
+    },
+    {
+      "description": "Crew-side patient data: extraction from voice, text or a monitor photo, the log and the hospital brief.",
+      "name": "triage"
+    },
+    {
+      "description": "The live corridor: location ticks, alert acknowledgements and the junction cop's duty and notes.",
+      "name": "corridor"
+    },
+    {
+      "description": "Hospital desk sign-in and the destination routing agent.",
+      "name": "hospital"
+    },
+    {
+      "description": "Health and scheduled housekeeping.",
+      "name": "ops"
+    }
+  ]
+}

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Header
 from fastapi.responses import JSONResponse
 
 import production
+from apidoc import BriefOut, RunLogEntryOut, meta
 from firestore_client import db
 
 router = APIRouter()
@@ -27,7 +28,10 @@ def not_found(code: str) -> JSONResponse:
     return production.refuse(404, code)
 
 
-@router.get("/runs/{run_id}/log")
+@router.get(
+    "/runs/{run_id}/log",
+    **meta("runs", "The transit log of a run", list[RunLogEntryOut], 401, 403, 404, 422),
+)
 def run_log(run_id: str, x_device_token: str = Header("")):
     """The transit log, oldest first: [{n, t, kind, transcript_en, fields, interventions, confirmed, photo_url?}]. Needs the
     run's vehicle token or a hospital desk token."""
@@ -40,7 +44,9 @@ def run_log(run_id: str, x_device_token: str = Header("")):
     return [{"n": int(d.id), **iso(d.to_dict())} for d in docs]
 
 
-@router.get("/briefs/{run_id}")
+@router.get(
+    "/briefs/{run_id}", **meta("runs", "The stored hospital brief of a run", BriefOut, 401, 403, 404, 422)
+)
 def get_brief(run_id: str, x_device_token: str = Header("")):
     """The stored ATMIST brief (SCHEMA.md, briefs/{run_id}). Same tokens as the log; 404 `no_brief` until one is written."""
     if not db.collection("runs").document(run_id).get().exists:

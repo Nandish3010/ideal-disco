@@ -142,7 +142,16 @@ For repository workflow and contribution conventions, see CONTRIBUTING.md.
 
 - **API:** pytest against a fake Firestore, so tests need no credentials and make no cloud calls; the engines also self-check with `python3 api/acuity.py` and friends.
 - **Web:** vitest unit tests, including the replay maths and the scenario minutes-saved total; ESLint and Prettier checks.
+- **Contract and property tests:** `make contract` runs schemathesis (every check, 20 examples per operation) against the API on an in-memory Firestore, and hypothesis checks the engines' invariants for any input (`api/tests/test_properties.py`). `make openapi` rewrites `api/openapi.json`; CI fails if it is stale.
 - **Gate:** CI runs lint, format, tests and the production build, and enforces a minimum coverage threshold on the API. Run the same commands locally before opening a PR.
+
+### Performance (offline, single instance)
+
+`make loadtest` (needs `pip install -r api/loadtest/requirements.txt`) replays the scenario's three vehicles at 20x for 60 s against one
+uvicorn worker on an in-memory Firestore, with a client polling `/health`; nothing leaves the machine and no paid call is made.
+On an Apple M4 laptop, `/location` answered in 17 ms at p50 and 37 ms at p95 (720 requests at about 12 a second, no failures)
+and `/health` in 4 ms and 21 ms (a quieter run gave 14 / 26 ms and 4 / 9 ms). That is the application code alone: a deployed instance adds the Firestore round trips and the
+network. The table and caveats are in [api/loadtest/RESULTS.md](api/loadtest/RESULTS.md).
 
 ## Deploy
 

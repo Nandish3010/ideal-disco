@@ -1,6 +1,7 @@
 """Routes parsing and the cache/failure rules, with httpx stubbed."""
 
 import time
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -8,6 +9,7 @@ import httpx
 import pytest
 
 import routes_api
+from fakefs import FakeFirestore
 
 GOOGLE_EXAMPLE = "_p~iF~ps|U_ulLnnqC_mqNvxq`@"
 ROUTE = {
@@ -105,3 +107,75 @@ def test_failure_reuses_recent_spans_but_not_old_ones(monkeypatch: pytest.Monkey
     assert out["intervals"] == parsed["intervals"] and out["stale"] is True and out["age_s"] >= 40
     routes_api._cache["k"] = (time.monotonic() - 90, parsed)
     assert routes_api.traffic_to_point(A, B, key="k")["intervals"] == []
+
+
+KEY = ("run-1", "route")
+
+
+def test_a_fetch_is_stored_in_the_shared_doc_for_the_run(
+    db: FakeFirestore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stub_post(monkeypatch, ok())
+    routes_api.traffic_to_point(A, B, key=KEY, run_id="run-1")
+    doc = db.docs["route_cache/run-1"]
+    assert (
+        doc["result"]["duration_s"] == 95 and len(doc["result"]["polyline_points"]) == 6
+    )  # flat: no nested arrays
+    assert abs((datetime.now(UTC) - doc["fetched_at"]).total_seconds()) < 5
+    assert doc["expires_at"] > doc["fetched_at"]  # the field a Firestore TTL policy deletes by
+
+
+def test_a_fresh_instance_reuses_the_shared_doc_instead_of_calling_routes(
+    db: FakeFirestore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = stub_post(monkeypatch, ok())
+    first = routes_api.traffic_to_point(A, B, key=KEY, run_id="run-1")
+    monkeypatch.setattr(
+        routes_api, "_cache", {}
+    )  # another instance, or this one after a restart: empty memory
+    again = routes_api.traffic_to_point(A, B, key=KEY, run_id="run-1")
+    assert len(calls) == 1 and again["stale"] is False
+    assert again["intervals"] == first["intervals"] and again["polyline_points"] == first["polyline_points"]
+    assert 0 <= again["age_s"] < 5
+    assert KEY in routes_api._cache  # and keeps it in memory from then on
+
+
+def test_a_shared_doc_older_than_the_ttl_is_refetched(
+    db: FakeFirestore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = stub_post(monkeypatch, ok())
+    routes_api.traffic_to_point(A, B, key=KEY)
+    db.docs["route_cache/run-1"]["fetched_at"] = datetime.now(UTC) - timedelta(seconds=25)
+    monkeypatch.setattr(routes_api, "_cache", {})
+    routes_api.traffic_to_point(A, B, key=KEY)
+    assert len(calls) == 2
+
+
+def test_an_old_shared_doc_still_serves_when_routes_is_down(
+    db: FakeFirestore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stub_post(monkeypatch, ok())
+    routes_api.traffic_to_point(A, B, key=KEY)
+    db.docs["route_cache/run-1"]["fetched_at"] = datetime.now(UTC) - timedelta(seconds=40)
+    monkeypatch.setattr(routes_api, "_cache", {})
+    stub_post(monkeypatch, httpx.ConnectTimeout("t"))
+    out = routes_api.traffic_to_point(A, B, key=KEY)
+    assert out["stale"] is True and out["duration_s"] == 95
+
+
+def test_firestore_errors_never_break_a_route_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Down:
+        def collection(self, name: str) -> Any:
+            raise RuntimeError("firestore down")
+
+    monkeypatch.setattr(routes_api, "db", Down())
+    stub_post(monkeypatch, ok())
+    out = routes_api.traffic_to_point(A, B, key=KEY)
+    assert out["stale"] is False and out["duration_s"] == 95
+    assert routes_api.traffic_to_point(A, B, key=KEY)["stale"] is False  # the memory layer still works
+
+
+def test_no_key_means_no_shared_doc(db: FakeFirestore, monkeypatch: pytest.MonkeyPatch) -> None:
+    stub_post(monkeypatch, ok())
+    routes_api.traffic_to_point(A, B)
+    assert not any(k.startswith("route_cache/") for k in db.docs)
