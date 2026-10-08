@@ -399,7 +399,7 @@ for r_, (grp, items) in enumerate(TECH):
         shape_text(p_, [nm], size=18, anchor=MSO_ANCHOR.MIDDLE, margins=(0.25, 0, 0.1, 0))
 by = TOP + 0.05 + 4 * rstep + 0.1
 bq = box(s, MX, by, CW, 0.7, fill=PALE, line=rgb("9CA3AF"), dash=True, radius=0.1, name="BigQuery ML note")
-shape_text(bq, [[("BigQuery ML  ", {"bold": True}), ("pipeline in place; peak-hour spans logging on Cloud Scheduler since 6 Oct; model retrained before submission", {"color": MID})]], size=16, anchor=MSO_ANCHOR.MIDDLE, margins=(0.25, 0, 0.2, 0))
+shape_text(bq, [[("BigQuery ML  ", {"bold": True}), ("retrained 8 Oct on 2,173 traffic readings, 5–8 Oct, mostly peak hours; 88% still zero jam; baseline, not deployed", {"color": MID})]], size=16, anchor=MSO_ANCHOR.MIDDLE, margins=(0.25, 0, 0.2, 0))
 
 # 10 cost
 s = content_slide("Estimated implementation cost", DATA["headlines"][10])
