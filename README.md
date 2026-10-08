@@ -88,7 +88,7 @@ Google products actually wired:
 - **Cloud Text-to-Speech, Cloud Translation, Cloud Storage:** spoken alerts and their MP3s.
 - **Secret Manager:** Maps server key.
 - **Cloud Scheduler, Cloud Build, Artifact Registry:** traffic logger schedule and image.
-- **BigQuery:** traffic spans and run reports. **BigQuery ML:** a jam-forecast pipeline is in place and a retrain is scheduled before submission; it is a pipeline proof, not a deployed forecast (see Real data).
+- **BigQuery:** traffic spans and run reports. **BigQuery ML:** a jam-forecast pipeline is in place and was retrained on 8 Oct on 2,173 traffic readings; it is a baseline, not a deployed forecast (see Real data).
 - **Workload Identity Federation:** keyless CI deploys.
 - **Cloud Trace, Cloud Monitoring and Cloud Logging:** request and engine spans, a dashboard, an uptime check and log-based metrics.
 - **Firebase Cloud Messaging:** a push to the on-duty cop's phone when an alert is written.
@@ -100,7 +100,7 @@ Signal preemption sits behind a one-method `SignalAdapter` (`api/signal_adapter.
 
 A Cloud Run Job (`jobs/traffic_logger.py`), triggered by Cloud Scheduler for Bengaluru peak hours, logs Routes traffic spans per junction approach into BigQuery `corridor.traffic_spans`, using the same `jam_metres` as the live engine. [jobs/bqml](jobs/bqml) builds a feature view and a BigQuery ML boosted-tree model, `corridor.jam_forecast`, for the next reading's jam length. Every run also writes its report card to `corridor.run_reports`.
 
-Be clear about what that is today: the logger runs on Cloud Scheduler for Bengaluru peak hours since 6 Oct, paused after 10 Oct. `corridor.traffic_spans` held 342 rows when last counted (5 Oct 17:50 to 6 Oct 02:40 UTC), and only 1 of them has `jam_m` above zero. The first 216 rows (midnight) had zero queues, so the label had no variance and the first model was constant. The BigQuery ML model is a pipeline proof until peak-hour rows accumulate; a retrain is scheduled before submission, and it is not a deployed forecast. It will only say something after the logger has seen weeks of real congestion. See [jobs/bqml/README.md](jobs/bqml/README.md) for the numbers and limits.
+Be clear about what that is today: the logger has run on Cloud Scheduler for Bengaluru peak hours since 6 Oct. `corridor.traffic_spans` held 2,173 traffic readings, 5 to 8 Oct 2026 (5 Oct 23:20 to 8 Oct 10:50 IST), 1,849 of them in peak hours. Only 267 (12.3%) have `jam_m` above zero, so the data is still 87.7% zeros. The first 216 rows (midnight) had zero queues, so the first model was constant. The 8 Oct retrain on all labelled rows has an R2 of 0.58 on BigQuery ML's random holdout, but it does not beat simply repeating the current reading (MAE 29.8 m against 21.8 m), so it is a baseline and not a deployed forecast. It will only say something after the logger has seen weeks of real congestion. See [jobs/bqml/README.md](jobs/bqml/README.md) for the numbers and limits.
 
 ## Honest limits
 

@@ -224,7 +224,7 @@ The trace on the left is a live routing trace from a rehearsal run (a critical c
 
 ![w:1100](img/architecture.svg)
 
-<p class="cite">Cost by design: ~3 traffic-aware Routes calls per vehicle-minute; AI side effects run off the request path. Wired on main only. BigQuery ML: pipeline in place, retrained before submission on N rows ([fill at freeze]); not a deployed forecast.</p>
+<p class="cite">Cost by design: ~3 traffic-aware Routes calls per vehicle-minute; AI side effects run off the request path. Wired on main only. BigQuery ML: pipeline in place, retrained 8 Oct on 2,173 traffic readings (5–8 Oct 2026, mostly peak hours); a baseline, not a deployed forecast.</p>
 
 <!--
 The SignalAdapter seam is the point: today SimAdapter writes the junction phase to Firestore, tomorrow a real controller adapter implements the same one method. Firestore is the single event bus and the accepted single point of failure for the demo. Cost is a design target: about 3 traffic-aware Routes calls per vehicle-minute, with Gemini, translation and speech side effects off the request path. Only products wired on main are shown. The BigQuery ML model is retrained before submission on peak-hour logger rows; state N from the freeze count.
@@ -246,8 +246,8 @@ The SignalAdapter seam is the point: today SimAdapter writes the junction phase 
 <div>
 
 ### Proof of pipeline, not a forecast
-- Rows so far: N ([fill at freeze]). The first 216 rows were midnight with zero queues
-- BigQuery ML model: a pipeline proof until peak rows accumulate; retrained before submission, not a deployed forecast
+- 2,173 traffic readings, 5–8 Oct 2026, mostly peak hours; 88% still have zero jam. The first 216 rows were midnight with zero queues
+- BigQuery ML model: retrained 8 Oct (R2 0.58 on a random holdout, but no better than repeating the current reading); a baseline, not a deployed forecast
 - First step to a learning controller; clearance rate stays constant until observed
 
 </div>
@@ -256,7 +256,7 @@ The SignalAdapter seam is the point: today SimAdapter writes the junction phase 
 <p class="cite">Run reports (the with-vs-without report card per run) also land in BigQuery <code>run_reports</code>.</p>
 
 <!--
-Be explicit about scale: the logger has run on Cloud Scheduler during Bengaluru peak hours (08-11 and 17-21 IST) since 6 Oct, with N rows so far (fill N at freeze). The first 216 rows were logged at midnight with zero queues, so the model learned nothing from them. The BigQuery ML model is a pipeline proof until peak rows accumulate, retrained before submission, not a deployed forecast. Collection, feature view and training run end to end.
+Be explicit about scale: the logger has run on Cloud Scheduler during Bengaluru peak hours (08-11 and 17-21 IST) since 6 Oct, with 2,173 rows so far (5 to 8 Oct 2026), 88% of them zero jam. The first 216 rows were logged at midnight with zero queues, so the first model learned nothing from them. The BigQuery ML model was retrained on 8 Oct; it is a baseline that does not beat repeating the current reading, not a deployed forecast. Collection, feature view and training run end to end.
 -->
 
 ---

@@ -124,7 +124,7 @@ DATA = {
     "roadmap": [
         ("Today", "Constable alerts", "Spoken alert, one ACK."),
         ("Phase 2", "Signal controllers via the adapter", "Constables no longer clear queues by hand."),
-        ("Phase 3", "Learning controller on logged junction data", "Peak-hour spans already logged."),
+        ("Phase 3", "Learning controller on logged junction data", "2,173 traffic readings logged, 5–8 Oct."),
     ],
     # slide 14
     "links": {
